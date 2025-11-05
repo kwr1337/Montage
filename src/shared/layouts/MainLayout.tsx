@@ -14,7 +14,7 @@ import { ReportsScreen } from '../../screens/Reports/ReportsScreen';
 import { SalaryScreen } from '../../screens/Salary/SalaryScreen';
 import './main-layout.scss';
 
-export const MainLayout: FC<MainLayoutProps> = ({ onLogout }) => {
+export const MainLayout: FC<MainLayoutProps> = ({ onLogout: _onLogout }) => {
   // Восстанавливаем activeMenuItem из localStorage при загрузке
   const [activeMenuItem, setActiveMenuItem] = useState(() => {
     const saved = localStorage.getItem('activeMenuItem');
