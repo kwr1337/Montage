@@ -1,0 +1,96 @@
+.login {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Мобайл/планшет: фон страницы белый */
+  background: #ffffff;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+
+  &__card {
+    width: 100%;
+    max-width: 320px;
+    border-radius: 16px;
+    /* Мобайл/планшет: форма такого же белого цвета, как фон */
+    background: #ffffff;
+    padding: 24px 16px 16px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  &__logo {
+    display: none; /* нет на моб/планшет */
+    text-align: center;
+    font-weight: 700;
+    font-size: 24px;
+    line-height: 30px;
+    color: #2c2d2e;
+  }
+
+  &__title {
+    text-align: left;
+    font-weight: 700;
+    font-size: 20px;
+    line-height: 26px;
+    color: #2c2d2e;
+  }
+
+  &__form { display: flex; flex-direction: column; gap: 16px; }
+  
+  /* мобилка/планшет: инпуты на всю ширину */
+  .ti { width: 100%; }
+
+  &__forgot {
+    display: none; /* скрыто на моб/планшете */
+    align-self: center;
+    background: transparent;
+    border: none;
+    color: #919399;
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  &__submit { width: 100%; }
+
+  &__error {
+    color: #ff4757;
+    font-size: 14px;
+    text-align: center;
+    margin-top: 8px;
+  }
+
+
+  @media (min-width: 480px) {
+    &__card { max-width: 360px; padding: 28px 20px 20px; }
+    &__logo { font-size: 26px; line-height: 32px; }
+    &__title { font-size: 21px; line-height: 27px; }
+  }
+
+  @media (min-width: 768px) {
+    &__card { max-width: 400px; padding: 32px 24px 24px; }
+    &__logo { font-size: 28px; line-height: 34px; }
+    &__title { font-size: 22px; line-height: 28px; }
+  }
+
+  @media (min-width: 800px) {
+    background: #f3f3f5;
+    &__card {
+      width: 280px;
+      height: 383px;
+      max-width: none;
+      background: #ffffff;
+      padding: 32px 24px 24px; 
+    }
+    &__logo { display: block; }
+    &__title { text-align: center; margin-top: 32px; }
+    &__form { margin-top: 20px; gap: 0; align-items: center; }
+    .ti:first-of-type { margin-top: 0; }
+    .ti { width: 232px; }
+    .ti + .ti { margin-top: 16px; }
+    &__forgot { display: inline-block; margin-top: 16px; }
+    &__submit { margin-top: 32px; } 
+    .btn.login__submit { width: 233px; }
+  }
+}
+
+

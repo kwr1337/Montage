@@ -1,0 +1,819 @@
+import React, { useState, useEffect } from 'react';
+import { apiService } from '../../services/api';
+import { ProjectDetail } from './ProjectDetail';
+
+type ProjectsScreenProps = {
+  onLogout?: () => void;
+};
+
+import menuIconGrey from '../../shared/icons/menuIconGrey.svg';
+import searchIcon from '../../shared/icons/searchIcon.svg';
+import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
+import brigadirIcon from '../../shared/icons/brigadirIcon.svg';
+import logoIcon from '../../shared/icons/logoIcon.png';
+import { PageHeader } from '../../shared/ui/PageHeader/PageHeader';
+import StatusFilter from '../../shared/ui/StatusFilter/StatusFilter';
+import { Pagination } from '../../shared/ui/Pagination/Pagination';
+import './projects.scss';
+
+export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
+  const [searchValue, setSearchValue] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [projects, setProjects] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<Set<number>>(new Set());
+  const [isArchiving, setIsArchiving] = useState(false);
+  // Восстанавливаем selectedProjectId из localStorage при загрузке
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(() => {
+    const saved = localStorage.getItem('selectedProjectId');
+    return saved ? parseInt(saved, 10) : null;
+  });
+  const [navigationHistory, setNavigationHistory] = useState<(number | null)[]>(() => {
+    const saved = localStorage.getItem('selectedProjectId');
+    const savedId = saved ? parseInt(saved, 10) : null;
+    return savedId ? [null, savedId] : [null];
+  });
+  const [historyIndex, setHistoryIndex] = useState(() => {
+    const saved = localStorage.getItem('selectedProjectId');
+    return saved ? 1 : 0;
+  });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const itemsPerPage = 11;
+  
+  // Состояние для сортировки
+  const [sortField, setSortField] = useState<string | null>(null); // null = сортировка по дате добавления (по умолчанию)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc'); // по умолчанию по убыванию
+
+  // Функция для расчета суммы израсходованных средств проекта
+  // На основе суммы колонки "Сумма (всего)" из таблицы фиксации работ
+  // Использует ту же логику, что и в ProjectDetail.tsx
+  const calculateTotalSpent = (project: any): number => {
+    if (!project.employees || !Array.isArray(project.employees)) {
+      return 0;
+    }
+    
+    // Формируем trackingItems для проекта аналогично ProjectDetail.tsx
+    // и суммируем totalSum из всех сотрудников
+    const trackingItems = project.employees.map((employee: any) => {
+      // Используем totalSum из trackingItems, если оно есть
+      // В текущей реализации totalSum = 0 (заглушка), но логика готова
+      return {
+        totalSum: employee.totalSum || 0
+      };
+    });
+    
+    // Суммируем все totalSum из trackingItems (как в ProjectDetail)
+    const totalSpent = trackingItems.reduce((sum: number, item: any) => sum + (item.totalSum || 0), 0);
+    
+    return totalSpent;
+  };
+
+  useEffect(() => {
+    const fetchProjects = async () => {
+      setIsLoading(true);
+      try {
+        const response = await apiService.getProjects(currentPage, itemsPerPage);
+        console.log('Projects response:', response);
+        
+        // Проверяем разные варианты структуры ответа
+        if (Array.isArray(response)) {
+          setProjects(response);
+          // Если массив без мета-данных, используем локальную пагинацию
+          setTotalPages(1);
+        } else if (response && response.data) {
+          if (Array.isArray(response.data)) {
+            setProjects(response.data);
+            // Проверяем наличие информации о пагинации
+            // Laravel pagination format
+            if (response.last_page) {
+              setTotalPages(response.last_page);
+            } else if (response.meta) {
+              const total = response.meta.total || response.data.length;
+              setTotalPages(Math.ceil(total / itemsPerPage));
+            } else if (response.pagination) {
+              setTotalPages(response.pagination.total_pages || 1);
+            } else {
+              setTotalPages(1);
+            }
+          } else {
+            setProjects([]);
+            setTotalPages(1);
+          }
+        } else {
+          setProjects([]);
+          setTotalPages(1);
+        }
+      } catch (error) {
+        console.error('Error fetching projects:', error);
+        setProjects([]);
+        setTotalPages(1);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProjects();
+  }, [currentPage]);
+
+  // Фильтрация проектов по статусу и поиску (клиентская, пока сервер не поддерживает)
+  const filteredProjects = projects.filter((project) => {
+    console.log('Project status:', project.status, 'Filter:', statusFilter);
+    
+    // Фильтр по статусу
+    let matchesStatus = false;
+    if (statusFilter === 'all') {
+      matchesStatus = true;
+    } else if (statusFilter === 'Архив') {
+      // Для статуса "Архив" проверяем поле is_archived
+      matchesStatus = project.is_archived === 1 || project.is_archived === true;
+    } else {
+      // Для остальных статусов проверяем project.status
+      matchesStatus = project.status === statusFilter;
+    }
+    
+    // Фильтр по поиску
+    let matchesSearch = false;
+    if (searchValue === '') {
+      matchesSearch = true;
+    } else {
+      const searchLower = searchValue.toLowerCase().trim();
+      
+      // Поиск по ID
+      if (project.id.toString().includes(searchValue)) {
+        matchesSearch = true;
+      }
+      // Поиск по наименованию
+      else if (project.name && project.name.toLowerCase().includes(searchLower)) {
+        matchesSearch = true;
+      }
+      // Поиск по ФИО ответственного бригадира
+      else if (project.employees && Array.isArray(project.employees)) {
+        const activeEmployees = project.employees.filter((emp: any) => !emp.pivot?.end_working_date);
+        const foreman = activeEmployees.find((emp: any) => emp.role === 'Бригадир');
+        
+        if (foreman) {
+          const foremanFullName = `${foreman.last_name || ''} ${foreman.first_name || ''} ${foreman.second_name || ''}`.toLowerCase().trim();
+          const foremanInitials = `${foreman.last_name || ''} ${foreman.first_name?.charAt(0) || ''}.${foreman.second_name?.charAt(0) ? ` ${foreman.second_name.charAt(0)}.` : ''}`.toLowerCase().trim();
+          
+          if (foremanFullName.includes(searchLower) || foremanInitials.includes(searchLower)) {
+            matchesSearch = true;
+          }
+        }
+        
+        // Поиск по ФИО любого сотрудника
+        if (!matchesSearch && activeEmployees.length > 0) {
+          const foundEmployee = activeEmployees.find((emp: any) => {
+            const employeeFullName = `${emp.last_name || ''} ${emp.first_name || ''} ${emp.second_name || ''}`.toLowerCase().trim();
+            const employeeInitials = `${emp.last_name || ''} ${emp.first_name?.charAt(0) || ''}.${emp.second_name?.charAt(0) ? ` ${emp.second_name.charAt(0)}.` : ''}`.toLowerCase().trim();
+            
+            return employeeFullName.includes(searchLower) || employeeInitials.includes(searchLower);
+          });
+          
+          if (foundEmployee) {
+            matchesSearch = true;
+          }
+        }
+      }
+    }
+    
+    return matchesStatus && matchesSearch;
+  });
+
+  // Функция сортировки проектов
+  const getSortedProjects = () => {
+    const sorted = [...filteredProjects];
+    
+    sorted.sort((a: any, b: any) => {
+      // Если sortField === null, сортируем по дате добавления (по умолчанию)
+      if (sortField === null) {
+        // Сортируем по ID (по дате добавления) по убыванию по умолчанию
+        const aValue = a.id || a.created_at || 0;
+        const bValue = b.id || b.created_at || 0;
+        return sortDirection === 'desc' ? bValue - aValue : aValue - bValue;
+      }
+      
+      let aValue: any;
+      let bValue: any;
+      
+      switch (sortField) {
+        case 'id':
+          aValue = a.id || 0;
+          bValue = b.id || 0;
+          return sortDirection === 'desc' ? bValue - aValue : aValue - bValue;
+          
+        case 'name':
+          aValue = (a.name || '').toLowerCase();
+          bValue = (b.name || '').toLowerCase();
+          if (sortDirection === 'desc') {
+            return bValue.localeCompare(aValue, 'ru');
+          } else {
+            return aValue.localeCompare(bValue, 'ru');
+          }
+          
+        case 'status':
+          aValue = (a.status || '').toLowerCase();
+          bValue = (b.status || '').toLowerCase();
+          if (sortDirection === 'desc') {
+            return bValue.localeCompare(aValue, 'ru');
+          } else {
+            return aValue.localeCompare(bValue, 'ru');
+          }
+          
+        case 'dates':
+          // Сортируем по дате начала
+          aValue = a.start_date ? new Date(a.start_date).getTime() : 0;
+          bValue = b.start_date ? new Date(b.start_date).getTime() : 0;
+          return sortDirection === 'desc' ? bValue - aValue : aValue - bValue;
+          
+        case 'foreman':
+          // Получаем имя бригадира
+          const getForemanName = (project: any) => {
+            const activeEmployees = (project.employees || []).filter((emp: any) => !emp.pivot?.end_working_date);
+            const foreman = activeEmployees.find((emp: any) => emp.role === 'Бригадир');
+            if (foreman) {
+              return `${foreman.last_name || ''} ${foreman.first_name || ''} ${foreman.second_name || ''}`.toLowerCase();
+            }
+            return '';
+          };
+          aValue = getForemanName(a);
+          bValue = getForemanName(b);
+          if (sortDirection === 'desc') {
+            return bValue.localeCompare(aValue, 'ru');
+          } else {
+            return aValue.localeCompare(bValue, 'ru');
+          }
+          
+        case 'employees':
+          // Сортируем по количеству активных сотрудников
+          const getActiveEmployeesCount = (project: any) => {
+            return (project.employees || []).filter((emp: any) => !emp.pivot?.end_working_date).length;
+          };
+          aValue = getActiveEmployeesCount(a);
+          bValue = getActiveEmployeesCount(b);
+          return sortDirection === 'desc' ? bValue - aValue : aValue - bValue;
+          
+        case 'spent':
+          // Сортируем по расходу ФОТ
+          aValue = calculateTotalSpent(a);
+          bValue = calculateTotalSpent(b);
+          return sortDirection === 'desc' ? bValue - aValue : aValue - bValue;
+          
+        default:
+          return 0;
+      }
+    });
+    
+    return sorted;
+  };
+
+  const sortedProjects = getSortedProjects();
+
+  // Обработчик клика на значок сортировки
+  const handleSort = (field: string | null) => {
+    if (sortField === field) {
+      // Если кликнули по уже активному полю, меняем направление сортировки
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Если кликнули по новому полю, устанавливаем его и направление сортировки
+      setSortField(field);
+      // Для текстовых полей - по возрастанию (А-Я), для числовых - по убыванию
+      if (field === 'name' || field === 'status' || field === 'foreman') {
+        setSortDirection('asc');
+      } else {
+        setSortDirection('desc');
+      }
+    }
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  // Сбрасываем страницу при изменении фильтров
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, searchValue]);
+
+  const [selectedProject, setSelectedProject] = useState<any | null>(null);
+  const [isLoadingProject, setIsLoadingProject] = useState(false);
+
+  // Загружаем полные данные проекта при выборе
+  useEffect(() => {
+    const fetchProjectDetails = async () => {
+      if (selectedProjectId) {
+        setIsLoadingProject(true);
+        try {
+          const response = await apiService.getProjectById(selectedProjectId);
+          console.log('Project details response:', response);
+          
+          if (response && response.data) {
+            setSelectedProject(response.data);
+          } else if (response) {
+            setSelectedProject(response);
+          } else {
+            // Если не удалось загрузить с сервера, ищем в локальном списке
+            const localProject = projects.find(p => p.id === selectedProjectId);
+            setSelectedProject(localProject || null);
+          }
+        } catch (error) {
+          console.error('Error fetching project details:', error);
+          // Fallback к локальному списку
+          const localProject = projects.find(p => p.id === selectedProjectId);
+          setSelectedProject(localProject || null);
+        } finally {
+          setIsLoadingProject(false);
+        }
+      } else {
+        setSelectedProject(null);
+      }
+    };
+
+    fetchProjectDetails();
+  }, [selectedProjectId, projects]);
+
+  // Функция для навигации с сохранением истории
+  const navigateToProject = (projectId: number | null) => {
+    const newHistory = navigationHistory.slice(0, historyIndex + 1);
+    newHistory.push(projectId);
+    setNavigationHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+    setSelectedProjectId(projectId);
+    
+    // Сохраняем selectedProjectId в localStorage
+    if (projectId) {
+      localStorage.setItem('selectedProjectId', projectId.toString());
+    } else {
+      localStorage.removeItem('selectedProjectId');
+    }
+  };
+
+  const handleBack = () => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      setHistoryIndex(newIndex);
+      const prevProjectId = navigationHistory[newIndex];
+      setSelectedProjectId(prevProjectId);
+      
+      // Сохраняем selectedProjectId в localStorage
+      if (prevProjectId) {
+        localStorage.setItem('selectedProjectId', prevProjectId.toString());
+      } else {
+        localStorage.removeItem('selectedProjectId');
+      }
+    }
+  };
+
+  const handleForward = () => {
+    if (historyIndex < navigationHistory.length - 1) {
+      const newIndex = historyIndex + 1;
+      setHistoryIndex(newIndex);
+      const nextProjectId = navigationHistory[newIndex];
+      setSelectedProjectId(nextProjectId);
+      
+      // Сохраняем selectedProjectId в localStorage
+      if (nextProjectId) {
+        localStorage.setItem('selectedProjectId', nextProjectId.toString());
+      } else {
+        localStorage.removeItem('selectedProjectId');
+      }
+    }
+  };
+
+  const handleProjectUpdate = (updatedProject: any) => {
+    // Обновляем проект в списке
+    setProjects(prevProjects => 
+      prevProjects.map(p => p.id === updatedProject.id ? updatedProject : p)
+    );
+    // Обновляем выбранный проект, если это он
+    if (selectedProject && selectedProject.id === updatedProject.id) {
+      setSelectedProject(updatedProject);
+    }
+  };
+
+  // Обработчик выбора/снятия выбора проекта
+  const handleProjectSelect = (projectId: number, event?: React.MouseEvent) => {
+    if (event) {
+      event.stopPropagation();
+    }
+    setSelectedProjectIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(projectId)) {
+        newSet.delete(projectId);
+      } else {
+        newSet.add(projectId);
+      }
+      return newSet;
+    });
+  };
+
+  // Обработчик выбора/снятия выбора всех проектов
+  const handleSelectAll = (event?: React.MouseEvent) => {
+    if (event) {
+      event.stopPropagation();
+    }
+    const filteredProjects = projects.filter(project => {
+      if (statusFilter === 'all') return true;
+      return project.status === statusFilter;
+    });
+    const filteredProjectIds = filteredProjects
+      .filter(p => !(p.is_archived === 1 || p.is_archived === true)) // Не выбираем уже архивные
+      .map(p => p.id);
+    
+    if (selectedProjectIds.size === filteredProjectIds.length && filteredProjectIds.length > 0) {
+      // Снять выделение со всех
+      setSelectedProjectIds(new Set());
+    } else {
+      // Выбрать всех (кроме архивных)
+      setSelectedProjectIds(new Set(filteredProjectIds));
+    }
+  };
+
+  // Функция архивирования выбранных проектов
+  const handleArchiveProjects = async () => {
+    if (selectedProjectIds.size === 0) return;
+
+    const selectedIdsArray = Array.from(selectedProjectIds);
+
+    setIsArchiving(true);
+    try {
+      // Архивируем все выбранные проекты параллельно
+      const archivePromises = selectedIdsArray.map(projectId => 
+        apiService.archiveProject(projectId)
+      );
+      
+      await Promise.all(archivePromises);
+      
+      // Обновляем список проектов
+      const updatedProjects = projects.map(project => {
+        if (selectedProjectIds.has(project.id)) {
+          return { ...project, is_archived: 1, status: 'Архив' };
+        }
+        return project;
+      });
+      
+      setProjects(updatedProjects);
+      
+      // Если архивируемый проект открыт, закрываем его
+      if (selectedProject && selectedProjectIds.has(selectedProject.id)) {
+        setSelectedProjectId(null);
+        localStorage.removeItem('selectedProjectId');
+      }
+      
+      // Очищаем выбор
+      setSelectedProjectIds(new Set());
+    } catch (error) {
+      console.error('Error archiving projects:', error);
+      alert('Ошибка при архивировании проектов. Попробуйте еще раз.');
+    } finally {
+      setIsArchiving(false);
+    }
+  };
+
+  return (
+    <div className="projects">
+      <PageHeader
+        categoryIcon={!selectedProject ? menuIconGrey : undefined}
+        categoryLabel={!selectedProject ? "Проекты" : undefined}
+        breadcrumb={selectedProject ? [
+          { icon: menuIconGrey, label: "Проекты", onClick: () => navigateToProject(null) },
+          { label: `№ ${selectedProject.id} ${selectedProject.name}` }
+        ] : undefined}
+        showPagination={true}
+        onBack={handleBack}
+        onForward={handleForward}
+        backDisabled={historyIndex === 0}
+        forwardDisabled={historyIndex === navigationHistory.length - 1}
+        createButtonText={!selectedProject ? "Создать" : undefined}
+        onCreate={!selectedProject ? () => {
+          // TODO: Открыть модальное окно создания проекта
+          console.log('Create project clicked');
+        } : undefined}
+        userName="Гиламанов Т.Р."
+        onLogout={onLogout}
+      />
+
+      {!selectedProject ? (
+        <div className="projects__content">
+          <div className="projects__toolbar">
+          <div className="projects__filters">
+            <StatusFilter onStatusChange={(status) => setStatusFilter(status)} />
+
+            <div className="projects__search">
+              <img src={searchIcon} alt="Поиск" className="projects__search-icon" />
+              <input
+                type="text"
+                className="projects__search-input"
+                placeholder="Поиск"
+                value={searchValue}
+                onChange={(e) => setSearchValue(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <button 
+            className="projects__archive-btn"
+            onClick={handleArchiveProjects}
+            disabled={isArchiving}
+          >
+            {isArchiving ? 'Архивирование...' : 'Перенести в архив'}
+          </button>
+        </div>
+
+        <div className="projects__table">
+          <div className="projects__table-header">
+            <div className="projects__table-header-col">
+              <input 
+                type="checkbox" 
+                className="projects__checkbox"
+                checked={(() => {
+                  const filteredProjects = projects.filter(project => {
+                    if (statusFilter === 'all') return true;
+                    return project.status === statusFilter;
+                  });
+                  const filteredNonArchived = filteredProjects.filter(p => !(p.is_archived === 1 || p.is_archived === true));
+                  return filteredNonArchived.length > 0 && 
+                         filteredNonArchived.every(p => selectedProjectIds.has(p.id));
+                })()}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  handleSelectAll(e as any);
+                }}
+                onClick={(e) => e.stopPropagation()}
+              />
+              <span>ID</span>
+              <img 
+                src={upDownTableFilter} 
+                alt="↑↓" 
+                className={`projects__sort-icon ${sortField === 'id' ? 'projects__sort-icon--active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSort('id');
+                }}
+                style={{ cursor: 'pointer' }}
+              />
+            </div>
+            <div className="projects__table-header-col">
+              <span>Наименование</span>
+              <img 
+                src={upDownTableFilter} 
+                alt="↑↓" 
+                className={`projects__sort-icon ${sortField === 'name' ? 'projects__sort-icon--active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSort('name');
+                }}
+                style={{ cursor: 'pointer' }}
+              />
+            </div>
+            <div className="projects__table-header-col">
+              <span>Статус</span>
+              <img 
+                src={upDownTableFilter} 
+                alt="↑↓" 
+                className={`projects__sort-icon ${sortField === 'status' ? 'projects__sort-icon--active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSort('status');
+                }}
+                style={{ cursor: 'pointer' }}
+              />
+            </div>
+            <div className="projects__table-header-col">
+              <span>Сроки</span>
+              <img 
+                src={upDownTableFilter} 
+                alt="↑↓" 
+                className={`projects__sort-icon ${sortField === 'dates' ? 'projects__sort-icon--active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSort('dates');
+                }}
+                style={{ cursor: 'pointer' }}
+              />
+            </div>
+            <div className="projects__table-header-col">
+              <span>Ответ. бригадир</span>
+              <img 
+                src={upDownTableFilter} 
+                alt="↑↓" 
+                className={`projects__sort-icon ${sortField === 'foreman' ? 'projects__sort-icon--active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSort('foreman');
+                }}
+                style={{ cursor: 'pointer' }}
+              />
+            </div>
+            <div className="projects__table-header-col">
+              <span>Сотрудники</span>
+              <img 
+                src={upDownTableFilter} 
+                alt="↑↓" 
+                className={`projects__sort-icon ${sortField === 'employees' ? 'projects__sort-icon--active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSort('employees');
+                }}
+                style={{ cursor: 'pointer' }}
+              />
+            </div>
+            <div className="projects__table-header-col">
+              <span>Расход ФОТ</span>
+              <img 
+                src={upDownTableFilter} 
+                alt="↑↓" 
+                className={`projects__sort-icon ${sortField === 'spent' ? 'projects__sort-icon--active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSort('spent');
+                }}
+                style={{ cursor: 'pointer' }}
+              />
+            </div>
+          </div>
+
+          {/* Строки таблицы */}
+          {isLoading ? (
+            <div className="projects__loading">Загрузка...</div>
+          ) : sortedProjects.length === 0 ? (
+            <div className="projects__empty">
+              {projects.length === 0 ? 'Нет проектов' : 'Нет проектов с такими параметрами'}
+            </div>
+          ) : (
+            sortedProjects.map((project) => {
+              const isArchived = project.is_archived === 1 || project.is_archived === true || project.status === 'Архив';
+              return (
+                <div 
+                key={project.id} 
+                className={`projects__table-row ${isArchived ? 'projects__table-row--archived' : ''}`}
+                onClick={() => !isArchived && navigateToProject(project.id)}
+              >
+                <div className="projects__table-row-col">
+                  <input 
+                    type="checkbox" 
+                    className="projects__checkbox"
+                    checked={selectedProjectIds.has(project.id)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      if (!isArchived) {
+                        handleProjectSelect(project.id, e as any);
+                      }
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    disabled={isArchived}
+                    style={{ cursor: isArchived ? 'not-allowed' : 'pointer' }}
+                  />
+                  <span>{project.id}</span>
+                </div>
+                <div className="projects__table-row-col">
+                  <span>{project.name}</span>
+                </div>
+                <div className="projects__table-row-col">
+                  <div className={`projects__status ${project.status === 'В работе' ? 'projects__status--in-progress' : ''} ${isArchived ? 'projects__status--archived' : ''}`}>
+                    <div className="projects__status-dot"></div>
+                    <span>{isArchived ? 'Архив' : project.status}</span>
+                  </div>
+                </div>
+                <div className="projects__table-row-col">
+                  <div className="projects__dates">
+                    <div className="projects__date-item">
+                      <span className="projects__year">{new Date(project.start_date).getFullYear()}</span>
+                      <span className="projects__year">{new Date(project.end_date).getFullYear()}</span>
+                    </div>
+                    <span className="projects__period">
+                      {new Date(project.start_date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} - {new Date(project.end_date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+                    </span>
+                  </div>
+                </div>
+                <div className="projects__table-row-col">
+                  <div className="projects__foreman">
+                    {(() => {
+                      // Фильтруем только активных (не удаленных) бригадиров
+                      const activeEmployees = (project.employees || []).filter((emp: any) => !emp.pivot?.end_working_date);
+                      const foreman = activeEmployees.find((emp: any) => emp.role === 'Бригадир');
+                      if (foreman) {
+                        return (
+                          <>
+                            {foreman.avatar_id || foreman.avatar_url ? (
+                              <img 
+                                src={foreman.avatar_url || `http://92.53.97.20/api/avatars/${foreman.avatar_id}`} 
+                                alt={`${foreman.last_name} ${foreman.first_name}`} 
+                                className="projects__foreman-avatar" 
+                              />
+                            ) : (
+                              <img src={brigadirIcon} alt="—" className="projects__foreman-avatar" />
+                            )}
+                            <span>
+                              {(() => {
+                                const firstNameInitial = foreman.first_name ? foreman.first_name.charAt(0).toUpperCase() : '';
+                                const secondNameInitial = foreman.second_name ? foreman.second_name.charAt(0).toUpperCase() : '';
+                                return `${foreman.last_name} ${firstNameInitial}.${secondNameInitial ? ` ${secondNameInitial}.` : ''}`;
+                              })()}
+                            </span>
+                          </>
+                        );
+                      }
+                      return (
+                        <>
+                          <img src={brigadirIcon} alt="—" className="projects__foreman-avatar" />
+                          <span>—</span>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+                <div className="projects__table-row-col">
+                  <div className="projects__employees">
+                    {(() => {
+                      // Фильтруем только активных (не удаленных) сотрудников
+                      const activeEmployees = (project.employees || []).filter((emp: any) => !emp.pivot?.end_working_date);
+                      return (
+                        <>
+                          <div className="projects__employee-avatars">
+                            {activeEmployees.slice(0, 3).map((emp: any) => (
+                              emp.avatar_id || emp.avatar_url ? (
+                                <img 
+                                  key={emp.id} 
+                                  src={emp.avatar_url || `http://92.53.97.20/api/avatars/${emp.avatar_id}`} 
+                                  alt={`${emp.last_name} ${emp.first_name}`} 
+                                  className="projects__employee-avatar" 
+                                />
+                              ) : (
+                                <img 
+                                  key={emp.id} 
+                                  src={logoIcon} 
+                                  alt={`${emp.last_name} ${emp.first_name}`} 
+                                  className="projects__employee-avatar" 
+                                />
+                              )
+                            ))}
+                          </div>
+                          {activeEmployees.length > 3 && (
+                            <div className="projects__employee-count">
+                              <span>+{activeEmployees.length - 3} Сотр.</span>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+                <div className="projects__table-row-col">
+                  <div className="projects__budget">
+                    <div className="projects__budget-remaining">
+                      <span className="projects__budget-label">Осталось:</span>
+                      <span className="projects__budget-amount">
+                        {(() => {
+                          const budget = project.budget || 0;
+                          const spent = calculateTotalSpent(project);
+                          const remaining = budget - spent;
+                          return remaining >= 0 
+                            ? `${remaining.toLocaleString('ru-RU')} ₽`
+                            : '—';
+                        })()}
+                      </span>
+                    </div>
+                    <div className="projects__budget-spent">
+                      <span className="projects__budget-label">Потрачено:</span>
+                      <span className="projects__budget-amount">
+                        {calculateTotalSpent(project).toLocaleString('ru-RU')} ₽
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Пагинация */}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={handlePageChange}
+        />
+        </div>
+      ) : isLoadingProject ? (
+        <div className="projects__content">
+          <div className="projects__loading">Загрузка проекта...</div>
+        </div>
+      ) : selectedProject && !(selectedProject.is_archived === 1 || selectedProject.is_archived === true) ? (
+        <ProjectDetail 
+          project={selectedProject} 
+          onBack={() => {
+            setSelectedProjectId(null);
+            localStorage.removeItem('selectedProjectId');
+          }}
+          onProjectUpdate={handleProjectUpdate}
+        />
+      ) : (
+        <div className="projects__content">
+          <div className="projects__empty">Проект не найден</div>
+        </div>
+      )}
+    </div>
+  );
+};
+

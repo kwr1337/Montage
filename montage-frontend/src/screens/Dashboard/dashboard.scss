@@ -1,0 +1,13 @@
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  &__content {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+    background: #ffffff;
+    border-radius: 16px;
+  }
+}

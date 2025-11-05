@@ -1,0 +1,1032 @@
+.employee-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+
+  &__content {
+    display: flex;
+    flex-direction: column;
+    border-radius: 16px;
+    gap: 16px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+  }
+
+  // Верхняя карточка - детали сотрудника
+  &__card {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 24px;
+    position: relative;
+
+    &--top {
+      max-height: 379px;
+    }
+
+    &--bottom {
+      min-height: 403px;
+    }
+  }
+
+  // Заголовок карточки
+  &__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 16px;
+  }
+
+  &__header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  &__avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  &__info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+  }
+
+  &__name-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  &__name {
+    font-family: 'SF Pro', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 28px;
+    color: #2c2d2e;
+    margin: 0;
+    flex-shrink: 0;
+  }
+
+  &__dates {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__date {
+    font-family: 'SF Pro', sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 16px;
+    color: #919399;
+    margin: 0;
+  }
+
+  &__header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__dismiss-dropdown {
+    position: relative;
+  }
+
+  &__dismiss-btn {
+    padding: 4px 8px;
+    background: #ffffff;
+    border: 1px solid rgba(39, 135, 245, 0.5);
+    border-radius: 8px;
+    font-family: 'SF Pro', sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 16px;
+    color: #2787f5;
+    cursor: pointer;
+    white-space: nowrap;
+
+    &:hover {
+      background: rgba(39, 135, 245, 0.05);
+    }
+  }
+
+  &__dismiss-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    background: #ffffff;
+    border: 1px solid #f3f3f5;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    z-index: 10;
+    min-width: 150px;
+  }
+
+  &__dismiss-option {
+    padding: 8px 12px;
+    font-family: 'SF Pro', sans-serif;
+    font-size: 12px;
+    color: #2c2d2e;
+    cursor: pointer;
+
+    &:hover {
+      background: rgba(39, 135, 245, 0.05);
+    }
+  }
+
+  // Стили для кнопки с тремя точками и меню (как в ProjectDetail)
+  &__icon-btn {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 16px;
+    height: 16px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+
+    img {
+      width: 16px;
+      height: 16px;
+    }
+
+    &:hover {
+      opacity: 0.7;
+    }
+
+    &--dots {
+      img {
+        filter: brightness(0) saturate(100%);
+      }
+
+      &:hover img {
+        filter: none;
+      }
+    }
+  }
+
+  &__dots-menu-wrapper {
+    position: relative;
+  }
+
+  &__dots-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    background: #ffffff;
+    border: 1px solid #2787f5;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    width: 150px;
+    min-height: 28px;
+    padding: 4px;
+    box-sizing: border-box;
+  }
+
+  &__dots-menu-item {
+    display: block;
+    width: 100%;
+    padding: 4px 8px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    text-align: left;
+    font-size: 12px;
+    color: #2c2d2e;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+
+    &:hover {
+      background: rgba(39, 135, 245, 0.1);
+      color: #2787f5;
+    }
+
+    &--delete {
+      color: #2c2d2e;
+
+      &:hover {
+        background: rgba(39, 135, 245, 0.1);
+        color: #2787f5;
+      }
+    }
+  }
+
+  &__dots {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    img {
+      width: 16px;
+      height: 16px;
+    }
+
+    &:hover {
+      opacity: 0.7;
+    }
+  }
+
+  // Поля формы
+  &__fields {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  &__fields-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+  }
+
+  // Специфичные стили для TextInput в EmployeeDetail
+  // Полностью переопределяем стили для сохранения единой стилистики
+  // Ширина поля рассчитывается: (100% - 4 * 8px gap) / 5 полей = ~19.2%
+  // Это обеспечивает одинаковую ширину всех полей как в первой строке
+  &__field {
+    flex: 0 0 calc((100% - 4 * 8px) / 5);
+    width: calc((100% - 4 * 8px) / 5);
+    min-width: 0;
+    max-width: calc((100% - 4 * 8px) / 5);
+    
+    // Переопределяем все стили для TextInput в контексте EmployeeDetail
+    :global(.ti.ti) {
+      :global(.ti__field.ti__field) {
+        // Базовые стили - высота 32px
+        display: flex !important;
+        align-items: center !important;
+        background: #fff !important;
+        border: 1px solid #f3f3f5 !important;
+        border-radius: 8px !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        max-height: 32px !important;
+        padding: 6px 12px !important;
+        box-sizing: border-box !important;
+        line-height: 20px !important;
+      }
+      
+      :global(.ti__input.ti__input) {
+        flex: 1 !important;
+        border: none !important;
+        outline: none !important;
+        font-size: 12px !important;
+        color: #2c2d2e !important;
+        padding: 0 !important;
+        line-height: 20px !important;
+        height: auto !important;
+      }
+      
+      :global(.ti__label.ti__label) {
+        color: #919399 !important;
+        font-size: 11px !important;
+        margin-bottom: 4px !important;
+      }
+    }
+  }
+  
+  // Переопределение медиа-запросов с максимальной специфичностью
+  @media (min-width: 768px) {
+    .employee-detail__field.ti.ti :global(.ti__field.ti__field) {
+      height: 32px !important;
+      min-height: 32px !important;
+      max-height: 32px !important;
+      padding: 6px 12px !important;
+      line-height: 20px !important;
+    }
+    
+    .employee-detail__field :global(.ti.ti) :global(.ti__input.ti__input) {
+      font-size: 12px !important;
+    }
+  }
+  
+  @media (min-width: 1024px) {
+    .employee-detail__field.ti.ti :global(.ti__field.ti__field) {
+      height: 32px !important;
+      min-height: 32px !important;
+      max-height: 32px !important;
+      padding: 6px 12px !important;
+      line-height: 20px !important;
+    }
+    
+    .employee-detail__field :global(.ti.ti) :global(.ti__input.ti__input) {
+      font-size: 12px !important;
+    }
+  }
+
+  &__dropdown-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 0 0 calc((100% - 4 * 8px) / 5);
+    width: calc((100% - 4 * 8px) / 5);
+    min-width: 0;
+    max-width: calc((100% - 4 * 8px) / 5);
+  }
+
+  &__field-label {
+    font-family: 'SF Pro', sans-serif;
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 13px;
+    color: #919399;
+  }
+
+  &__dropdown-field {
+    position: relative;
+  }
+
+  &__dropdown {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: #ffffff;
+    border: 1px solid #f3f3f5;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: 'SF Pro', sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 16px;
+    color: #2c2d2e;
+    height: 32px;
+    box-sizing: border-box;
+    min-width: 0;
+
+    span {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    img {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      opacity: 0.5;
+      transition: transform 0.2s ease;
+    }
+
+    &:hover {
+      background: rgba(39, 135, 245, 0.05);
+    }
+  }
+
+  &__dropdown-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border: 1px solid rgba(39, 135, 245, 0.5);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    padding: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  &__dropdown-option {
+    padding: 4px 8px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-family: 'SF Pro', sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 16px;
+    color: #2c2d2e;
+    transition: background-color 0.15s ease;
+
+    &:hover {
+      background: rgba(39, 135, 245, 0.1);
+    }
+
+    &--selected {
+      background: rgba(39, 135, 245, 0.1);
+      color: #2787f5;
+    }
+  }
+
+  &__password-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 0 0 calc((100% - 4 * 8px) / 5);
+    width: calc((100% - 4 * 8px) / 5);
+    min-width: 0;
+    max-width: calc((100% - 4 * 8px) / 5);
+    
+    // Те же стили что и для обычных полей
+    :global(.ti.ti) {
+      :global(.ti__field.ti__field) {
+        display: flex !important;
+        align-items: center !important;
+        background: #fff !important;
+        border: 1px solid #f3f3f5 !important;
+        border-radius: 8px !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        max-height: 32px !important;
+        padding: 6px 12px !important;
+        box-sizing: border-box !important;
+        line-height: 20px !important;
+      }
+      
+      :global(.ti__input.ti__input) {
+        flex: 1 !important;
+        border: none !important;
+        outline: none !important;
+        font-size: 12px !important;
+        color: #2c2d2e !important;
+        padding: 0 !important;
+        line-height: 20px !important;
+        height: auto !important;
+      }
+      
+      :global(.ti__label.ti__label) {
+        color: #919399 !important;
+        font-size: 11px !important;
+        margin-bottom: 4px !important;
+      }
+    }
+  }
+  
+  @media (min-width: 768px) {
+    .employee-detail__password-field.ti.ti :global(.ti__field.ti__field) {
+      height: 32px !important;
+      min-height: 32px !important;
+      max-height: 32px !important;
+      padding: 6px 12px !important;
+      line-height: 20px !important;
+    }
+    
+    .employee-detail__password-field :global(.ti.ti) :global(.ti__input.ti__input) {
+      font-size: 12px !important;
+    }
+  }
+  
+  @media (min-width: 1024px) {
+    .employee-detail__password-field.ti.ti :global(.ti__field.ti__field) {
+      height: 32px !important;
+      min-height: 32px !important;
+      max-height: 32px !important;
+      padding: 6px 12px !important;
+      line-height: 20px !important;
+    }
+    
+    .employee-detail__password-field :global(.ti.ti) :global(.ti__input.ti__input) {
+      font-size: 12px !important;
+    }
+  }
+
+  &__password-input {
+    width: 100%;
+  }
+
+  // Финансы
+  &__finances {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 10px;
+  }
+
+  &__finances-title {
+    font-family: 'SF Pro', sans-serif;
+    font-size: 17px;
+    font-weight: 400;
+    line-height: 22px;
+    color: #2c2d2e;
+    margin: 0;
+  }
+
+  &__rate-input {
+    flex: 0 0 calc((100% - 4 * 8px) / 5);
+    width: calc((100% - 4 * 8px) / 5);
+    max-width: calc((100% - 4 * 8px) / 5);
+    
+    // Те же стили что и для обычных полей
+    :global(.ti.ti) {
+      :global(.ti__field.ti__field) {
+        display: flex !important;
+        align-items: center !important;
+        background: #fff !important;
+        border: 1px solid #f3f3f5 !important;
+        border-radius: 8px !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        max-height: 32px !important;
+        padding: 6px 12px !important;
+        box-sizing: border-box !important;
+        line-height: 20px !important;
+      }
+      
+      :global(.ti__input.ti__input) {
+        flex: 1 !important;
+        border: none !important;
+        outline: none !important;
+        font-size: 12px !important;
+        color: #2c2d2e !important;
+        padding: 0 !important;
+        line-height: 20px !important;
+        height: auto !important;
+      }
+      
+      :global(.ti__label.ti__label) {
+        color: #919399 !important;
+        font-size: 11px !important;
+        margin-bottom: 4px !important;
+      }
+    }
+  }
+  
+  @media (min-width: 768px) {
+    .employee-detail__rate-input.ti.ti :global(.ti__field.ti__field) {
+      height: 32px !important;
+      min-height: 32px !important;
+      max-height: 32px !important;
+      padding: 6px 12px !important;
+      line-height: 20px !important;
+    }
+    
+    .employee-detail__rate-input :global(.ti.ti) :global(.ti__input.ti__input) {
+      font-size: 12px !important;
+    }
+  }
+  
+  @media (min-width: 1024px) {
+    .employee-detail__rate-input.ti.ti :global(.ti__field.ti__field) {
+      height: 32px !important;
+      min-height: 32px !important;
+      max-height: 32px !important;
+      padding: 6px 12px !important;
+      line-height: 20px !important;
+    }
+    
+    .employee-detail__rate-input :global(.ti.ti) :global(.ti__input.ti__input) {
+      font-size: 12px !important;
+    }
+  }
+
+  // Кнопки действий
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    justify-content: flex-end;
+  }
+
+  &__cancel-btn {
+    padding: 8px 18px;
+    background: rgba(39, 135, 245, 0.1);
+    border: none;
+    border-radius: 8px;
+    font-family: 'SF Pro', sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 18px;
+    color: #2787f5;
+    cursor: pointer;
+    width: 104px;
+
+    &:hover {
+      background: rgba(39, 135, 245, 0.15);
+    }
+  }
+
+  &__save-btn {
+    padding: 8px 18px;
+    background: #2787f5;
+    border: none;
+    border-radius: 8px;
+    font-family: 'SF Pro', sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 18px;
+    color: #ffffff;
+    cursor: pointer;
+
+    &:hover {
+      background: #1e6fd4;
+    }
+  }
+
+  // Нижняя карточка - история выплат ЗП
+  &__card--bottom {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+
+  &__salary-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 10px;
+    width: 100%;
+    box-sizing: border-box;
+    flex-shrink: 0;
+  }
+
+  &__salary-title {
+    font-family: 'SF Pro', sans-serif;
+    font-size: 17px;
+    font-weight: 400;
+    line-height: 22px;
+    color: #2c2d2e;
+    margin: 0;
+  }
+
+  &__date-range {
+    display: flex;
+    align-items: center;
+    width: 220px;
+    height: 32px;
+    border: 1px solid #f3f3f5;
+    border-radius: 8px;
+    background: #ffffff;
+    overflow: hidden;
+  }
+
+  &__date-range-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    width: 120px;
+    flex-shrink: 0;
+    border-right: 1px solid #f3f3f5;
+    box-sizing: border-box;
+    height: 100%;
+
+    img {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      display: block;
+    }
+
+    span {
+      font-family: 'SF Pro', sans-serif;
+      font-size: 12px;
+      font-weight: 400;
+      line-height: 16px;
+      color: #919399;
+      white-space: nowrap;
+    }
+  }
+
+  &__date-range-divider {
+    display: none;
+  }
+
+  &__date-range-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    width: 100px;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    height: 100%;
+
+    span {
+      font-family: 'SF Pro', sans-serif;
+      font-size: 12px;
+      font-weight: 400;
+      line-height: 16px;
+      color: #919399;
+      white-space: nowrap;
+    }
+  }
+
+  &__date-input-wrapper {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    cursor: pointer;
+  }
+
+  &__date-input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-family: 'SF Pro', sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 16px;
+    color: transparent;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    z-index: 2;
+    opacity: 0;
+
+    &::-webkit-calendar-picker-indicator {
+      cursor: pointer;
+      position: absolute;
+      right: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      z-index: 3;
+    }
+
+    &::-webkit-datetime-edit {
+      display: none;
+    }
+
+    &[value]:not([value=""]) {
+      opacity: 1;
+      color: #2c2d2e;
+      position: static;
+
+      &::-webkit-datetime-edit {
+        display: block;
+      }
+    }
+
+    &[value]:not([value=""]) ~ .employee-detail__date-placeholder {
+      display: none;
+    }
+  }
+
+  &__date-placeholder {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: 'SF Pro', sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 16px;
+    color: #919399;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  // Таблица выплат ЗП (стили как в projects)
+  &__salary-table {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  &__salary-table-header {
+    display: flex;
+    border-bottom: 1px solid #f3f3f5;
+  }
+
+  &__salary-table-header-col {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+    font-weight: 400;
+    color: #919399;
+    flex: 1;
+    min-width: 0;
+    padding: 0 8px;
+    box-sizing: border-box;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+
+    &:nth-child(2) {
+      // Месяц - нужно больше места, чтобы текст был полностью виден
+      flex: 1.2;
+      min-width: 150px;
+      overflow: visible;
+      text-overflow: clip;
+      white-space: normal;
+    }
+
+    img {
+      width: 12px;
+      height: 12px;
+      cursor: pointer;
+      flex-shrink: 0;
+      opacity: 0.5;
+      transition: opacity 0.15s ease;
+
+      &:hover {
+        opacity: 0.8;
+      }
+    }
+
+    input[type="checkbox"] {
+      width: 12px;
+      height: 12px;
+      margin: 0;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      border: 1px solid #2787f5;
+      border-radius: 2px;
+      background-color: transparent;
+      flex-shrink: 0;
+
+      &:checked {
+        background-color: #2787f5;
+        border-color: #2787f5;
+        position: relative;
+
+        &::after {
+          content: '';
+          position: absolute;
+          left: 3px;
+          top: 1px;
+          width: 4px;
+          height: 7px;
+          border: solid white;
+          border-width: 0 1.5px 1.5px 0;
+          transform: rotate(45deg);
+        }
+      }
+    }
+  }
+
+  &__salary-table-body {
+    display: flex;
+    flex-direction: column;
+  }
+
+  &__salary-table-row {
+    display: flex;
+    padding: 6px 0px;
+    border-bottom: 1px solid #f3f3f5;
+    align-items: center;
+    transition: background 0.15s ease;
+    min-height: 52px;
+
+    &:hover {
+      background: #f8f9fa;
+    }
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+
+  &__salary-table-col {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 15px;
+    font-weight: 400;
+    color: #2c2d2e;
+    flex: 1;
+    min-width: 0;
+    padding: 0 8px;
+    box-sizing: border-box;
+    overflow: hidden;
+
+    &:first-child {
+      // flex: 0 0 60px;
+      // min-width: 60px;
+      // max-width: 60px;
+      gap: 8px;
+    }
+
+    &:nth-child(2) {
+      // Месяц - нужно больше места, чтобы текст был полностью виден
+      flex: 1.2;
+      min-width: 150px;
+      overflow: visible;
+    }
+
+    &:nth-child(5),
+    &:nth-child(7),
+    &:nth-child(9) {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+    }
+
+    input[type="checkbox"] {
+      width: 12px;
+      height: 12px;
+      margin: 0;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      border: 1px solid #2787f5;
+      border-radius: 2px;
+      background-color: transparent;
+      flex-shrink: 0;
+
+      &:checked {
+        background-color: #2787f5;
+        border-color: #2787f5;
+        position: relative;
+
+        &::after {
+          content: '';
+          position: absolute;
+          left: 3px;
+          top: 1px;
+          width: 4px;
+          height: 7px;
+          border: solid white;
+          border-width: 0 1.5px 1.5px 0;
+          transform: rotate(45deg);
+        }
+      }
+    }
+  }
+
+  &__month {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  &__month-name {
+    font-size: 15px;
+    font-weight: 400;
+    color: #2c2d2e;
+    white-space: nowrap;
+  }
+
+  &__month-year {
+    font-size: 12px;
+    font-weight: 400;
+    color: #919399;
+    white-space: nowrap;
+  }
+
+  &__payout {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  &__payout-amount {
+    font-size: 15px;
+    font-weight: 400;
+    color: #2c2d2e;
+  }
+
+  &__payout-date {
+    font-size: 12px;
+    font-weight: 400;
+    color: #919399;
+  }
+
+  &__salary-pagination {
+    display: flex;
+    justify-content: flex-end;
+    // padding: 12px 24px;
+
+    // Переопределяем стили компонента Pagination для EmployeeDetail
+    :global(.pagination.employee-detail__pagination) {
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+  }
+}
+

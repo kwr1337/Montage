@@ -1,0 +1,281 @@
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #f3f3f5;
+
+  &__left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  &__breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: #ffffff;
+    border-radius: 8px;
+
+    &-btn {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      color: #2c2d2e;
+      padding: 0;
+
+      img {
+        width: 16px;
+        height: 16px;
+      }
+
+      &:hover {
+        opacity: 0.7;
+      }
+    }
+
+    &-separator {
+      width: 18px;
+      height: 18px;
+      transform: rotate(-90deg);
+      opacity: 0.5;
+    }
+
+    &-current {
+      font-size: 13px;
+      color: #2c2d2e;
+    }
+  }
+
+  &__pagination {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px;
+    background: #ffffff;
+    border-radius: 8px;
+    border: 1px solid #f3f3f5;
+  }
+
+  &__pagination-btn {
+    width: 18px;
+    height: 18px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease;
+    padding: 0;
+
+    &:hover:not(:disabled) {
+      background: #f3f3f5;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+
+      &:hover {
+        background: transparent;
+      }
+    }
+
+    svg {
+      width: 18px;
+      height: 18px;
+    }
+  }
+
+  &__right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  &__create {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: #2787f5;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 18px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    width: 109px;
+    height: 34px;
+    box-sizing: border-box;
+
+    &:hover {
+      background: #1e6ccc;
+    }
+
+    &-icon {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    &-text {
+      white-space: nowrap;
+    }
+  }
+
+  &__user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #ffffff;
+    border: 1px solid #f3f3f5;
+    border-radius: 8px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s ease;
+    width: 178px;
+    height: 34px;
+    box-sizing: border-box;
+
+
+    &-avatar {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #d9d9d9;
+      flex-shrink: 0;
+    }
+
+    &-text {
+      font-size: 13px;
+      font-weight: 400;
+      line-height: 18px;
+      color: #2c2d2e;
+      white-space: nowrap;
+      flex: 1;
+    }
+
+    &-arrow {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      transition: transform 0.15s ease;
+
+      &:hover {
+        transform: rotate(180deg);
+      }
+    }
+  }
+
+  &__user-wrapper {
+    position: relative;
+  }
+
+  &__user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #ffffff;
+    border: 1px solid #f3f3f5;
+    border-radius: 8px;
+    cursor: pointer;
+    user-select: none;
+    width: 178px;
+    height: 34px;
+    box-sizing: border-box;
+
+    &-avatar {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #d9d9d9;
+      flex-shrink: 0;
+    }
+
+    &-text {
+      font-size: 13px;
+      font-weight: 400;
+      line-height: 18px;
+      color: #2c2d2e;
+      white-space: nowrap;
+      flex: 1;
+    }
+
+    &-arrow {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      transition: transform 0.15s ease;
+
+      &--active {
+        transform: rotate(180deg);
+      }
+    }
+
+    &-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      margin-top: 4px;
+      background: #ffffff;
+      border: none;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      z-index: 1000;
+      min-width: 178px;
+      padding: 4px;
+    }
+  }
+
+  &__logout-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    text-align: left;
+    width: 100%;
+
+    &:hover {
+      background: #f3f3f5;
+    }
+
+    &:focus {
+      outline: none;
+    }
+
+    &:active {
+      background: transparent;
+    }
+
+    img {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
+    span {
+      color: #2c2d2e;
+      font-size: 13px;
+      font-weight: 400;
+      line-height: 18px;
+    }
+  }
+}

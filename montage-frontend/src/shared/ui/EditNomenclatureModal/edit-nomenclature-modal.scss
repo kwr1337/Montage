@@ -1,0 +1,388 @@
+.edit-nomenclature-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.edit-nomenclature-modal {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 24px;
+  width: 871px;
+  height: 263px;
+  max-width: 90vw;
+  position: relative;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  box-sizing: border-box;
+}
+
+.edit-nomenclature-modal__content {
+  display: flex;
+  gap: 0;
+  height: 100%;
+}
+
+.edit-nomenclature-modal__form-section {
+  height: 206px;
+  padding-right: 24px;
+  display: flex;
+  flex-direction: column;
+}
+
+.edit-nomenclature-modal__history-section {
+  width: 514px;
+  // height: 263px;
+  border-left: 1px solid #e1e3e6;
+  padding-left: 24px;
+}
+
+.edit-nomenclature-modal__close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  
+  img {
+    width: 24px;
+    height: 24px;
+  }
+  
+  &:hover img {
+    filter: brightness(0.6);
+  }
+}
+
+.edit-nomenclature-modal__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2c2d2e;
+  margin: 0 0 12px 0;
+  line-height: 1.2;
+}
+
+.edit-nomenclature-modal__form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.edit-nomenclature-modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.edit-nomenclature-modal__label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #919399;
+  line-height: 1.2;
+}
+
+.edit-nomenclature-modal__input {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid #e1e3e6;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #2c2d2e;
+  background: #ffffff;
+  box-sizing: border-box;
+  
+  &:focus {
+    outline: none;
+    border-color: #e1e3e6;
+    box-shadow: none;
+  }
+  
+  &::placeholder {
+    color: #919399;
+  }
+}
+
+.edit-nomenclature-modal__input-wrapper {
+  position: relative;
+  
+  .edit-nomenclature-modal__input {
+    width: 309px;
+    height: 34px;
+    padding-right: 36px;
+    border: 1px solid #e1e3e6;
+  }
+}
+
+.edit-nomenclature-modal__date-quantity-row {
+  display: flex;
+  gap: 12px;
+  
+  .edit-nomenclature-modal__field {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .edit-nomenclature-modal__date-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    
+    .edit-nomenclature-modal__input--date {
+      width: 148.5px;
+      height: 32px;
+      border: 1px solid #e1e3e6;
+    }
+  }
+  
+  .edit-nomenclature-modal__input {
+    width: 148.5px;
+    height: 32px;
+    border: 1px solid #e1e3e6;
+  }
+}
+
+.edit-nomenclature-modal__date-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 148.5px;
+  
+  .edit-nomenclature-modal__calendar-icon {
+    position: absolute;
+    left: 12px;
+    width: 16px;
+    height: 16px;
+    z-index: 1;
+    pointer-events: none;
+  }
+  
+  .edit-nomenclature-modal__input--date-readonly {
+    width: 148.5px;
+    height: 32px;
+    padding-left: 40px;
+    border: 1px solid #e1e3e6;
+  }
+}
+
+.edit-nomenclature-modal__calendar-icon {
+  position: absolute;
+  left: 12px;
+  width: 16px;
+  height: 16px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.edit-nomenclature-modal__input--date {
+  padding-left: 40px;
+}
+
+// Чистый date picker без border (как в общей информации)
+.edit-nomenclature-modal__date-wrapper--clean {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  width: fit-content;
+  height: 34px;
+  
+  &:hover {
+    .edit-nomenclature-modal__date-display {
+      color: #2c2d2e;
+    }
+  }
+}
+
+.edit-nomenclature-modal__calendar-icon--clean {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.edit-nomenclature-modal__date-display {
+  font-size: 14px;
+  color: #2c2d2e;
+  font-weight: 400;
+  line-height: 1.2;
+  pointer-events: none;
+  position: relative;
+  z-index: 2;
+  white-space: nowrap;
+}
+
+.edit-nomenclature-modal__actions {
+  display: flex;
+  gap: 24px;
+  justify-content: flex-start;
+}
+
+.edit-nomenclature-modal__btn {
+  height: 38px;
+  padding: 0;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  &--edit {
+    background: #2787f5;
+    color: #ffffff;
+    width: 135px;
+    
+    &:hover {
+      background: #1976e3;
+    }
+  }
+
+  &--cancel {
+    background: rgba(39, 135, 245, 0.08);
+    color: #2787f5;
+    width: 155px;
+    
+    &:hover {
+      background: rgba(39, 135, 245, 0.12);
+    }
+  }
+}
+
+// Стили для истории изменений
+.edit-nomenclature-modal__history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.edit-nomenclature-modal__history-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2c2d2e;
+  margin: 0;
+}
+
+.edit-nomenclature-modal__history-table {
+  border-radius: 6px;
+  overflow: visible;
+  width: 442px;
+  height: 186px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.edit-nomenclature-modal__history-header-row {
+  display: flex;
+  border-bottom: 1px solid #f3f3f5;
+  height: 21px;
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  z-index: 1;
+}
+
+.edit-nomenclature-modal__history-header-col {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #919399;
+  // padding: 0 24px;
+  flex: 1;
+  
+}
+
+.edit-nomenclature-modal__history-body {
+  height: 186px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 16px;
+  
+  // Стили скроллбара
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: #ffffff;
+    border-radius: 3px;
+    border: 1px solid #e1e3e6;
+    border-left: none;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: #d9d9d9;
+    border-radius: 3px;
+    margin: 1px;
+  }
+  
+  &::-webkit-scrollbar-thumb:hover {
+    background: #c0c0c0;
+  }
+}
+
+.edit-nomenclature-modal__history-row {
+  display: flex;
+  padding: 0;
+  border-bottom: 1px solid #f3f3f5;
+  align-items: center;
+  transition: background 0.15s ease;
+  height: 50px;
+  
+  &:hover {
+    background: #f8f9fa;
+  }
+  
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.edit-nomenclature-modal__history-col {
+  display: flex;
+  align-items: center;
+  // gap: 12px;
+  font-size: 15px;
+  font-weight: 400;
+  color: #2c2d2e;
+  // padding: 0 24px;
+  flex: 1;
+  
+}
+
+.edit-nomenclature-modal__sort-icon {
+  width: 12px;
+  height: 12px;
+  opacity: 0.5;
+}
+
+.edit-nomenclature-modal__dropdown-arrow {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  opacity: 0.5;
+  pointer-events: none;
+}

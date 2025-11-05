@@ -1,0 +1,59 @@
+.ti {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+
+  &__label {
+    color: #919399;
+    font-size: 12px;
+    margin-bottom: 4px; /* расстояние лейбл → инпут */
+  }
+
+  &__field {
+    display: flex;
+    align-items: center;
+    background: #fff;
+    border: 1px solid #f3f3f5;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  &__input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 14px;
+    color: #2c2d2e;
+  }
+
+  &__right {
+    display: inline-flex;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+  }
+  &__icon {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+  }
+
+  @media (min-width: 768px) {
+    &__label { font-size: 12px; }
+    &__field { padding: 12px 14px; }
+    &__input { font-size: 15px; }
+  }
+
+  @media (min-width: 1024px) {
+    /* ПК: высота поля ровно 49px как в макете */
+    &__field {
+      height: 49px;
+      padding: 0 12px;
+    }
+  }
+}
+
+

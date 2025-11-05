@@ -1,0 +1,24 @@
+.btn {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 8px;
+  background: #2787f5;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background .15s ease;
+
+  &:hover { background: #1e6ccc; }
+  &:active { background: #1556a1; }
+  &:disabled { background: #cfd3d9; cursor: not-allowed; }
+}
+
+@media (min-width: 800px) {
+  .btn { height: 38px; font-size: 17px; }
+}
+
+
