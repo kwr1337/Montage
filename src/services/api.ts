@@ -1,4 +1,6 @@
-const API_BASE_URL = 'http://92.53.97.20/api';
+// Используем переменную окружения или прокси через Vercel в production
+// В development через vite proxy, в production через Vercel rewrites
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? '/api' : 'http://92.53.97.20/api');
 
 interface LoginRequest {
   email: string;
