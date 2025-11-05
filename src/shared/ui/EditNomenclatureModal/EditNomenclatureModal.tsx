@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import calendarIconGrey from '../../icons/calendarIconGrey.svg';
-import userDropdownIcon from '../../icons/user-dropdown-icon.svg';
 import upDownTableFilter from '../../icons/upDownTableFilter.svg';
 import closeIcon from '../../icons/closeIcon.svg';
 import './edit-nomenclature-modal.scss';

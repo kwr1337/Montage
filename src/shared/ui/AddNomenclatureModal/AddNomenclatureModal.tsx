@@ -16,7 +16,7 @@ const AddNomenclatureModal: React.FC<AddNomenclatureModalProps> = ({
   isOpen,
   onClose,
   onAdd,
-  projectId,
+  projectId: _projectId,
   existingNomenclatureIds = [],
 }) => {
   const [nomenclatures, setNomenclatures] = useState<any[]>([]);

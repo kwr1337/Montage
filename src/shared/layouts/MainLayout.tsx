@@ -50,7 +50,7 @@ export const MainLayout: FC<MainLayoutProps> = ({ onLogout }) => {
 
   return (
     <div className="main-layout">
-      <Sidebar activeItem={activeMenuItem} onNavigate={handleNavigate} onLogout={onLogout} />
+      <Sidebar activeItem={activeMenuItem} onNavigate={handleNavigate} />
       <main className="main-layout__content">{renderScreen()}</main>
     </div>
   );

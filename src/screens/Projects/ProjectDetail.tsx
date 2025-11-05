@@ -60,8 +60,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   const [trackingCurrentPage, setTrackingCurrentPage] = useState(1);
   const trackingItemsPerPage = 5;
   const [foremen, setForemen] = useState<any[]>([]);
-  const [isLoadingForemen, setIsLoadingForemen] = useState(false);
-  const [selectedForemanId, setSelectedForemanId] = useState<number | null>(null);
   const [allEmployees, setAllEmployees] = useState<any[]>([]); // Все доступные сотрудники (is_employee = true)
   const startDateInputRef = React.useRef<HTMLInputElement>(null);
   const endDateInputRef = React.useRef<HTMLInputElement>(null);
@@ -483,7 +481,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     setNomenclatureHistory([]);
   };
 
-  const handleImport = (file: File) => {
+  const handleImport = (_file: File) => {
     // TODO: Реализовать импорт файла
     // Здесь можно добавить логику обработки импортированного файла
   };

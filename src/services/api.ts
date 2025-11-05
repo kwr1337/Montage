@@ -94,7 +94,7 @@ class ApiService {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      await response.text();
       throw new Error(`Login failed: ${response.status} ${response.statusText}`);
     }
 
