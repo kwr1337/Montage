@@ -173,6 +173,18 @@ class ApiService {
     return response;
   }
 
+  async registerEmployee(data: any): Promise<any> {
+    const response = await this.request<any>('/auth/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return response;
+  }
+
   async createProject(data: any): Promise<any> {
     try {
       const response = await this.request<any>('/projects', {

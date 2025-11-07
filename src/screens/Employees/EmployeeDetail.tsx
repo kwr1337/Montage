@@ -7,39 +7,54 @@ import userDropdownIcon from '../../shared/icons/user-dropdown-icon.svg';
 import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
 import logoIcon from '../../shared/icons/logoIcon.png';
 import calendarIconGrey from '../../shared/icons/calendarIconGrey.svg';
+import { apiService } from '../../services/api';
 import './employee-detail.scss';
 
 type EmployeeDetailProps = {
   employee: any;
   onBack: () => void;
   onSave?: (updatedEmployee: any) => void;
+  onCreate?: (createdEmployee: any) => void;
+  isNew?: boolean;
 };
+export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack, onSave, onCreate, isNew = false }) => {
+  const mapWorkSchedule = (value?: string) => {
+    if (!value) {
+      return '5/2 будни';
+    }
+    return value === '5/2' ? '5/2 будни' : value;
+  };
 
-export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack, onSave }) => {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState(() => ({
     first_name: employee.first_name || '',
     last_name: employee.last_name || '',
     second_name: employee.second_name || '',
     phone: employee.phone || '',
     email: employee.email || '',
     position: employee.role || 'Управляющий',
-    work_schedule: employee.work_schedule || '5/2 будни',
+    work_schedule: mapWorkSchedule(employee.work_schedule),
     status: employee.is_dismissed || employee.dismissal_date ? 'Уволен' : 'Работает',
-    rate_per_hour: employee.rate_per_hour || '300',
-    password: '*************',
+    rate_per_hour: employee.rate_per_hour ? String(employee.rate_per_hour) : '',
+    password: isNew ? '' : '*************',
+    birth_date: employee.birth_date || '',
+    gender: employee.gender || 'male',
+    employment_date: employee.employment_date || '',
     dateFrom: '',
     dateTo: '',
-  });
+  }));
 
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isDotsMenuOpen, setIsDotsMenuOpen] = useState(false);
   const [isPositionDropdownOpen, setIsPositionDropdownOpen] = useState(false);
   const [isScheduleDropdownOpen, setIsScheduleDropdownOpen] = useState(false);
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  const [isGenderDropdownOpen, setIsGenderDropdownOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const dotsMenuRef = React.useRef<HTMLDivElement>(null);
   const positionDropdownRef = React.useRef<HTMLDivElement>(null);
   const scheduleDropdownRef = React.useRef<HTMLDivElement>(null);
   const statusDropdownRef = React.useRef<HTMLDivElement>(null);
+  const genderDropdownRef = React.useRef<HTMLDivElement>(null);
   const dateFromRef = React.useRef<HTMLInputElement>(null);
   const dateToRef = React.useRef<HTMLInputElement>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -49,6 +64,10 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
   const positionOptions = ['Управляющий', 'Менеджер', 'Монтажник', 'Инженер', 'Бухгалтер', 'Сметчик', 'Бригадир'];
   const scheduleOptions = ['5/2 будни', '2/2'];
   const statusOptions = ['Работает', 'Уволен'];
+  const genderOptions = [
+    { value: 'male', label: 'Мужской' },
+    { value: 'female', label: 'Женский' },
+  ];
 
   // Закрытие дропдаунов при клике вне их
   React.useEffect(() => {
@@ -65,19 +84,38 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
       if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
         setIsStatusDropdownOpen(false);
       }
+      if (genderDropdownRef.current && !genderDropdownRef.current.contains(event.target as Node)) {
+        setIsGenderDropdownOpen(false);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Форматирование имени сотрудника
-  const formatEmployeeName = () => {
-    const firstName = employee.first_name || '';
-    const lastName = employee.last_name || '';
-    const secondName = employee.second_name || '';
-    return `${lastName} ${firstName} ${secondName}`.trim();
-  };
+  useEffect(() => {
+    if (isNew) {
+      return;
+    }
+
+    setFormData({
+      first_name: employee.first_name || '',
+      last_name: employee.last_name || '',
+      second_name: employee.second_name || '',
+      phone: employee.phone || '',
+      email: employee.email || '',
+      position: employee.role || 'Управляющий',
+      work_schedule: mapWorkSchedule(employee.work_schedule),
+      status: employee.is_dismissed || employee.dismissal_date ? 'Уволен' : 'Работает',
+      rate_per_hour: employee.rate_per_hour ? String(employee.rate_per_hour) : '',
+      password: '*************',
+      birth_date: employee.birth_date || '',
+      gender: employee.gender || 'male',
+      employment_date: employee.employment_date || '',
+      dateFrom: '',
+      dateTo: '',
+    });
+  }, [employee, isNew]);
 
   // Форматирование даты в формате дд.мм.гггг
   const formatDate = (dateString: string | null) => {
@@ -119,15 +157,149 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
     }
   }, [currentPage]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (isSaving) {
+      return;
+    }
+
+    const trimmedFirstName = formData.first_name.trim();
+    const trimmedLastName = formData.last_name.trim();
+    const trimmedEmail = formData.email.trim();
+    const trimmedPhone = formData.phone.trim();
+
+    if (!trimmedLastName || !trimmedFirstName) {
+      alert('Заполните фамилию и имя сотрудника');
+      return;
+    }
+
+    if (!trimmedEmail) {
+      alert('Укажите электронную почту');
+      return;
+    }
+
+    if (!trimmedPhone) {
+      alert('Укажите номер телефона');
+      return;
+    }
+
+    if (isNew) {
+      if (!formData.password.trim()) {
+        alert('Введите пароль для сотрудника');
+        return;
+      }
+
+      if (!formData.birth_date) {
+        alert('Укажите дату рождения');
+        return;
+      }
+
+      const employmentDateValue = formData.employment_date || new Date().toISOString().split('T')[0];
+      const rateValue = formData.rate_per_hour ? Number(formData.rate_per_hour) : 0;
+
+      setIsSaving(true);
+      try {
+        const payload = {
+          first_name: trimmedFirstName,
+          second_name: formData.second_name.trim(),
+          last_name: trimmedLastName,
+          birth_date: formData.birth_date,
+          gender: formData.gender,
+          email: trimmedEmail,
+          phone: trimmedPhone,
+          password: formData.password,
+          role: formData.position,
+          is_employee: true,
+          is_system_admin: false,
+          employment_date: employmentDateValue,
+          position: formData.position,
+          employee_status: formData.status === 'Работает' ? 'active' : 'dismissed',
+          rate_per_hour: Number.isFinite(rateValue) ? rateValue : 0,
+          work_schedule: formData.work_schedule === '5/2 будни' ? '5/2' : formData.work_schedule,
+        };
+
+        const response = await apiService.registerEmployee(payload);
+        const createdEmployee = response?.data ?? response;
+
+        if (!createdEmployee) {
+          throw new Error('Пустой ответ сервера');
+        }
+
+        setFormData({
+          first_name: createdEmployee.first_name || '',
+          last_name: createdEmployee.last_name || '',
+          second_name: createdEmployee.second_name || '',
+          phone: createdEmployee.phone || '',
+          email: createdEmployee.email || '',
+          position: createdEmployee.role || createdEmployee.position || formData.position,
+          work_schedule: mapWorkSchedule(createdEmployee.work_schedule),
+          status: createdEmployee.employee_status === 'dismissed' || createdEmployee.is_dismissed ? 'Уволен' : 'Работает',
+          rate_per_hour: createdEmployee.rate_per_hour ? String(createdEmployee.rate_per_hour) : '',
+          password: '',
+          birth_date: createdEmployee.birth_date || formData.birth_date,
+          gender: createdEmployee.gender || formData.gender,
+          employment_date: createdEmployee.employment_date || employmentDateValue,
+          dateFrom: '',
+          dateTo: '',
+        });
+        setIsPasswordVisible(false);
+        setIsStatusDropdownOpen(false);
+        setIsGenderDropdownOpen(false);
+        setIsScheduleDropdownOpen(false);
+        setIsPositionDropdownOpen(false);
+        setIsDotsMenuOpen(false);
+        onCreate?.(createdEmployee);
+        return;
+      } catch (error) {
+        console.error('Error creating employee:', error);
+        alert('Не удалось создать сотрудника. Проверьте данные и попробуйте ещё раз.');
+      } finally {
+        setIsSaving(false);
+      }
+
+      return;
+    }
+
+    const rateValue = formData.rate_per_hour ? Number(formData.rate_per_hour) : 0;
+
+    const updatedEmployee = {
+      ...employee,
+      first_name: trimmedFirstName,
+      last_name: trimmedLastName,
+      second_name: formData.second_name.trim(),
+      phone: trimmedPhone,
+      email: trimmedEmail,
+      role: formData.position,
+      work_schedule: formData.work_schedule,
+      employee_status: formData.status === 'Работает' ? 'active' : 'dismissed',
+      is_dismissed: formData.status !== 'Работает',
+      rate_per_hour: Number.isFinite(rateValue) ? rateValue : 0,
+      birth_date: formData.birth_date || employee.birth_date,
+      gender: formData.gender || employee.gender,
+      employment_date: formData.employment_date || employee.employment_date,
+    };
+
     if (onSave) {
-      onSave({
-        ...employee,
-        ...formData,
-      });
+      onSave(updatedEmployee);
     }
     onBack();
   };
+
+  const handleCancel = () => {
+    onBack();
+  };
+
+  const formatEmployeeName = () => {
+    const firstName = formData.first_name || '';
+    const lastName = formData.last_name || '';
+    const secondName = formData.second_name || '';
+    const fullName = `${lastName} ${firstName} ${secondName}`.trim();
+    return fullName || 'Новый сотрудник';
+  };
+
+  const dismissalDateDisplay = employee.dismissal_date ? formatDate(employee.dismissal_date) : '-';
+  const employmentDateDisplay = (formData.employment_date && formatDate(formData.employment_date))
+    || (employee.employment_date ? formatDate(employee.employment_date) : '-')
+    || '-';
 
   return (
     <div className="employee-detail">
@@ -144,38 +316,40 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
                   <h2 className="employee-detail__name">{formatEmployeeName()}</h2>
                   <div className="employee-detail__dates">
                     <p className="employee-detail__date">
-                      Дата увольнения: {employee.dismissal_date ? formatDate(employee.dismissal_date) : '-'}
+                      Дата увольнения: {dismissalDateDisplay}
                     </p>
                     <p className="employee-detail__date">
-                      Дата трудоустройства: {employee.employment_date ? formatDate(employee.employment_date) : '-'}
+                      Дата трудоустройства: {employmentDateDisplay}
                     </p>
                   </div>
                 </div>
               </div>
             </div>
-            <div className="employee-detail__header-right">
-              <div className="employee-detail__dots-menu-wrapper" ref={dotsMenuRef}>
-                <button 
-                  className="employee-detail__icon-btn employee-detail__icon-btn--dots"
-                  onClick={() => setIsDotsMenuOpen(!isDotsMenuOpen)}
-                >
-                  <img src={dotsIcon} alt="Меню" />
-                </button>
-                {isDotsMenuOpen && (
-                  <div className="employee-detail__dots-menu">
-                    <button 
-                      className="employee-detail__dots-menu-item"
-                      onClick={() => {
-                        // TODO: Реализовать функционал увольнения через меню
-                        setIsDotsMenuOpen(false);
-                      }}
-                    >
-                      Уволить
-                    </button>
-                  </div>
-                )}
+            {!isNew && (
+              <div className="employee-detail__header-right">
+                <div className="employee-detail__dots-menu-wrapper" ref={dotsMenuRef}>
+                  <button 
+                    className="employee-detail__icon-btn employee-detail__icon-btn--dots"
+                    onClick={() => setIsDotsMenuOpen(!isDotsMenuOpen)}
+                  >
+                    <img src={dotsIcon} alt="Меню" />
+                  </button>
+                  {isDotsMenuOpen && (
+                    <div className="employee-detail__dots-menu">
+                      <button 
+                        className="employee-detail__dots-menu-item"
+                        onClick={() => {
+                          // TODO: Реализовать функционал увольнения через меню
+                          setIsDotsMenuOpen(false);
+                        }}
+                      >
+                        Уволить
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className="employee-detail__fields">
@@ -310,6 +484,53 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
                 />
               </div>
             </div>
+
+            <div className="employee-detail__fields-row">
+              <div className="employee-detail__date-field">
+                <label className="employee-detail__field-label">Дата рождения</label>
+                <input
+                  type="date"
+                  className="employee-detail__date-field-input"
+                  value={formData.birth_date || ''}
+                  onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
+                />
+              </div>
+              <div className="employee-detail__date-field">
+                <label className="employee-detail__field-label">Дата трудоустройства</label>
+                <input
+                  type="date"
+                  className="employee-detail__date-field-input"
+                  value={formData.employment_date || ''}
+                  onChange={(e) => setFormData({ ...formData, employment_date: e.target.value })}
+                />
+              </div>
+              <div className="employee-detail__dropdown-field employee-detail__dropdown-field--third" ref={genderDropdownRef}>
+                <label className="employee-detail__field-label">Пол</label>
+                <div
+                  className="employee-detail__dropdown"
+                  onClick={() => setIsGenderDropdownOpen(!isGenderDropdownOpen)}
+                >
+                  <span>{genderOptions.find((option) => option.value === formData.gender)?.label || 'Мужской'}</span>
+                  <img src={userDropdownIcon} alt="▼" />
+                </div>
+                {isGenderDropdownOpen && (
+                  <div className="employee-detail__dropdown-menu">
+                    {genderOptions.map((option) => (
+                      <div
+                        key={option.value}
+                        className={`employee-detail__dropdown-option ${formData.gender === option.value ? 'employee-detail__dropdown-option--selected' : ''}`}
+                        onClick={() => {
+                          setFormData({ ...formData, gender: option.value });
+                          setIsGenderDropdownOpen(false);
+                        }}
+                      >
+                        {option.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="employee-detail__finances">
@@ -327,12 +548,15 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
             <Button
               text="Отмена"
               className="employee-detail__cancel-btn"
-              onClick={onBack}
+              onClick={handleCancel}
             />
             <Button
-              text="Сохранить"
+              text={isSaving ? 'Сохранение...' : isNew ? 'Создать' : 'Сохранить'}
               className="employee-detail__save-btn"
-              onClick={handleSave}
+              disabled={isSaving}
+              onClick={() => {
+                void handleSave();
+              }}
             />
           </div>
         </div>

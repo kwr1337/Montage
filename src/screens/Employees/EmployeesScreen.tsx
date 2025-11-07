@@ -9,13 +9,15 @@ import userDropdownIcon from '../../shared/icons/user-dropdown-icon.svg';
 import { EmployeeDetail } from './EmployeeDetail';
 import './employees.scss';
 
+type EmployeeHistoryEntry = number | 'new' | null;
+
 export const EmployeesScreen: React.FC = () => {
   // Состояние для выбранного сотрудника
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(() => {
     const saved = localStorage.getItem('selectedEmployeeId');
     return saved ? parseInt(saved, 10) : null;
   });
-  const [navigationHistory, setNavigationHistory] = useState<(number | null)[]>(() => {
+  const [navigationHistory, setNavigationHistory] = useState<EmployeeHistoryEntry[]>(() => {
     const saved = localStorage.getItem('selectedEmployeeId');
     const savedId = saved ? parseInt(saved, 10) : null;
     return savedId ? [null, savedId] : [null];
@@ -32,6 +34,8 @@ export const EmployeesScreen: React.FC = () => {
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<number>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [isCreatingEmployee, setIsCreatingEmployee] = useState(false);
+  const [draftEmployee, setDraftEmployee] = useState<any | null>(null);
   
   // Состояние для сортировки
   const [sortField, setSortField] = useState<string | null>(null);
@@ -61,6 +65,50 @@ export const EmployeesScreen: React.FC = () => {
 
     fetchEmployees();
   }, []);
+
+  const createEmptyEmployeeDraft = () => ({
+    id: null,
+    first_name: '',
+    last_name: '',
+    second_name: '',
+    phone: '',
+    email: '',
+    role: 'Управляющий',
+    work_schedule: '5/2 будни',
+    is_dismissed: false,
+    employee_status: 'active',
+    rate_per_hour: '',
+    birth_date: '',
+    gender: 'male',
+    employment_date: '',
+  });
+
+  const startEmployeeCreation = () => {
+    const draft = createEmptyEmployeeDraft();
+    setIsCreatingEmployee(true);
+    setDraftEmployee(draft);
+    setSelectedEmployeeId(null);
+    setSelectedEmployeeIds(new Set());
+    localStorage.removeItem('selectedEmployeeId');
+  };
+
+  const exitCreationToList = () => {
+    setIsCreatingEmployee(false);
+    setDraftEmployee(null);
+    setSelectedEmployeeId(null);
+    setNavigationHistory((prevHistory) => {
+      const updated = [...prevHistory];
+      if (historyIndex >= 0 && historyIndex < updated.length) {
+        updated[historyIndex] = null;
+      } else {
+        updated.push(null);
+      }
+      const newIndex = Math.min(historyIndex, updated.length - 1);
+      setHistoryIndex(newIndex);
+      return updated;
+    });
+    localStorage.removeItem('selectedEmployeeId');
+  };
 
   // Фильтрация сотрудников
   const filteredEmployees = employees.filter((employee) => {
@@ -169,16 +217,23 @@ export const EmployeesScreen: React.FC = () => {
   const paginatedEmployees = sortedEmployees.slice(startIndex, endIndex);
 
   // Функция для навигации с сохранением истории
-  const navigateToEmployee = (employeeId: number | null) => {
+  const navigateToEmployee = (entry: EmployeeHistoryEntry) => {
     const newHistory = navigationHistory.slice(0, historyIndex + 1);
-    newHistory.push(employeeId);
+    newHistory.push(entry);
     setNavigationHistory(newHistory);
     setHistoryIndex(newHistory.length - 1);
-    setSelectedEmployeeId(employeeId);
     
-    // Сохраняем selectedEmployeeId в localStorage
-    if (employeeId) {
-      localStorage.setItem('selectedEmployeeId', employeeId.toString());
+    if (entry === 'new') {
+      startEmployeeCreation();
+      return;
+    }
+
+    setIsCreatingEmployee(false);
+    setDraftEmployee(null);
+    setSelectedEmployeeId(entry ?? null);
+
+    if (typeof entry === 'number' && entry) {
+      localStorage.setItem('selectedEmployeeId', entry.toString());
     } else {
       localStorage.removeItem('selectedEmployeeId');
     }
@@ -195,7 +250,11 @@ export const EmployeesScreen: React.FC = () => {
 
   // Обработчик возврата к списку
   const handleBackToList = () => {
-    navigateToEmployee(null);
+    if (isCreatingEmployee) {
+      exitCreationToList();
+    } else {
+      navigateToEmployee(null);
+    }
   };
 
   // Обработчик навигации назад
@@ -203,14 +262,20 @@ export const EmployeesScreen: React.FC = () => {
     if (historyIndex > 0) {
       const newIndex = historyIndex - 1;
       setHistoryIndex(newIndex);
-      const prevEmployeeId = navigationHistory[newIndex];
-      setSelectedEmployeeId(prevEmployeeId);
-      
-      // Сохраняем selectedEmployeeId в localStorage
-      if (prevEmployeeId) {
-        localStorage.setItem('selectedEmployeeId', prevEmployeeId.toString());
+      const prevEntry = navigationHistory[newIndex];
+
+      if (prevEntry === 'new') {
+        startEmployeeCreation();
       } else {
-        localStorage.removeItem('selectedEmployeeId');
+        setIsCreatingEmployee(false);
+        setDraftEmployee(null);
+        setSelectedEmployeeId(prevEntry ?? null);
+
+        if (typeof prevEntry === 'number' && prevEntry) {
+          localStorage.setItem('selectedEmployeeId', prevEntry.toString());
+        } else {
+          localStorage.removeItem('selectedEmployeeId');
+        }
       }
     }
   };
@@ -220,23 +285,31 @@ export const EmployeesScreen: React.FC = () => {
     if (historyIndex < navigationHistory.length - 1) {
       const newIndex = historyIndex + 1;
       setHistoryIndex(newIndex);
-      const nextEmployeeId = navigationHistory[newIndex];
-      setSelectedEmployeeId(nextEmployeeId);
-      
-      // Сохраняем selectedEmployeeId в localStorage
-      if (nextEmployeeId) {
-        localStorage.setItem('selectedEmployeeId', nextEmployeeId.toString());
+      const nextEntry = navigationHistory[newIndex];
+
+      if (nextEntry === 'new') {
+        startEmployeeCreation();
       } else {
-        localStorage.removeItem('selectedEmployeeId');
+        setIsCreatingEmployee(false);
+        setDraftEmployee(null);
+        setSelectedEmployeeId(nextEntry ?? null);
+
+        if (typeof nextEntry === 'number' && nextEntry) {
+          localStorage.setItem('selectedEmployeeId', nextEntry.toString());
+        } else {
+          localStorage.removeItem('selectedEmployeeId');
+        }
       }
     }
   };
 
   // Получаем выбранного сотрудника
-  const selectedEmployee = selectedEmployeeId && !isLoading
+  const selectedEmployeeData = selectedEmployeeId && !isLoading
     ? employees.find((emp) => emp.id === selectedEmployeeId)
     : null;
 
+  const detailEmployee = isCreatingEmployee ? draftEmployee : selectedEmployeeData;
+ 
   // Обработчик сортировки
   const handleSort = (field: string | null) => {
     if (sortField === field) {
@@ -289,8 +362,8 @@ export const EmployeesScreen: React.FC = () => {
     const firstName = employee.first_name || '';
     const lastName = employee.last_name || '';
     const secondName = employee.second_name || '';
-    // Для breadcrumb используем полное имя, для таблицы - только фамилия и имя
-    return `${lastName} ${firstName} ${secondName}`.trim() || `${lastName} ${firstName}`.trim();
+    const fullName = `${lastName} ${firstName} ${secondName}`.trim();
+    return fullName || 'Новый сотрудник';
   };
 
   // Функция форматирования даты
@@ -339,28 +412,26 @@ export const EmployeesScreen: React.FC = () => {
   return (
     <div className="employees">
       <PageHeader
-        categoryIcon={!selectedEmployee ? sotrudnikiIconGrey : undefined}
-        categoryLabel={!selectedEmployee ? "Сотрудники" : undefined}
-        breadcrumb={selectedEmployee ? [
+        categoryIcon={!detailEmployee ? sotrudnikiIconGrey : undefined}
+        categoryLabel={!detailEmployee ? "Сотрудники" : undefined}
+        breadcrumb={detailEmployee ? [
           { icon: sotrudnikiIconGrey, label: "Сотрудники", onClick: () => navigateToEmployee(null) },
-          { label: formatEmployeeName(selectedEmployee) }
+          { label: formatEmployeeName(detailEmployee) }
         ] : undefined}
         showPagination={true}
         onBack={handleBack}
         onForward={handleForward}
         backDisabled={historyIndex === 0}
         forwardDisabled={historyIndex === navigationHistory.length - 1}
-        createButtonText={!selectedEmployee ? "Добавить" : undefined}
-        onCreate={!selectedEmployee ? () => {
-          // TODO: Открыть модальное окно добавления сотрудника
-        } : undefined}
+        createButtonText={!detailEmployee ? "Добавить" : undefined}
+        onCreate={!detailEmployee ? () => navigateToEmployee('new') : undefined}
         userName="Гиламанов Т.Р."
       />
 
       {/* Если выбран сотрудник и данные загружены, показываем детальный вид */}
-      {selectedEmployee && !isLoading ? (
+      {(detailEmployee && (isCreatingEmployee || !isLoading)) ? (
         <EmployeeDetail
-          employee={selectedEmployee}
+          employee={detailEmployee}
           onBack={handleBackToList}
           onSave={(updatedEmployee) => {
             // Обновляем данные сотрудника в списке
@@ -368,6 +439,38 @@ export const EmployeesScreen: React.FC = () => {
               prev.map((emp) => (emp.id === updatedEmployee.id ? updatedEmployee : emp))
             );
           }}
+          onCreate={(createdEmployee) => {
+            if (!createdEmployee || !createdEmployee.id) {
+              setIsCreatingEmployee(false);
+              setDraftEmployee(null);
+              navigateToEmployee(null);
+              return;
+            }
+
+            setEmployees((prev) => {
+              const filtered = prev.filter((emp) => emp.id !== createdEmployee.id);
+              return [createdEmployee, ...filtered];
+            });
+
+            setIsCreatingEmployee(false);
+            setDraftEmployee(null);
+            const numericId = Number(createdEmployee.id);
+            setSelectedEmployeeId(numericId);
+            setNavigationHistory((prevHistory) => {
+              const updated = [...prevHistory];
+              if (updated.length === 0) {
+                const initialHistory: EmployeeHistoryEntry[] = [null, numericId];
+                setHistoryIndex(initialHistory.length - 1);
+                return initialHistory;
+              }
+              const targetIndex = Math.min(historyIndex, updated.length - 1);
+              updated[targetIndex] = numericId;
+              setHistoryIndex(targetIndex);
+              return updated;
+            });
+            localStorage.setItem('selectedEmployeeId', numericId.toString());
+          }}
+          isNew={isCreatingEmployee}
         />
       ) : (
       
