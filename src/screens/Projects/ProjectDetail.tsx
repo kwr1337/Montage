@@ -20,18 +20,42 @@ type ProjectDetailProps = {
   project: any;
   onBack: () => void;
   onProjectUpdate?: (updatedProject: any) => void;
+  onProjectCreate?: (createdProject: any) => void;
+  isNew?: boolean;
 };
 
-export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, onProjectUpdate }) => {
+const PROJECT_STATUS_META: Record<string, { className: string; color: string; label: string }> = {
+  'Новый': { className: 'projects__status--new', color: '#2787F5', label: 'Новый' },
+  'В работе': { className: 'projects__status--in-progress', color: '#FF9E00', label: 'В работе' },
+  'Завершен': { className: 'projects__status--completed', color: '#26AB69', label: 'Завершен' },
+  'Архив': { className: 'projects__status--archived', color: '#919399', label: 'Архив' },
+};
+
+const EDITABLE_PROJECT_STATUS_OPTIONS = [
+  { label: 'Новый', value: 'Новый', color: '#2787F5' },
+  { label: 'В работе', value: 'В работе', color: '#FF9E00' },
+];
+
+const EDITABLE_PROJECT_STATUS_VALUES = EDITABLE_PROJECT_STATUS_OPTIONS.map((option) => option.value);
+const DEFAULT_EDITABLE_PROJECT_STATUS = EDITABLE_PROJECT_STATUS_OPTIONS[0].value;
+
+export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, onProjectUpdate, onProjectCreate, isNew = false }) => {
   const [localProject, setLocalProject] = useState(project);
   // Восстанавливаем activeTab из localStorage при загрузке
   const [activeTab, setActiveTab] = useState(() => {
+    if (!project?.id) {
+      return 'general';
+    }
     const saved = localStorage.getItem(`activeTab_${project.id}`);
     return saved || 'general';
   });
 
   // Обновляем activeTab при изменении проекта
   useEffect(() => {
+    if (!project?.id) {
+      setActiveTab('general');
+      return;
+    }
     const saved = localStorage.getItem(`activeTab_${project.id}`);
     if (saved) {
       setActiveTab(saved);
@@ -62,9 +86,69 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   const [foremen, setForemen] = useState<any[]>([]);
   const [_selectedForemanId, setSelectedForemanId] = useState<number | null>(null);
   const [allEmployees, setAllEmployees] = useState<any[]>([]); // Все доступные сотрудники (is_employee = true)
+  const [isEditingHeader, setIsEditingHeader] = useState(false);
+  const [editedProjectName, setEditedProjectName] = useState(project.name || '');
+  const [editedStatus, setEditedStatus] = useState(
+    project.status && EDITABLE_PROJECT_STATUS_VALUES.includes(project.status)
+      ? project.status
+      : DEFAULT_EDITABLE_PROJECT_STATUS
+  );
+  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  const [isSavingHeader, setIsSavingHeader] = useState(false);
+  const statusDropdownRef = React.useRef<HTMLDivElement>(null);
+  const isNewProject = isNew;
+
   const startDateInputRef = React.useRef<HTMLInputElement>(null);
   const endDateInputRef = React.useRef<HTMLInputElement>(null);
   const datesContainerRef = React.useRef<HTMLDivElement>(null);
+  
+  const getEditableStatusValue = (status: string | null | undefined) => {
+    if (status && EDITABLE_PROJECT_STATUS_VALUES.includes(status)) {
+      return status;
+    }
+    return DEFAULT_EDITABLE_PROJECT_STATUS;
+  };
+
+  const resolveStatusMeta = (status: string | null | undefined) => {
+    if (!status) {
+      return { className: '', color: '#919399', label: '—' };
+    }
+
+    return PROJECT_STATUS_META[status] || { className: '', color: '#919399', label: status };
+  };
+
+  useEffect(() => {
+    if (!isEditingHeader) {
+      setEditedProjectName(localProject.name || '');
+      setEditedStatus(getEditableStatusValue(localProject.status));
+    }
+  }, [localProject.id, localProject.name, localProject.status, isEditingHeader]);
+
+  useEffect(() => {
+    if (!isStatusDropdownOpen) {
+      return;
+    }
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
+        setIsStatusDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isStatusDropdownOpen]);
+
+  useEffect(() => {
+    if (isNewProject) {
+      setIsEditingHeader(true);
+      setEditedProjectName(project.name || '');
+      setEditedStatus(getEditableStatusValue(project.status));
+    }
+  }, [isNewProject, project.name, project.status]);
   
   // Функция для форматирования имени пользователя
   const formatUserName = (user: any) => {
@@ -317,66 +401,226 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     }));
   };
 
-  const handleSave = async () => {
+  const handleStartHeaderEdit = () => {
+    setEditedProjectName(localProject.name || '');
+    setEditedStatus(getEditableStatusValue(localProject.status));
+    setIsStatusDropdownOpen(false);
+    setIsDotsMenuOpen(false);
+    setIsEditingHeader(true);
+  };
+
+  const handleHeaderCancel = () => {
+    if (isNewProject) {
+      onBack();
+      return;
+    }
+
+    setEditedProjectName(localProject.name || '');
+    setEditedStatus(getEditableStatusValue(localProject.status));
+    setIsStatusDropdownOpen(false);
+    setIsEditingHeader(false);
+  };
+
+  const handleHeaderSave = async () => {
+    if (isNewProject) {
+      setIsSavingHeader(true);
+      try {
+        await handleSave();
+      } finally {
+        setIsSavingHeader(false);
+      }
+      return;
+    }
+
+    if (!localProject?.id) {
+      return;
+    }
+
+    const trimmedName = editedProjectName.trim();
+
+    if (!trimmedName) {
+      alert('Введите название проекта');
+      return;
+    }
+
+    setIsSavingHeader(true);
+
     try {
-      // Получаем текущий список сотрудников проекта (включая всех сотрудников)
-      // Бригадиры управляются через вкладку "Фиксация работ", поэтому здесь их не трогаем
       const currentEmployees = localProject.employees || [];
-      
-      // Формируем массив employee для PATCH запроса согласно документации:
-      // { id, start_working_date, end_working_date: null, rate_per_hour }
-      // Сохраняем всех существующих сотрудников с их данными
+
       const employeeObjects = currentEmployees.map((emp: any) => ({
         id: emp.id,
         start_working_date: emp.pivot?.start_working_date || localProject.start_date,
         end_working_date: emp.pivot?.end_working_date || null,
-        rate_per_hour: emp.pivot?.rate_per_hour || emp.rate_per_hour || 0
+        rate_per_hour: emp.pivot?.rate_per_hour || emp.rate_per_hour || 0,
       }));
 
       const updateData: any = {
-        name: localProject.name,
+        name: trimmedName,
         project_manager_id: localProject.project_manager_id || null,
         start_date: formData.startDate,
         end_date: formData.endDate,
         budget: formData.budget ? parseFloat(formData.budget.toString()) : null,
         address: formData.address,
         description: localProject.description || '',
-        status: localProject.status || 'В работе',
-        employee: employeeObjects
+        status: editedStatus,
+        employee: employeeObjects,
       };
 
-      // Отправляем запрос на обновление проекта
       await apiService.updateProject(localProject.id, updateData);
-      
-      // Перезагружаем проект, чтобы получить обновленные данные
+
+      const updatedProjectResponse = await apiService.getProjectById(localProject.id);
+
+      if (updatedProjectResponse && updatedProjectResponse.data) {
+        const updatedProject = updatedProjectResponse.data;
+        setLocalProject(updatedProject);
+
+        if (onProjectUpdate) {
+          onProjectUpdate(updatedProject);
+        }
+      } else {
+        setLocalProject((prev: any) => ({
+          ...prev,
+          name: trimmedName,
+          status: editedStatus,
+        }));
+      }
+
+      setIsEditingHeader(false);
+      setIsStatusDropdownOpen(false);
+    } catch (error) {
+      console.error('Error updating project title or status:', error);
+      alert('Не удалось сохранить изменения. Попробуйте еще раз.');
+    } finally {
+      setIsSavingHeader(false);
+    }
+  };
+
+  const handleSave = async () => {
+    const trimmedName = (isEditingHeader ? editedProjectName : localProject.name || '').trim();
+
+    if (!trimmedName) {
+      alert('Введите название проекта');
+      setIsEditingHeader(true);
+      return;
+    }
+
+    const statusForSave = isEditingHeader ? editedStatus : getEditableStatusValue(localProject.status);
+    const currentUser = apiService.getCurrentUser();
+    const effectiveProjectManagerId = localProject.project_manager_id ?? currentUser?.id ?? null;
+
+    const currentEmployees = localProject.employees || [];
+    const employeeObjects = currentEmployees.map((emp: any) => ({
+      id: emp.id,
+      start_working_date: emp.pivot?.start_working_date || localProject.start_date || formData.startDate || null,
+      end_working_date: emp.pivot?.end_working_date || null,
+      rate_per_hour: emp.pivot?.rate_per_hour || emp.rate_per_hour || 0,
+    }));
+
+    const basePayload: any = {
+      name: trimmedName,
+      project_manager_id: effectiveProjectManagerId,
+      start_date: formData.startDate || null,
+      end_date: formData.endDate || null,
+      budget: formData.budget ? parseFloat(formData.budget.toString()) : null,
+      address: formData.address,
+      description: localProject.description || '',
+      status: statusForSave,
+      employee: employeeObjects,
+    };
+
+    if (isNewProject) {
+      try {
+        const defaultStartDate = formData.startDate || new Date().toISOString().split('T')[0];
+        const employeesForRequest = employeeObjects.length > 0
+          ? employeeObjects
+          : (currentUser
+            ? [{
+                id: currentUser.id,
+                start_working_date: defaultStartDate,
+                end_working_date: null,
+                rate_per_hour: currentUser.rate_per_hour || 0,
+              }]
+            : []);
+
+        const createPayload = {
+          ...basePayload,
+          employee: employeesForRequest,
+        };
+
+        const response = await apiService.createProject(createPayload);
+        const createdProject = response?.data ?? response;
+
+        if (!createdProject) {
+          throw new Error('Empty response when creating project');
+        }
+
+        setLocalProject(createdProject);
+        setEditedProjectName(createdProject.name || '');
+        setEditedStatus(getEditableStatusValue(createdProject.status));
+        setIsEditingHeader(false);
+        setFormData(prev => ({
+          ...prev,
+          address: createdProject.address || '',
+          startDate: createdProject.start_date || '',
+          endDate: createdProject.end_date || '',
+          budget: createdProject.budget ? createdProject.budget.toString() : '',
+        }));
+
+        if (onProjectCreate) {
+          onProjectCreate(createdProject);
+        }
+      } catch (error) {
+        console.error('Error creating project:', error);
+        alert('Не удалось создать проект. Проверьте заполненные данные и попробуйте еще раз.');
+      }
+
+      return;
+    }
+
+    try {
+      await apiService.updateProject(localProject.id, basePayload);
+
       const updatedProjectResponse = await apiService.getProjectById(localProject.id);
       if (updatedProjectResponse && updatedProjectResponse.data) {
         const updatedProject = updatedProjectResponse.data;
         setLocalProject(updatedProject);
-        
-        // Обновляем проект в родительском компоненте
+
         if (onProjectUpdate) {
           onProjectUpdate(updatedProject);
         }
+      } else {
+        setLocalProject((prev: any) => ({
+          ...prev,
+          name: trimmedName,
+          status: statusForSave,
+          project_manager_id: effectiveProjectManagerId,
+        }));
       }
-      
     } catch (error) {
       // Ошибка обработана без уведомления пользователя
     }
   };
 
   const handleCancel = () => {
+    if (isNewProject) {
+      onBack();
+      return;
+    }
+
     // Сброс к исходным данным
     // Получаем всех бригадиров из проекта
     let foremenList: any[] = [];
-    let foremanName = '';
-    
+
     if (localProject.employees && Array.isArray(localProject.employees)) {
       foremenList = localProject.employees.filter((emp: any) => emp.role === 'Бригадир');
       
       if (foremenList.length > 0) {
         const firstForeman = foremenList[0];
-        foremanName = formatUserName(firstForeman);
+        setFormData(prev => ({
+          ...prev,
+          foreman: formatUserName(firstForeman)
+        }));
       }
     }
     
@@ -387,7 +631,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       address: localProject.address || '',
       startDate: localProject.start_date || '',
       endDate: localProject.end_date || '',
-      foreman: foremanName,
+      foreman: '',
       budget: localProject.budget || ''
     });
   };
@@ -1073,6 +1317,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       }
     }
   };
+  const displayProjectName = isEditingHeader ? editedProjectName : (localProject.name || '');
+  const displayStatus = isEditingHeader ? editedStatus : localProject.status;
+  const currentStatusMeta = resolveStatusMeta(displayStatus);
+  const selectedStatusMeta = resolveStatusMeta(editedStatus);
 
   return (
     <>
@@ -1081,15 +1329,72 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         <div className="projects__detail-header-row">
           {/* Заголовок, статус и последнее изменение в одной строке */}
           <div className="projects__detail-title-row">
-            <h1 className="projects__detail-title">{localProject.name}</h1>
-            <div className="projects__detail-status-group">
-              <div className="projects__status projects__status--in-progress">
-                <div className="projects__status-dot"></div>
-                <span>{localProject.status}</span>
-              </div>
+            <div className="projects__detail-title-wrapper">
+              {isEditingHeader ? (
+                <input
+                  type="text"
+                  className="projects__detail-title-input"
+                  value={editedProjectName}
+                  onChange={(e) => setEditedProjectName(e.target.value)}
+                  placeholder="Введите название проекта"
+                />
+              ) : (
+                <h1 className="projects__detail-title">{displayProjectName || 'Без названия'}</h1>
+              )}
             </div>
-            
-            {/* Последнее изменение */}
+            <div className="projects__detail-status-group">
+              {isEditingHeader ? (
+                <div
+                  className={`projects__detail-status-editor ${isStatusDropdownOpen ? 'projects__detail-status-editor--open' : ''}`}
+                  ref={statusDropdownRef}
+                >
+                  <button
+                    type="button"
+                    className={`projects__detail-status-trigger ${isStatusDropdownOpen ? 'projects__detail-status-trigger--open' : ''}`}
+                    onClick={() => setIsStatusDropdownOpen(prev => !prev)}
+                  >
+                    <span
+                      className="projects__detail-status-indicator"
+                      style={{ backgroundColor: selectedStatusMeta.color }}
+                    />
+                    <span className="projects__detail-status-trigger-text">{editedStatus}</span>
+                    <div className="projects__detail-status-trigger-arrow">
+                      <img src={userDropdownIcon} alt="▼" />
+                    </div>
+                  </button>
+                  {isStatusDropdownOpen && (
+                    <div className="projects__detail-status-dropdown">
+                      {EDITABLE_PROJECT_STATUS_OPTIONS.map(option => (
+                        <button
+                          type="button"
+                          key={option.value}
+                          className={`projects__detail-status-option ${option.value === editedStatus ? 'projects__detail-status-option--selected' : ''}`}
+                          onClick={() => {
+                            setEditedStatus(option.value);
+                            setIsStatusDropdownOpen(false);
+                          }}
+                        >
+                          <span
+                            className="projects__detail-status-option-indicator"
+                            style={{ backgroundColor: option.color }}
+                          />
+                          <span className="projects__detail-status-option-text">{option.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className={`projects__status ${currentStatusMeta.className}`}>
+                  <div
+                    className="projects__status-dot"
+                    style={{ backgroundColor: currentStatusMeta.color }}
+                  ></div>
+                  <span>{displayStatus || '—'}</span>
+                </div>
+              )}
+            </div>
+
             <div className="projects__detail-last-update">
               Последнее изменение: {formatDateWithMonth(localProject.updated_at)}
             </div>
@@ -1098,61 +1403,86 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
           {/* Иконки действий */}
           <div className="projects__detail-actions-top">
             <div className="projects__detail-icon-buttons">
-              <button className="projects__detail-icon-btn">
-                <img src={editIcon} alt="Редактировать" />
-              </button>
-              <div className="projects__detail-dots-menu-wrapper">
-                <button 
-                  className="projects__detail-icon-btn projects__detail-icon-btn--dots"
-                  onClick={() => setIsDotsMenuOpen(!isDotsMenuOpen)}
-                >
-                  <img src={dotsIcon} alt="Меню" />
-                </button>
-                {isDotsMenuOpen && (
-                  <div className="projects__detail-dots-menu">
-                    <button 
-                      className="projects__detail-dots-menu-item"
-                      onClick={async () => {
-                        if (!localProject.id || isArchiving) return;
-                        
-                        setIsArchiving(true);
-                        try {
-                          await apiService.archiveProject(localProject.id);
-                          
-                          // Обновляем проект
-                          const updatedProject = {
-                            ...localProject,
-                            is_archived: 1,
-                            status: 'Архив'
-                          };
-                          
-                          setLocalProject(updatedProject);
-                          
-                          // Уведомляем родительский компонент об обновлении
-                          if (onProjectUpdate) {
-                            onProjectUpdate(updatedProject);
-                          }
-                          
-                          // Закрываем проект и возвращаемся к списку
-                          onBack();
-                        } catch (error) {
-                          console.error('Error archiving project:', error);
-                          alert('Ошибка при архивировании проекта. Попробуйте еще раз.');
-                        } finally {
-                          setIsArchiving(false);
-                          setIsDotsMenuOpen(false);
-                        }
-                      }}
-                      disabled={isArchiving}
-                    >
-                      {isArchiving ? 'Архивирование...' : 'Перенести в архив'}
+              {isEditingHeader ? (
+                <div className="projects__detail-edit-actions">
+                  <button
+                    type="button"
+                    className="projects__detail-edit-btn projects__detail-edit-btn--save"
+                    onClick={handleHeaderSave}
+                    disabled={isSavingHeader}
+                  >
+                    {isSavingHeader ? 'Сохранение...' : isNewProject ? 'Создать' : 'Сохранить'}
+                  </button>
+                  <button
+                    type="button"
+                    className="projects__detail-edit-btn projects__detail-edit-btn--cancel"
+                    onClick={handleHeaderCancel}
+                    disabled={isSavingHeader}
+                  >
+                    Отмена
+                  </button>
+                </div>
+              ) : (
+                !isNewProject && (
+                  <>
+                    <button className="projects__detail-icon-btn" onClick={handleStartHeaderEdit}>
+                      <img src={editIcon} alt="Редактировать" />
                     </button>
-                    <button className="projects__detail-dots-menu-item projects__detail-dots-menu-item--delete">
-                      Удалить
-                    </button>
-                  </div>
-                )}
-              </div>
+                    <div className="projects__detail-dots-menu-wrapper">
+                      <button 
+                        className="projects__detail-icon-btn projects__detail-icon-btn--dots"
+                        onClick={() => setIsDotsMenuOpen(!isDotsMenuOpen)}
+                      >
+                        <img src={dotsIcon} alt="Меню" />
+                      </button>
+                      {isDotsMenuOpen && (
+                        <div className="projects__detail-dots-menu">
+                          <button 
+                            className="projects__detail-dots-menu-item"
+                            onClick={async () => {
+                              if (!localProject.id || isArchiving) return;
+                              
+                              setIsArchiving(true);
+                              try {
+                                await apiService.archiveProject(localProject.id);
+                                
+                                // Обновляем проект
+                                const updatedProject = {
+                                  ...localProject,
+                                  is_archived: 1,
+                                  status: 'Архив'
+                                };
+                                
+                                setLocalProject(updatedProject);
+                                
+                                // Уведомляем родительский компонент об обновлении
+                                if (onProjectUpdate) {
+                                  onProjectUpdate(updatedProject);
+                                }
+                                
+                                // Закрываем проект и возвращаемся к списку
+                                onBack();
+                              } catch (error) {
+                                console.error('Error archiving project:', error);
+                                alert('Ошибка при архивировании проекта. Попробуйте еще раз.');
+                              } finally {
+                                setIsArchiving(false);
+                                setIsDotsMenuOpen(false);
+                              }
+                            }}
+                            disabled={isArchiving}
+                          >
+                            {isArchiving ? 'Архивирование...' : 'Перенести в архив'}
+                          </button>
+                          <button className="projects__detail-dots-menu-item projects__detail-dots-menu-item--delete">
+                            Удалить
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )
+              )}
             </div>
           </div>
         </div>
@@ -1202,7 +1532,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
               className={`projects__detail-tab ${activeTab === 'general' ? 'projects__detail-tab--active' : ''}`}
               onClick={() => {
                 setActiveTab('general');
-                if (project.id) {
+                if (project?.id) {
                   localStorage.setItem(`activeTab_${project.id}`, 'general');
                 }
               }}
@@ -1213,7 +1543,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
               className={`projects__detail-tab ${activeTab === 'specification' ? 'projects__detail-tab--active' : ''}`}
               onClick={() => {
                 setActiveTab('specification');
-                if (project.id) {
+                if (project?.id) {
                   localStorage.setItem(`activeTab_${project.id}`, 'specification');
                 }
               }}
@@ -1225,7 +1555,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
               onClick={() => {
                 setActiveTab('tracking');
                 setTrackingCurrentPage(1); // Сбрасываем пагинацию при переключении на вкладку
-                if (project.id) {
+                if (project?.id) {
                   localStorage.setItem(`activeTab_${project.id}`, 'tracking');
                 }
               }}

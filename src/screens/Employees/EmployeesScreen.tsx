@@ -43,7 +43,6 @@ export const EmployeesScreen: React.FC = () => {
       setIsLoading(true);
       try {
         const response = await apiService.getUsers();
-        console.log('Employees response:', response);
         
         // Фильтруем только сотрудников (is_employee = true)
         const employeesData = response && response.data 
@@ -352,7 +351,9 @@ export const EmployeesScreen: React.FC = () => {
         backDisabled={historyIndex === 0}
         forwardDisabled={historyIndex === navigationHistory.length - 1}
         createButtonText={!selectedEmployee ? "Добавить" : undefined}
-        onCreate={!selectedEmployee ? () => console.log('Добавить сотрудника') : undefined}
+        onCreate={!selectedEmployee ? () => {
+          // TODO: Открыть модальное окно добавления сотрудника
+        } : undefined}
         userName="Гиламанов Т.Р."
       />
 
@@ -481,7 +482,6 @@ export const EmployeesScreen: React.FC = () => {
                 return;
               }
               // TODO: Реализовать увольнение выбранных сотрудников
-              console.log('Уволить сотрудников:', Array.from(selectedEmployeeIds));
             }}
           >
             Уволить

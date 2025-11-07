@@ -1,11 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../../services/api';
 import { ProjectDetail } from './ProjectDetail';
-
-type ProjectsScreenProps = {
-  onLogout?: () => void;
-};
-
 import menuIconGrey from '../../shared/icons/menuIconGrey.svg';
 import searchIcon from '../../shared/icons/searchIcon.svg';
 import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
@@ -15,6 +10,12 @@ import { PageHeader } from '../../shared/ui/PageHeader/PageHeader';
 import StatusFilter from '../../shared/ui/StatusFilter/StatusFilter';
 import { Pagination } from '../../shared/ui/Pagination/Pagination';
 import './projects.scss';
+
+type ProjectsScreenProps = {
+  onLogout?: () => void;
+};
+
+type ProjectHistoryEntry = number | 'new' | null;
 
 export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
   const [searchValue, setSearchValue] = useState('');
@@ -28,7 +29,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     const saved = localStorage.getItem('selectedProjectId');
     return saved ? parseInt(saved, 10) : null;
   });
-  const [navigationHistory, setNavigationHistory] = useState<(number | null)[]>(() => {
+  const [navigationHistory, setNavigationHistory] = useState<ProjectHistoryEntry[]>(() => {
     const saved = localStorage.getItem('selectedProjectId');
     const savedId = saved ? parseInt(saved, 10) : null;
     return savedId ? [null, savedId] : [null];
@@ -40,6 +41,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const itemsPerPage = 11;
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
   
   // Состояние для сортировки
   const [sortField, setSortField] = useState<string | null>(null); // null = сортировка по дате добавления (по умолчанию)
@@ -74,7 +76,6 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
       setIsLoading(true);
       try {
         const response = await apiService.getProjects(currentPage, itemsPerPage);
-        console.log('Projects response:', response);
         
         // Проверяем разные варианты структуры ответа
         if (Array.isArray(response)) {
@@ -118,7 +119,6 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
 
   // Фильтрация проектов по статусу и поиску (клиентская, пока сервер не поддерживает)
   const filteredProjects = projects.filter((project) => {
-    console.log('Project status:', project.status, 'Filter:', statusFilter);
     
     // Фильтр по статусу
     let matchesStatus = false;
@@ -305,7 +305,6 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
         setIsLoadingProject(true);
         try {
           const response = await apiService.getProjectById(selectedProjectId);
-          console.log('Project details response:', response);
           
           if (response && response.data) {
             setSelectedProject(response.data);
@@ -323,25 +322,31 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
           setSelectedProject(localProject || null);
         } finally {
           setIsLoadingProject(false);
+          setIsCreatingProject(false);
         }
-      } else {
+      } else if (!isCreatingProject) {
         setSelectedProject(null);
       }
     };
 
     fetchProjectDetails();
-  }, [selectedProjectId, projects]);
+  }, [selectedProjectId, projects, isCreatingProject]);
 
   // Функция для навигации с сохранением истории
-  const navigateToProject = (projectId: number | null) => {
+  const navigateToProject = (projectId: ProjectHistoryEntry) => {
     const newHistory = navigationHistory.slice(0, historyIndex + 1);
     newHistory.push(projectId);
     setNavigationHistory(newHistory);
     setHistoryIndex(newHistory.length - 1);
-    setSelectedProjectId(projectId);
+    if (projectId === 'new') {
+      startProjectCreation();
+    } else {
+      setIsCreatingProject(false);
+      setSelectedProjectId(projectId ?? null);
+    }
     
     // Сохраняем selectedProjectId в localStorage
-    if (projectId) {
+    if (typeof projectId === 'number' && projectId) {
       localStorage.setItem('selectedProjectId', projectId.toString());
     } else {
       localStorage.removeItem('selectedProjectId');
@@ -352,13 +357,18 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     if (historyIndex > 0) {
       const newIndex = historyIndex - 1;
       setHistoryIndex(newIndex);
-      const prevProjectId = navigationHistory[newIndex];
-      setSelectedProjectId(prevProjectId);
-      
-      // Сохраняем selectedProjectId в localStorage
-      if (prevProjectId) {
-        localStorage.setItem('selectedProjectId', prevProjectId.toString());
+      const prevEntry = navigationHistory[newIndex];
+
+      if (prevEntry === 'new') {
+        startProjectCreation();
+      } else if (typeof prevEntry === 'number' && prevEntry) {
+        setIsCreatingProject(false);
+        setSelectedProjectId(prevEntry);
+        localStorage.setItem('selectedProjectId', prevEntry.toString());
       } else {
+        setIsCreatingProject(false);
+        setSelectedProject(null);
+        setSelectedProjectId(null);
         localStorage.removeItem('selectedProjectId');
       }
     }
@@ -368,16 +378,54 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     if (historyIndex < navigationHistory.length - 1) {
       const newIndex = historyIndex + 1;
       setHistoryIndex(newIndex);
-      const nextProjectId = navigationHistory[newIndex];
-      setSelectedProjectId(nextProjectId);
-      
-      // Сохраняем selectedProjectId в localStorage
-      if (nextProjectId) {
-        localStorage.setItem('selectedProjectId', nextProjectId.toString());
+      const nextEntry = navigationHistory[newIndex];
+
+      if (nextEntry === 'new') {
+        startProjectCreation();
+      } else if (typeof nextEntry === 'number' && nextEntry) {
+        setIsCreatingProject(false);
+        setSelectedProjectId(nextEntry);
+        localStorage.setItem('selectedProjectId', nextEntry.toString());
       } else {
+        setIsCreatingProject(false);
+        setSelectedProject(null);
+        setSelectedProjectId(null);
         localStorage.removeItem('selectedProjectId');
       }
     }
+  };
+
+  const currentUser = apiService.getCurrentUser();
+
+  const createEmptyProjectDraft = () => ({
+    id: null,
+    name: '',
+    status: 'Новый',
+    start_date: '',
+    end_date: '',
+    address: '',
+    description: '',
+    budget: '',
+    project_manager_id: currentUser?.id ?? null,
+    employees: [],
+    nomenclature: [],
+  });
+
+  const startProjectCreation = () => {
+    const draftProject = createEmptyProjectDraft();
+    setIsCreatingProject(true);
+    setSelectedProject(draftProject);
+    setSelectedProjectId(null);
+    setIsLoadingProject(false);
+    localStorage.removeItem('selectedProjectId');
+  };
+
+  const handleStartCreateProject = () => {
+    const newHistory = navigationHistory.slice(0, historyIndex + 1);
+    newHistory.push('new');
+    setNavigationHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+    startProjectCreation();
   };
 
   const handleProjectUpdate = (updatedProject: any) => {
@@ -485,10 +533,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
         backDisabled={historyIndex === 0}
         forwardDisabled={historyIndex === navigationHistory.length - 1}
         createButtonText={!selectedProject ? "Создать" : undefined}
-        onCreate={!selectedProject ? () => {
-          // TODO: Открыть модальное окно создания проекта
-          console.log('Create project clicked');
-        } : undefined}
+        onCreate={!selectedProject ? handleStartCreateProject : undefined}
         userName="Гиламанов Т.Р."
         onLogout={onLogout}
       />
@@ -643,6 +688,14 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
           ) : (
             sortedProjects.map((project) => {
               const isArchived = project.is_archived === 1 || project.is_archived === true || project.status === 'Архив';
+              const statusClassNames = [
+                'projects__status',
+                project.status === 'Новый' ? 'projects__status--new' : '',
+                project.status === 'В работе' ? 'projects__status--in-progress' : '',
+                project.status === 'Завершен' ? 'projects__status--completed' : '',
+                isArchived ? 'projects__status--archived' : '',
+              ].filter(Boolean).join(' ');
+              const statusLabel = isArchived ? 'Архив' : project.status || '—';
               return (
                 <div 
                 key={project.id} 
@@ -670,9 +723,9 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                   <span>{project.name}</span>
                 </div>
                 <div className="projects__table-row-col">
-                  <div className={`projects__status ${project.status === 'В работе' ? 'projects__status--in-progress' : ''} ${isArchived ? 'projects__status--archived' : ''}`}>
+                  <div className={statusClassNames}>
                     <div className="projects__status-dot"></div>
-                    <span>{isArchived ? 'Архив' : project.status}</span>
+                    <span>{statusLabel}</span>
                   </div>
                 </div>
                 <div className="projects__table-row-col">
@@ -803,10 +856,35 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
         <ProjectDetail 
           project={selectedProject} 
           onBack={() => {
+            setIsCreatingProject(false);
+            setSelectedProject(null);
             setSelectedProjectId(null);
             localStorage.removeItem('selectedProjectId');
           }}
           onProjectUpdate={handleProjectUpdate}
+          onProjectCreate={(createdProject) => {
+            setProjects(prev => [createdProject, ...prev]);
+            setIsCreatingProject(false);
+            setSelectedProject(createdProject);
+            setSelectedProjectId(createdProject.id);
+            setIsLoadingProject(false);
+            setNavigationHistory(prevHistory => {
+              const updated = [...prevHistory];
+              if (updated.length === 0) {
+                const result = [null, createdProject.id];
+                setHistoryIndex(result.length - 1);
+                return result;
+              }
+              const targetIndex = Math.min(historyIndex, updated.length - 1);
+              updated[targetIndex] = createdProject.id;
+              setHistoryIndex(targetIndex);
+              return updated;
+            });
+            if (createdProject?.id) {
+              localStorage.setItem('selectedProjectId', createdProject.id.toString());
+            }
+          }}
+          isNew={isCreatingProject}
         />
       ) : (
         <div className="projects__content">
