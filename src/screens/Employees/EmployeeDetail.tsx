@@ -297,9 +297,9 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
   };
 
   const dismissalDateDisplay = employee.dismissal_date ? formatDate(employee.dismissal_date) : '-';
-  const employmentDateDisplay = (formData.employment_date && formatDate(formData.employment_date))
-    || (employee.employment_date ? formatDate(employee.employment_date) : '-')
-    || '-';
+  const employmentDateDisplay = formData.employment_date
+    ? formatDate(formData.employment_date)
+    : (employee.employment_date ? formatDate(employee.employment_date) : '-') || '-';
 
   return (
     <div className="employee-detail">
@@ -485,52 +485,45 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
               </div>
             </div>
 
-            <div className="employee-detail__fields-row">
-              <div className="employee-detail__date-field">
-                <label className="employee-detail__field-label">Дата рождения</label>
-                <input
-                  type="date"
-                  className="employee-detail__date-field-input"
-                  value={formData.birth_date || ''}
-                  onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
-                />
-              </div>
-              <div className="employee-detail__date-field">
-                <label className="employee-detail__field-label">Дата трудоустройства</label>
-                <input
-                  type="date"
-                  className="employee-detail__date-field-input"
-                  value={formData.employment_date || ''}
-                  onChange={(e) => setFormData({ ...formData, employment_date: e.target.value })}
-                />
-              </div>
-              <div className="employee-detail__dropdown-field employee-detail__dropdown-field--third" ref={genderDropdownRef}>
-                <label className="employee-detail__field-label">Пол</label>
-                <div
-                  className="employee-detail__dropdown"
-                  onClick={() => setIsGenderDropdownOpen(!isGenderDropdownOpen)}
-                >
-                  <span>{genderOptions.find((option) => option.value === formData.gender)?.label || 'Мужской'}</span>
-                  <img src={userDropdownIcon} alt="▼" />
+            {isNew && (
+              <div className="employee-detail__fields-row">
+                <div className="employee-detail__date-field">
+                  <label className="employee-detail__field-label">Дата рождения</label>
+                  <input
+                    type="date"
+                    className="employee-detail__date-field-input"
+                    value={formData.birth_date || ''}
+                    onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
+                  />
                 </div>
-                {isGenderDropdownOpen && (
-                  <div className="employee-detail__dropdown-menu">
-                    {genderOptions.map((option) => (
-                      <div
-                        key={option.value}
-                        className={`employee-detail__dropdown-option ${formData.gender === option.value ? 'employee-detail__dropdown-option--selected' : ''}`}
-                        onClick={() => {
-                          setFormData({ ...formData, gender: option.value });
-                          setIsGenderDropdownOpen(false);
-                        }}
-                      >
-                        {option.label}
-                      </div>
-                    ))}
+                <div className="employee-detail__dropdown-field employee-detail__dropdown-field--third" ref={genderDropdownRef}>
+                  <label className="employee-detail__field-label">Пол</label>
+                  <div
+                    className="employee-detail__dropdown"
+                    onClick={() => setIsGenderDropdownOpen(!isGenderDropdownOpen)}
+                  >
+                    <span>{genderOptions.find((option) => option.value === formData.gender)?.label || 'Мужской'}</span>
+                    <img src={userDropdownIcon} alt="▼" />
                   </div>
-                )}
+                  {isGenderDropdownOpen && (
+                    <div className="employee-detail__dropdown-menu">
+                      {genderOptions.map((option) => (
+                        <div
+                          key={option.value}
+                          className={`employee-detail__dropdown-option ${formData.gender === option.value ? 'employee-detail__dropdown-option--selected' : ''}`}
+                          onClick={() => {
+                            setFormData({ ...formData, gender: option.value });
+                            setIsGenderDropdownOpen(false);
+                          }}
+                        >
+                          {option.label}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className="employee-detail__finances">

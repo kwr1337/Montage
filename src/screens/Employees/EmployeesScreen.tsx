@@ -80,7 +80,7 @@ export const EmployeesScreen: React.FC = () => {
     rate_per_hour: '',
     birth_date: '',
     gender: 'male',
-    employment_date: '',
+    employment_date: new Date().toISOString().split('T')[0],
   });
 
   const startEmployeeCreation = () => {
