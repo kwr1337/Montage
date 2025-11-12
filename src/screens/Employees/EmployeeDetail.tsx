@@ -339,7 +339,6 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
                       <button 
                         className="employee-detail__dots-menu-item"
                         onClick={() => {
-                          // TODO: Реализовать функционал увольнения через меню
                           setIsDotsMenuOpen(false);
                         }}
                       >

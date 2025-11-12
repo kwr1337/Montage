@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { LoginScreen } from './screens/Auth/LoginScreen';
 import { MainLayout } from './shared/layouts/MainLayout';
 import { apiService } from './services/api';
+import { ProjectsScreenMobile } from './screens/Projects/ProjectsScreenMobile';
 import './index.css';
 
 // Импорт стилей всех экранов
 import './screens/Dashboard/dashboard.scss';
 import './screens/Projects/projects.scss';
+import './screens/Projects/projects-mobile.scss';
 import './screens/Calendar/calendar.scss';
 import './screens/Employees/employees.scss';
 import './screens/Employees/employee-detail.scss';
@@ -14,15 +16,39 @@ import './screens/Nomenclature/nomenclature.scss';
 import './screens/Reports/reports.scss';
 import './screens/Salary/salary.scss';
 
+const MOBILE_WIDTH_THRESHOLD = 900;
+const MOBILE_HEIGHT_THRESHOLD = 600;
+
+const getIsMobileViewport = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  return window.innerWidth <= MOBILE_WIDTH_THRESHOLD || window.innerHeight <= MOBILE_HEIGHT_THRESHOLD;
+};
+
+const getIsTouchDevice = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  if (window.matchMedia) {
+    return window.matchMedia('(pointer: coarse)').matches;
+  }
+  return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+};
+
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(() => apiService.getCurrentUser());
+  const [isMobileViewport, setIsMobileViewport] = useState(getIsMobileViewport);
+  const [isTouchDevice, setIsTouchDevice] = useState(getIsTouchDevice);
 
   useEffect(() => {
     // Проверяем токен при загрузке приложения
     const checkAuth = () => {
       if (apiService.isAuthenticated()) {
         setIsAuthenticated(true);
+        setCurrentUser(apiService.getCurrentUser());
       }
       setIsLoading(false);
     };
@@ -30,8 +56,47 @@ function App() {
     checkAuth();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleViewportChange = () => {
+      setIsMobileViewport(getIsMobileViewport());
+    };
+
+    const handleTouchChange = (event: MediaQueryListEvent) => {
+      setIsTouchDevice(event.matches);
+    };
+
+    const touchQuery = window.matchMedia('(pointer: coarse)');
+
+    window.addEventListener('resize', handleViewportChange);
+    window.addEventListener('orientationchange', handleViewportChange);
+    handleViewportChange();
+
+    if (touchQuery.addEventListener) {
+      touchQuery.addEventListener('change', handleTouchChange);
+    } else if (touchQuery.addListener) {
+      touchQuery.addListener(handleTouchChange);
+    }
+
+    setIsTouchDevice(getIsTouchDevice());
+
+    return () => {
+      window.removeEventListener('resize', handleViewportChange);
+      window.removeEventListener('orientationchange', handleViewportChange);
+      if (touchQuery.removeEventListener) {
+        touchQuery.removeEventListener('change', handleTouchChange);
+      } else if (touchQuery.removeListener) {
+        touchQuery.removeListener(handleTouchChange);
+      }
+    };
+  }, []);
+
   const handleLogin = () => {
     setIsAuthenticated(true);
+    setCurrentUser(apiService.getCurrentUser());
   };
 
   const handleLogout = async () => {
@@ -44,8 +109,15 @@ function App() {
       localStorage.removeItem('user');
       localStorage.removeItem('token_type');
       setIsAuthenticated(false);
+      setCurrentUser(null);
     }
   };
+
+  const userRole = currentUser?.role || currentUser?.position;
+  const isBrigadier = userRole === 'Бригадир';
+  const isMobileContext = isMobileViewport || isTouchDevice;
+  const shouldUseMobileProjects = isAuthenticated && isMobileContext && isBrigadier;
+  const shouldShowMobileRestriction = isAuthenticated && isMobileContext && !isBrigadier;
 
   if (isLoading) {
     return (
@@ -66,7 +138,24 @@ function App() {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
+  if (shouldUseMobileProjects) {
+    return <ProjectsScreenMobile onLogout={handleLogout} />;
+  }
+
+  if (shouldShowMobileRestriction) {
+    return (
+      <div className="mobile-restriction">
+        <div className="mobile-restriction__content">
+          <h1>Доступ через ПК</h1>
+          <p>Мобильная версия доступна только для бригадиров. Пожалуйста, откройте сервис на компьютере.</p>
+          <button type="button" onClick={handleLogout}>Выйти</button>
+        </div>
+      </div>
+    );
+  }
+
   return <MainLayout onLogout={handleLogout} />;
 }
 
 export default App;
+

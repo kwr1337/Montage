@@ -36,3 +36,52 @@ button { font-family: inherit; }
 
 /* Reset контейнера Vite */
 #root { max-width: none; margin: 0; }
+
+.mobile-restriction {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+  background: linear-gradient(145deg, #ffffff 0%, #f3f3f5 100%);
+}
+
+.mobile-restriction__content {
+  max-width: 360px;
+  width: 100%;
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 32px 24px;
+  box-shadow: 0 24px 48px rgba(22, 24, 35, 0.12);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: #2c2d2e;
+}
+
+.mobile-restriction__content h1 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.mobile-restriction__content p {
+  margin: 0;
+  font-size: 15px;
+  color: #6b6c70;
+  line-height: 1.4;
+}
+
+.mobile-restriction__content button {
+  margin-top: 8px;
+  border: none;
+  background: #2787f5;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 12px 18px;
+  border-radius: 12px;
+  box-shadow: 0 12px 24px rgba(39, 135, 245, 0.25);
+}
