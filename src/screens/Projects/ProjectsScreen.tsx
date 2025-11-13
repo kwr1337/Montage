@@ -42,6 +42,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
   const [totalPages, setTotalPages] = useState(1);
   const itemsPerPage = 11;
   const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [projectSpentMap, setProjectSpentMap] = useState<Map<number, number>>(new Map());
   
   // Состояние для сортировки
   const [sortField, setSortField] = useState<string | null>(null); // null = сортировка по дате добавления (по умолчанию)
@@ -49,26 +50,77 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
 
   // Функция для расчета суммы израсходованных средств проекта
   // На основе суммы колонки "Сумма (всего)" из таблицы фиксации работ
-  // Использует ту же логику, что и в ProjectDetail.tsx
   const calculateTotalSpent = (project: any): number => {
-    if (!project.employees || !Array.isArray(project.employees)) {
-      return 0;
+    // Используем кэшированное значение, если оно есть
+    if (projectSpentMap.has(project.id)) {
+      return projectSpentMap.get(project.id) || 0;
     }
     
-    // Формируем trackingItems для проекта аналогично ProjectDetail.tsx
-    // и суммируем totalSum из всех сотрудников
-    const trackingItems = project.employees.map((employee: any) => {
-      // Используем totalSum из trackingItems, если оно есть
-      // В текущей реализации totalSum = 0 (заглушка), но логика готова
-      return {
-        totalSum: employee.totalSum || 0
-      };
-    });
+    // Если данных еще нет, возвращаем 0 (данные загрузятся асинхронно)
+    return 0;
+  };
+
+  // Функция для загрузки израсходованных сумм для всех проектов
+  const loadProjectsSpent = async (projectsList: any[]) => {
+    const spentMap = new Map<number, number>();
     
-    // Суммируем все totalSum из trackingItems (как в ProjectDetail)
-    const totalSpent = trackingItems.reduce((sum: number, item: any) => sum + (item.totalSum || 0), 0);
+    await Promise.all(
+      projectsList.map(async (project) => {
+        if (!project.id || !project.employees || !Array.isArray(project.employees)) {
+          spentMap.set(project.id, 0);
+          return;
+        }
+        
+        try {
+          // Загружаем work_reports для всех сотрудников проекта и суммируем
+          const totalSpent = await Promise.all(
+            project.employees
+              .filter((emp: any) => !emp.pivot?.end_working_date) // Только активные
+              .map(async (emp: any) => {
+                try {
+                  const response = await apiService.getWorkReports(project.id, emp.id, {
+                    per_page: 1000,
+                  });
+                  
+                  let reports: any[] = [];
+                  if (response?.data?.data && Array.isArray(response.data.data)) {
+                    reports = response.data.data;
+                  } else if (response?.data && Array.isArray(response.data)) {
+                    reports = response.data;
+                  } else if (Array.isArray(response)) {
+                    reports = response;
+                  }
+                  
+                  // Суммируем часы
+                  const totalHours = reports.reduce((sum, report) => {
+                    const hoursWorked = Number(report.hours_worked) || 0;
+                    const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
+                    return sum + (isAbsent ? 0 : hoursWorked);
+                  }, 0);
+                  
+                  // Получаем ставку
+                  const rate = emp.pivot?.rate_per_hour || emp.rate_per_hour || emp.pivot?.hourly_rate || 0;
+                  
+                  // Рассчитываем сумму для сотрудника
+                  return totalHours * rate;
+                } catch (error) {
+                  console.error(`Error loading work reports for employee ${emp.id} in project ${project.id}:`, error);
+                  return 0;
+                }
+              })
+          );
+          
+          // Суммируем все суммы сотрудников
+          const projectTotalSpent = totalSpent.reduce((sum, employeeSpent) => sum + employeeSpent, 0);
+          spentMap.set(project.id, projectTotalSpent);
+        } catch (error) {
+          console.error(`Error loading spent for project ${project.id}:`, error);
+          spentMap.set(project.id, 0);
+        }
+      })
+    );
     
-    return totalSpent;
+    setProjectSpentMap(spentMap);
   };
 
   useEffect(() => {
@@ -78,12 +130,15 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
         const response = await apiService.getProjects(currentPage, itemsPerPage);
         
         // Проверяем разные варианты структуры ответа
+        let projectsList: any[] = [];
         if (Array.isArray(response)) {
+          projectsList = response;
           setProjects(response);
           // Если массив без мета-данных, используем локальную пагинацию
           setTotalPages(1);
         } else if (response && response.data) {
           if (Array.isArray(response.data)) {
+            projectsList = response.data;
             setProjects(response.data);
             // Проверяем наличие информации о пагинации
             // Laravel pagination format
@@ -104,6 +159,11 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
         } else {
           setProjects([]);
           setTotalPages(1);
+        }
+        
+        // Загружаем израсходованные суммы для всех проектов
+        if (projectsList.length > 0) {
+          loadProjectsSpent(projectsList);
         }
       } catch (error) {
         console.error('Error fetching projects:', error);

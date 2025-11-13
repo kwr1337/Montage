@@ -211,62 +211,121 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
 
   // Обновляем данные для фиксации работ при изменении сотрудников проекта
   useEffect(() => {
-    if (localProject.employees && Array.isArray(localProject.employees)) {
-      const formattedEmployees = localProject.employees.map((employee: any) => {
-        // Получаем дату начала работы сотрудника из pivot
-        const startWorkingDate = employee.pivot?.start_working_date || null;
-        const endWorkingDate = employee.pivot?.end_working_date || null;
-        const daysInProject = calculateDaysInProject(startWorkingDate, endWorkingDate);
-        
-        // Определяем статус: если есть end_working_date, то "Удалён"
-        const status = endWorkingDate ? 'Удалён' : 
-                      (employee.employee_status === 'active' ? 'Работает' :
-                      employee.is_dismissed ? 'Удалён' : 'Неизвестно');
-        
-        // Форматируем дату удаления
-        const deletionDate = endWorkingDate ? 
-          new Date(endWorkingDate).toLocaleDateString('ru-RU', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric'
-          }) : null;
-        
-        return {
-          id: employee.id,
-          name: `${employee.last_name} ${employee.first_name.charAt(0)}. ${employee.second_name.charAt(0)}.`,
-          role: employee.role || 'Не указана',
-          status: status,
-          deletionDate: deletionDate,
-          startDate: startWorkingDate ?
-                    new Date(startWorkingDate).toLocaleDateString('ru-RU', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric'
-                    }) : 'Не указана',
-          days: daysInProject,
-          hours: 0, // Пока заглушка, потом рассчитаем из отчетов
-          lastHours: 0, // Пока заглушка, потом возьмем из последнего отчета
-          rate: employee.pivot?.rate_per_hour || employee.rate_per_hour || 0,
-          lastSum: 0, // Пока заглушка, потом рассчитаем
-          totalSum: 0 // Пока заглушка, потом рассчитаем
-        };
-      });
-          
-          // Сортируем: сначала активные, затем удаленные
-          const sortedEmployees = formattedEmployees.sort((a: any, b: any) => {
-            const aIsDeleted = a.status === 'Удалён';
-            const bIsDeleted = b.status === 'Удалён';
+    if (localProject.employees && Array.isArray(localProject.employees) && localProject.id) {
+      const loadTrackingData = async () => {
+        const formattedEmployees = await Promise.all(
+          localProject.employees.map(async (employee: any) => {
+            // Получаем дату начала работы сотрудника из pivot
+            const startWorkingDate = employee.pivot?.start_working_date || null;
+            const endWorkingDate = employee.pivot?.end_working_date || null;
+            const daysInProject = calculateDaysInProject(startWorkingDate, endWorkingDate);
             
-            if (aIsDeleted === bIsDeleted) {
-              return 0;
+            // Определяем статус: если есть end_working_date, то "Удалён"
+            const status = endWorkingDate ? 'Удалён' : 
+                          (employee.employee_status === 'active' ? 'Работает' :
+                          employee.is_dismissed ? 'Удалён' : 'Неизвестно');
+            
+            // Форматируем дату удаления
+            const deletionDate = endWorkingDate ? 
+              new Date(endWorkingDate).toLocaleDateString('ru-RU', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric'
+              }) : null;
+            
+            // Получаем ставку в час
+            const rate = employee.pivot?.rate_per_hour || employee.rate_per_hour || 0;
+            
+            // Загружаем work_reports для сотрудника
+            let hours = 0;
+            let lastHours = 0;
+            let totalSum = 0;
+            let lastSum = 0;
+            
+            try {
+              const response = await apiService.getWorkReports(localProject.id, employee.id, {
+                per_page: 1000,
+              });
+              
+              let reports: any[] = [];
+              // Проверяем разные варианты структуры ответа
+              if (response?.data?.data && Array.isArray(response.data.data)) {
+                reports = response.data.data;
+              } else if (response?.data && Array.isArray(response.data)) {
+                reports = response.data;
+              } else if (Array.isArray(response)) {
+                reports = response;
+              }
+              
+              // Сортируем reports по дате (от новых к старым) для получения последнего
+              reports.sort((a, b) => {
+                const dateA = new Date(a.report_date).getTime();
+                const dateB = new Date(b.report_date).getTime();
+                return dateB - dateA;
+              });
+              
+              // Суммируем все часы
+              hours = reports.reduce((sum, report) => {
+                const hoursWorked = Number(report.hours_worked) || 0;
+                const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
+                return sum + (isAbsent ? 0 : hoursWorked);
+              }, 0);
+              
+              // Получаем последние часы (из самого последнего отчета)
+              if (reports.length > 0) {
+                const lastReport = reports[0];
+                const lastHoursWorked = Number(lastReport.hours_worked) || 0;
+                const isLastAbsent = lastReport.absent === true || lastReport.absent === 1 || lastReport.absent === '1';
+                lastHours = isLastAbsent ? 0 : lastHoursWorked;
+              }
+              
+              // Рассчитываем суммы
+              totalSum = hours * rate;
+              lastSum = lastHours * rate;
+            } catch (error) {
+              console.error(`Error loading work reports for employee ${employee.id}:`, error);
             }
             
-            return aIsDeleted ? 1 : -1;
-          });
+            return {
+              id: employee.id,
+              name: `${employee.last_name} ${employee.first_name.charAt(0)}. ${employee.second_name.charAt(0)}.`,
+              role: employee.role || 'Не указана',
+              status: status,
+              deletionDate: deletionDate,
+              startDate: startWorkingDate ?
+                        new Date(startWorkingDate).toLocaleDateString('ru-RU', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        }) : 'Не указана',
+              days: daysInProject,
+              hours: hours,
+              lastHours: lastHours,
+              rate: rate,
+              lastSum: lastSum,
+              totalSum: totalSum
+            };
+          })
+        );
           
-          setTrackingItems(sortedEmployees);
-          // Сбрасываем пагинацию при изменении данных
-          setTrackingCurrentPage(1);
+        // Сортируем: сначала активные, затем удаленные
+        const sortedEmployees = formattedEmployees.sort((a: any, b: any) => {
+          const aIsDeleted = a.status === 'Удалён';
+          const bIsDeleted = b.status === 'Удалён';
+          
+          if (aIsDeleted === bIsDeleted) {
+            return 0;
+          }
+          
+          return aIsDeleted ? 1 : -1;
+        });
+        
+        setTrackingItems(sortedEmployees);
+        // Сбрасываем пагинацию при изменении данных
+        setTrackingCurrentPage(1);
+      };
+      
+      loadTrackingData();
     } else {
       // Если employees пустой или undefined, очищаем trackingItems
       setTrackingItems([]);

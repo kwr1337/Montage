@@ -1,0 +1,550 @@
+.add-hours-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  animation: fadeIn 0.2s ease;
+}
+
+.add-hours-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #ffffff;
+  border-radius: 16px;
+  width: 268px;
+  max-width: calc(100vw - 32px);
+  max-height: 90vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  z-index: 1000;
+  animation: slideUp 0.3s ease;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-sizing: border-box;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    border-bottom: 1px solid #ecedf0;
+    background: #ffffff;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  &__title {
+    margin: 0;
+    font-family: 'SF Pro', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 19px;
+    font-weight: 500;
+    color: #2c2d2e;
+    letter-spacing: 0.06px;
+    text-transform: uppercase;
+    line-height: 1.3;
+  }
+
+  &__close {
+    border: none;
+    background: rgba(39, 135, 245, 0.1);
+    border-radius: 8px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.2s ease;
+
+    &:hover {
+      background: rgba(39, 135, 245, 0.15);
+    }
+
+    &:active {
+      transform: translateY(1px);
+    }
+
+    img {
+      width: 24px;
+      height: 24px;
+      filter: brightness(0) saturate(100%) invert(46%) sepia(98%) saturate(1844%) hue-rotate(197deg) brightness(98%) contrast(93%);
+    }
+  }
+
+  &__content {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  &__info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__label {
+    font-family: 'SF Pro', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 10px;
+    font-weight: 500;
+    color: #919399;
+    letter-spacing: 0.06px;
+    line-height: 1.3;
+    text-transform: uppercase;
+  }
+
+  &__value {
+    font-family: 'SF Pro', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    color: #2c2d2e;
+    line-height: 1.3;
+  }
+
+  &__date-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  &__date-picker {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid #dfe3eb;
+    border-radius: 8px;
+    background: #ffffff;
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+    box-sizing: border-box;
+    width: 100%;
+
+    &:hover {
+      border-color: #2787f5;
+    }
+  }
+
+  &__date-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+
+  &__date-display {
+    font-family: 'SF Pro', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    font-weight: 400;
+    color: #2c2d2e;
+    letter-spacing: -0.23px;
+    line-height: 1.4;
+    flex: 1;
+  }
+
+  &__date-warning {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #ED0A34;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  &__calendar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid #ecedf0;
+    border-radius: 12px;
+    background: #fafbfd;
+    width: 100%;
+    box-sizing: border-box;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  &__calendar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+
+  }
+
+  &__calendar-nav {
+    border: none;
+    background: transparent;
+    padding: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+
+    &:hover {
+      transform: scale(1.1);
+    }
+
+    &:active {
+      transform: scale(0.95);
+    }
+  }
+
+  &__calendar-month {
+    font-family: 'SF Pro', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: #2c2d2e;
+    text-transform: capitalize;
+  }
+
+  &__calendar-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    margin-bottom: 2px;
+    border-top: 1px solid #ecedf0;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  &__calendar-weekday {
+    font-family: 'SF Pro', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    color: #919399;
+    text-align: center;
+    padding: 2px 0;
+    box-sizing: border-box;
+    min-width: 0;
+  }
+
+  &__calendar-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  &__calendar-day {
+    border: none;
+    background: transparent;
+    font-family: 'SF Pro', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 11px;
+    font-weight: 400;
+    color: #2c2d2e;
+    padding: 4px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    box-sizing: border-box;
+
+    &:hover:not(&--empty):not(:disabled) {
+      background: rgba(39, 135, 245, 0.1);
+    }
+
+    &--empty {
+      cursor: default;
+      visibility: hidden;
+    }
+
+    &--selected {
+      background: #2787f5;
+      color: #ffffff;
+      font-weight: 600;
+
+      &:hover {
+        background: #1f76d9;
+      }
+    }
+
+    &--today {
+      border: 2px solid #2787f5;
+      background: rgba(39, 135, 245, 0.1);
+    }
+
+    &--missing {
+      background: rgba(237, 10, 52, 0.1);
+      color: #ED0A34;
+      font-weight: 600;
+
+      &:hover {
+        background: rgba(237, 10, 52, 0.2);
+      }
+
+      // Если день одновременно выбран и без фиксации, приоритет у выбранного
+      &.add-hours-modal__calendar-day--selected {
+        background: #2787f5;
+        color: #ffffff;
+      }
+    }
+  }
+
+  &__quantity {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  &__quantity-label {
+    font-family: 'SF Pro', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: #2c2d2e;
+    letter-spacing: 0.06px;
+    line-height: 1.3;
+    text-transform: uppercase;
+  }
+
+  &__counter {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
+  }
+
+  &__counter-btn {
+    border: none;
+    background: #2c2d2e;
+    border-radius: 8px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.2s ease, transform 0.1s ease;
+
+    &:hover:not(:disabled) {
+      background: #3a3b3d;
+    }
+
+    &:active:not(:disabled) {
+      transform: scale(0.95);
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    svg {
+      width: 24px;
+      height: 24px;
+    }
+  }
+
+  &__counter-value {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 100%;
+    border: none;
+    background: transparent;
+    font-family: 'SF Pro', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 32px;
+    font-weight: 400;
+    color: #2c2d2e;
+    letter-spacing: 0.06px;
+    line-height: 1;
+    text-align: center;
+    padding: 0;
+    outline: none;
+    box-sizing: border-box;
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    &::placeholder {
+      color: #919399;
+    }
+  }
+
+  &__absent {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__absent-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  &__absent-checkbox {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  &__absent-icon {
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  &__absent-text {
+    font-family: 'SF Pro', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    font-weight: 400;
+    color: #919399;
+    letter-spacing: 0.06px;
+    line-height: 1.3;
+  }
+
+  &__reason {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: -8px;
+  }
+
+  &__reason-label {
+    font-family: 'SF Pro', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 10px;
+    font-weight: 500;
+    color: #919399;
+    letter-spacing: 0.06px;
+    line-height: 1.3;
+    text-transform: uppercase;
+  }
+
+  &__reason-textarea {
+    // width: 100%;
+    border: 1px solid #dfe3eb;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-family: 'SF Pro', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    font-weight: 400;
+    color: #2c2d2e;
+    background: #ffffff;
+    outline: none;
+    transition: border-color 0.2s ease;
+    resize: vertical;
+    min-height: 80px;
+
+    &:focus {
+      border-color: #2787f5;
+    }
+
+    &::placeholder {
+      color: #b0b1b5;
+    }
+  }
+
+  &__error {
+    padding: 12px;
+    background: rgba(237, 10, 52, 0.1);
+    border: 1px solid #ED0A34;
+    border-radius: 8px;
+    color: #ED0A34;
+    font-family: 'SF Pro', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.4;
+    text-align: center;
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px 16px;
+  }
+
+  &__btn {
+    flex: 1;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 10px;
+    font-family: 'SF Pro', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.43px;
+    line-height: 1.6;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.1s ease;
+
+    &:active {
+      transform: translateY(1px);
+    }
+
+    &--cancel {
+      background: rgba(39, 135, 245, 0.1);
+      color: #2787f5;
+
+      &:hover {
+        background: rgba(39, 135, 245, 0.15);
+      }
+    }
+
+    &--save {
+      background: #2787f5;
+      color: #ffffff;
+
+      &:hover {
+        background: #1f76d9;
+      }
+    }
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -45%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+

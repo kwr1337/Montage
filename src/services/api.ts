@@ -294,6 +294,95 @@ class ApiService {
     return response;
   }
 
+  // Получить список рабочего графика сотрудника в проекте
+  async getWorkReports(
+    projectId: number,
+    userId: number,
+    options?: {
+      page?: number;
+      per_page?: number;
+      with?: string[];
+      filter?: { date_from?: string; date_to?: string };
+    }
+  ): Promise<any> {
+    let url = `/projects/${projectId}/user/${userId}/work-reports`;
+    const params = new URLSearchParams();
+    
+    if (options?.page) params.append('page', options.page.toString());
+    if (options?.per_page) params.append('per_page', options.per_page.toString());
+    if (options?.with) {
+      options.with.forEach(w => params.append('with[]', w));
+    }
+    if (options?.filter) {
+      if (options.filter.date_from) params.append('filter[date_from]', options.filter.date_from);
+      if (options.filter.date_to) params.append('filter[date_to]', options.filter.date_to);
+    }
+    
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+    
+    const response = await this.request<any>(url, {
+      method: 'GET',
+    });
+    return response;
+  }
+
+  // Добавить запись в график сотрудника
+  async createWorkReport(
+    projectId: number,
+    userId: number,
+    data: {
+      report_date: string;
+      hours_worked: number;
+      absent: boolean;
+      notes?: string;
+    }
+  ): Promise<any> {
+    const response = await this.request<any>(`/projects/${projectId}/user/${userId}/work-reports`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return response;
+  }
+
+  // Изменить запись в графике сотрудника
+  async updateWorkReport(
+    projectId: number,
+    userId: number,
+    reportId: number,
+    data: {
+      hours_worked?: number;
+      absent?: boolean;
+      notes?: string;
+    }
+  ): Promise<any> {
+    const response = await this.request<any>(`/projects/${projectId}/user/${userId}/work-reports/${reportId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return response;
+  }
+
+  // Удалить запись из графика сотрудника
+  async deleteWorkReport(projectId: number, userId: number, reportId: number): Promise<any> {
+    const response = await this.request<any>(`/projects/${projectId}/user/${userId}/work-reports/${reportId}`, {
+      method: 'DELETE',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+    return response;
+  }
+
   // Функция для форматирования ФИО в формате "Фамилия И. О."
   formatUserName(user: any): string {
     if (!user) return 'Пользователь';

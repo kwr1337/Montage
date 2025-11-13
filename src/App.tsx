@@ -26,22 +26,11 @@ const getIsMobileViewport = () => {
   return window.innerWidth <= MOBILE_WIDTH_THRESHOLD || window.innerHeight <= MOBILE_HEIGHT_THRESHOLD;
 };
 
-const getIsTouchDevice = () => {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-  if (window.matchMedia) {
-    return window.matchMedia('(pointer: coarse)').matches;
-  }
-  return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-};
-
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(() => apiService.getCurrentUser());
   const [isMobileViewport, setIsMobileViewport] = useState(getIsMobileViewport);
-  const [isTouchDevice, setIsTouchDevice] = useState(getIsTouchDevice);
 
   useEffect(() => {
     // Проверяем токен при загрузке приложения
@@ -65,32 +54,13 @@ function App() {
       setIsMobileViewport(getIsMobileViewport());
     };
 
-    const handleTouchChange = (event: MediaQueryListEvent) => {
-      setIsTouchDevice(event.matches);
-    };
-
-    const touchQuery = window.matchMedia('(pointer: coarse)');
-
     window.addEventListener('resize', handleViewportChange);
     window.addEventListener('orientationchange', handleViewportChange);
     handleViewportChange();
 
-    if (touchQuery.addEventListener) {
-      touchQuery.addEventListener('change', handleTouchChange);
-    } else if (touchQuery.addListener) {
-      touchQuery.addListener(handleTouchChange);
-    }
-
-    setIsTouchDevice(getIsTouchDevice());
-
     return () => {
       window.removeEventListener('resize', handleViewportChange);
       window.removeEventListener('orientationchange', handleViewportChange);
-      if (touchQuery.removeEventListener) {
-        touchQuery.removeEventListener('change', handleTouchChange);
-      } else if (touchQuery.removeListener) {
-        touchQuery.removeListener(handleTouchChange);
-      }
     };
   }, []);
 
@@ -115,7 +85,7 @@ function App() {
 
   const userRole = currentUser?.role || currentUser?.position;
   const isBrigadier = userRole === 'Бригадир';
-  const isMobileContext = isMobileViewport || isTouchDevice;
+  const isMobileContext = isMobileViewport;
   const shouldUseMobileProjects = isAuthenticated && isMobileContext && isBrigadier;
   const shouldShowMobileRestriction = isAuthenticated && isMobileContext && !isBrigadier;
 

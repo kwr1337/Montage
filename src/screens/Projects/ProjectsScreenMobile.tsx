@@ -104,6 +104,27 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [selectedProject, setSelectedProject] = useState<any | null>(null);
   const [isProjectLoading, setIsProjectLoading] = useState(false);
+  const [isPortrait, setIsPortrait] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerHeight > window.innerWidth;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const checkOrientation = () => {
+      setIsPortrait(window.innerHeight > window.innerWidth);
+    };
+
+    checkOrientation();
+    window.addEventListener('resize', checkOrientation);
+    window.addEventListener('orientationchange', checkOrientation);
+
+    return () => {
+      window.removeEventListener('resize', checkOrientation);
+      window.removeEventListener('orientationchange', checkOrientation);
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -125,8 +146,33 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
           data = response.projects;
         }
 
+        // Фильтруем проекты для бригадира
+        const currentUser = apiService.getCurrentUser();
+        const currentUserId = currentUser?.id;
+
+        const filteredData = data.filter((project) => {
+          // Исключаем архивные проекты
+          if (project.status === 'Архив' || project.status === 'archived') {
+            return false;
+          }
+
+          // Проверяем, является ли текущий пользователь участником проекта
+          if (!project.employees || !Array.isArray(project.employees)) {
+            return false;
+          }
+
+          // Проверяем активных сотрудников (без end_working_date)
+          const isParticipant = project.employees.some((emp: any) => {
+            const isCurrentUser = emp.id === currentUserId;
+            const isActive = !emp.pivot?.end_working_date;
+            return isCurrentUser && isActive;
+          });
+
+          return isParticipant;
+        });
+
         if (mounted) {
-          setProjects(data);
+          setProjects(filteredData);
         }
       } catch (err) {
         if (mounted) {
@@ -195,6 +241,16 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
         onBack={handleCloseProject}
         isLoading={isProjectLoading}
       />
+    );
+  }
+
+  if (isPortrait) {
+    return (
+      <div className="mobile-projects mobile-projects--portrait">
+        <div className="mobile-projects__orientation-message">
+          <p>Держите телефон горизонтально</p>
+        </div>
+      </div>
     );
   }
 
