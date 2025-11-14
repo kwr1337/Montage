@@ -130,14 +130,249 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
     }
   };
 
-  // Моковые данные для истории выплат ЗП
-  const salaryHistory = [
-    { month: 'Сентрябрь', year: '2025', hours: 50, rate: 300, total: 15000, firstPayout: { amount: 5000, date: '11 сен 2025', method: 'Карта' }, secondPayout: { amount: 8000, date: '20 сен 2025', method: 'Наличные' }, balance: { amount: 2000, date: '30 сен 2025', method: 'Наличные' } },
-    { month: 'Октябрь', year: '2025', hours: 50, rate: 300, total: 15000, firstPayout: { amount: 5000, date: '11 сен 2025', method: 'Карта' }, secondPayout: { amount: 8000, date: '20 сен 2025', method: 'Наличные' }, balance: { amount: 2000, date: '30 сен 2025', method: 'Наличные' } },
-    { month: 'Ноябрь', year: '2025', hours: 50, rate: 300, total: 15000, firstPayout: { amount: 5000, date: '11 сен 2025', method: 'Карта' }, secondPayout: { amount: 8000, date: '20 сен 2025', method: 'Наличные' }, balance: { amount: 2000, date: '30 сен 2025', method: 'Наличные' } },
-    { month: 'Декабрь', year: '2025', hours: 50, rate: 300, total: 15000, firstPayout: { amount: 5000, date: '11 сен 2025', method: 'Карта' }, secondPayout: { amount: 8000, date: '20 сен 2025', method: 'Наличные' }, balance: { amount: 2000, date: '30 сен 2025', method: 'Наличные' } },
-    { month: 'Январь', year: '2026', hours: 50, rate: 300, total: 15000, firstPayout: { amount: 5000, date: '11 сен 2025', method: 'Карта' }, secondPayout: { amount: 8000, date: '20 сен 2025', method: 'Наличные' }, balance: { amount: 2000, date: '30 сен 2025', method: 'Наличные' } },
-  ];
+  // Состояние для истории выплат ЗП
+  const [salaryHistory, setSalaryHistory] = useState<any[]>([]);
+  const [isLoadingSalary, setIsLoadingSalary] = useState(false);
+
+  // Форматирование даты для выплат: "11 сен 2025"
+  const formatDateForPayment = (dateString: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) return '';
+    const day = date.getDate();
+    const month = date.toLocaleDateString('ru-RU', { month: 'short' });
+    const year = date.getFullYear();
+    return `${day} ${month} ${year}`;
+  };
+
+  // Форматирование валюты
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('ru-RU', {
+      style: 'currency',
+      currency: 'RUB',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    })
+      .format(amount)
+      .replace('₽', '₽');
+  };
+
+  // Получение названия месяца на русском
+  const getMonthName = (date: Date) => {
+    const months = [
+      'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+      'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
+    ];
+    return months[date.getMonth()];
+  };
+
+  // Загрузка выплат для сотрудника
+  useEffect(() => {
+    if (isNew || !employee?.id) return;
+
+    const loadSalaryHistory = async () => {
+      setIsLoadingSalary(true);
+      try {
+        const employeeId = employee.id;
+        console.log('Loading salary history for employee ID:', employeeId);
+        console.log('Employee object:', employee);
+        
+        // Загружаем все выплаты для сотрудника
+        const response = await apiService.getPayments({
+          per_page: 1000,
+          filter: {
+            users: [employeeId],
+          },
+        });
+
+        console.log('Payments API response:', response);
+
+        let paymentsData: any[] = [];
+        if (response) {
+          if (response.data) {
+            if (response.data.data && Array.isArray(response.data.data)) {
+              paymentsData = response.data.data;
+            } else if (Array.isArray(response.data)) {
+              paymentsData = response.data;
+            }
+          } else if (Array.isArray(response)) {
+            paymentsData = response;
+          }
+        }
+
+        // Дополнительная фильтрация по user_id на случай, если API не отфильтровал правильно
+        paymentsData = paymentsData.filter((payment: any) => {
+          const paymentUserId = payment.user_id;
+          const matches = paymentUserId === employeeId;
+          if (!matches) {
+            console.warn(`Payment ${payment.id} has user_id=${paymentUserId}, but expected ${employeeId}. Filtering out.`);
+          }
+          return matches;
+        });
+
+        console.log(`Filtered payments for employee ${employeeId}:`, paymentsData.length, paymentsData);
+
+        // Группируем выплаты по месяцам
+        const paymentsByMonth = new Map<string, any[]>();
+        
+        paymentsData.forEach((payment: any) => {
+          // Определяем месяц по дате первой выплаты
+          const paymentDate = payment.first_payment_date 
+            ? new Date(payment.first_payment_date)
+            : payment.second_payment_date 
+            ? new Date(payment.second_payment_date)
+            : payment.third_payment_date 
+            ? new Date(payment.third_payment_date)
+            : null;
+
+          if (!paymentDate || Number.isNaN(paymentDate.getTime())) return;
+
+          const monthKey = `${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, '0')}`;
+          
+          if (!paymentsByMonth.has(monthKey)) {
+            paymentsByMonth.set(monthKey, []);
+          }
+          paymentsByMonth.get(monthKey)!.push(payment);
+        });
+
+        // Для каждого месяца загружаем часы и формируем данные
+        const historyData = await Promise.all(
+          Array.from(paymentsByMonth.entries()).map(async ([monthKey, payments]) => {
+            const [year, month] = monthKey.split('-');
+            const monthDate = new Date(Number(year), Number(month) - 1, 1);
+            
+            // Берем первую выплату для определения месяца
+            const firstPayment = payments[0];
+            const paymentMonthDate = firstPayment.first_payment_date 
+              ? new Date(firstPayment.first_payment_date)
+              : firstPayment.second_payment_date 
+              ? new Date(firstPayment.second_payment_date)
+              : firstPayment.third_payment_date 
+              ? new Date(firstPayment.third_payment_date)
+              : monthDate;
+
+            const monthStart = new Date(paymentMonthDate.getFullYear(), paymentMonthDate.getMonth(), 1);
+            const monthEnd = new Date(paymentMonthDate.getFullYear(), paymentMonthDate.getMonth() + 1, 0, 23, 59, 59);
+            
+            const monthStartStr = monthStart.toISOString().split('T')[0];
+            const monthEndStr = monthEnd.toISOString().split('T')[0];
+
+            // Загружаем часы за этот месяц
+            let hours = 0;
+            const rate = employee.rate_per_hour || 0;
+
+            try {
+              // Получаем все проекты
+              const projectsResponse = await apiService.getProjects(1, 1000);
+              let projects: any[] = [];
+              if (projectsResponse && projectsResponse.data) {
+                const data = projectsResponse.data.data || projectsResponse.data;
+                projects = Array.isArray(data) ? data : [data];
+              }
+
+              // Находим проекты, где сотрудник участвует
+              const employeeProjects = projects.filter((project: any) => {
+                if (!project.employees || !Array.isArray(project.employees)) return false;
+                return project.employees.some((emp: any) => {
+                  const empId = emp.id || emp.user_id;
+                  const isCurrentUser = empId === employee.id;
+                  const isActive = !emp.pivot?.end_working_date;
+                  return isCurrentUser && isActive;
+                });
+              });
+
+              // Суммируем часы из всех проектов за месяц
+              const allHours = await Promise.all(
+                employeeProjects.map(async (project: any) => {
+                  try {
+                    const response = await apiService.getWorkReports(project.id, employee.id, {
+                      per_page: 1000,
+                      filter: {
+                        date_from: monthStartStr,
+                        date_to: monthEndStr,
+                      },
+                    });
+                    
+                    let reports: any[] = [];
+                    if (response?.data?.data && Array.isArray(response.data.data)) {
+                      reports = response.data.data;
+                    } else if (response?.data && Array.isArray(response.data)) {
+                      reports = response.data;
+                    } else if (Array.isArray(response)) {
+                      reports = response;
+                    }
+                    
+                    // Фильтруем отчеты по месяцу
+                    const monthReports = reports.filter((report) => {
+                      if (!report.report_date) return false;
+                      const reportDate = new Date(report.report_date);
+                      return reportDate >= monthStart && reportDate <= monthEnd;
+                    });
+                    
+                    // Суммируем часы
+                    return monthReports.reduce((sum, report) => {
+                      const hoursWorked = Number(report.hours_worked) || 0;
+                      const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
+                      return sum + (isAbsent ? 0 : hoursWorked);
+                    }, 0);
+                  } catch (error) {
+                    console.error(`Error loading work reports for project ${project.id}:`, error);
+                    return 0;
+                  }
+                })
+              );
+
+              hours = allHours.reduce((sum, h) => sum + h, 0);
+            } catch (error) {
+              console.error('Error loading hours:', error);
+            }
+
+            // Берем данные из первой выплаты месяца (или объединяем все выплаты)
+            const payment = firstPayment;
+
+            return {
+              month: getMonthName(paymentMonthDate),
+              year: String(paymentMonthDate.getFullYear()),
+              hours: hours,
+              rate: rate,
+              total: hours * rate,
+              firstPayout: {
+                amount: payment.first_payment_amount || 0,
+                date: payment.first_payment_date ? formatDateForPayment(payment.first_payment_date) : '',
+                method: payment.first_payment_type || 'Ожидание',
+              },
+              secondPayout: {
+                amount: payment.second_payment_amount || 0,
+                date: payment.second_payment_date ? formatDateForPayment(payment.second_payment_date) : '',
+                method: payment.second_payment_type || 'Ожидание',
+              },
+              balance: {
+                amount: payment.third_payment_amount || 0,
+                date: payment.third_payment_date ? formatDateForPayment(payment.third_payment_date) : '',
+                method: payment.third_payment_type || 'Ожидание',
+              },
+            };
+          })
+        );
+
+        // Сортируем по дате (от новых к старым)
+        historyData.sort((a, b) => {
+          const dateA = new Date(`${a.month} 1, ${a.year}`);
+          const dateB = new Date(`${b.month} 1, ${b.year}`);
+          return dateB.getTime() - dateA.getTime();
+        });
+
+        setSalaryHistory(historyData);
+      } catch (error) {
+        console.error('Error loading salary history:', error);
+        setSalaryHistory([]);
+      } finally {
+        setIsLoadingSalary(false);
+      }
+    };
+
+    loadSalaryHistory();
+  }, [employee?.id, isNew, formData.dateFrom, formData.dateTo]);
 
   const totalPages = Math.ceil(salaryHistory.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -680,53 +915,71 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
             </div>
 
             <div className="employee-detail__salary-table-body">
-              {paginatedHistory.map((item, index) => (
-                <div key={index} className="employee-detail__salary-table-row">
-                  <div className="employee-detail__salary-table-col">
-                    <input type="checkbox" />
-                    <div className="employee-detail__month">
-                      <span className="employee-detail__month-name">{item.month}</span>
-                      <span className="employee-detail__month-year">{item.year}</span>
+              {isLoadingSalary ? (
+                <div className="employee-detail__salary-loading">Загрузка...</div>
+              ) : paginatedHistory.length === 0 ? (
+                <div className="employee-detail__salary-empty">Нет данных для отображения</div>
+              ) : (
+                paginatedHistory.map((item, index) => (
+                  <div key={index} className="employee-detail__salary-table-row">
+                    <div className="employee-detail__salary-table-col">
+                      <input type="checkbox" />
+                      <div className="employee-detail__month">
+                        <span className="employee-detail__month-name">{item.month}</span>
+                        <span className="employee-detail__month-year">{item.year}</span>
+                      </div>
+                    </div>
+                    <div className="employee-detail__salary-table-col">
+                      <span>{item.hours}</span>
+                    </div>
+                    <div className="employee-detail__salary-table-col">
+                      <span>{formatCurrency(item.rate)}</span>
+                    </div>
+                    <div className="employee-detail__salary-table-col">
+                      <span>{formatCurrency(item.total)}</span>
+                    </div>
+                    <div className="employee-detail__salary-table-col">
+                      {item.firstPayout.amount > 0 ? (
+                        <div className="employee-detail__payout">
+                          <span className="employee-detail__payout-amount">{formatCurrency(item.firstPayout.amount)}</span>
+                          <span className="employee-detail__payout-date">{item.firstPayout.date}</span>
+                        </div>
+                      ) : (
+                        <div className="employee-detail__payment-pending">Ожидание...</div>
+                      )}
+                    </div>
+                    <div className="employee-detail__salary-table-col">
+                      <span>{item.firstPayout.method}</span>
+                    </div>
+                    <div className="employee-detail__salary-table-col">
+                      {item.secondPayout.amount > 0 ? (
+                        <div className="employee-detail__payout">
+                          <span className="employee-detail__payout-amount">{formatCurrency(item.secondPayout.amount)}</span>
+                          <span className="employee-detail__payout-date">{item.secondPayout.date}</span>
+                        </div>
+                      ) : (
+                        <div className="employee-detail__payment-pending">Ожидание...</div>
+                      )}
+                    </div>
+                    <div className="employee-detail__salary-table-col">
+                      <span>{item.secondPayout.method}</span>
+                    </div>
+                    <div className="employee-detail__salary-table-col">
+                      {item.balance.amount > 0 ? (
+                        <div className="employee-detail__payout">
+                          <span className="employee-detail__payout-amount">{formatCurrency(item.balance.amount)}</span>
+                          <span className="employee-detail__payout-date">{item.balance.date}</span>
+                        </div>
+                      ) : (
+                        <div className="employee-detail__payment-pending">Ожидание...</div>
+                      )}
+                    </div>
+                    <div className="employee-detail__salary-table-col">
+                      <span>{item.balance.method}</span>
                     </div>
                   </div>
-                  <div className="employee-detail__salary-table-col">
-                    <span>{item.hours}</span>
-                  </div>
-                  <div className="employee-detail__salary-table-col">
-                    <span>{item.rate} ₽</span>
-                  </div>
-                  <div className="employee-detail__salary-table-col">
-                    <span>{item.total.toLocaleString('ru-RU')} ₽</span>
-                  </div>
-                  <div className="employee-detail__salary-table-col">
-                    <div className="employee-detail__payout">
-                      <span className="employee-detail__payout-amount">{item.firstPayout.amount.toLocaleString('ru-RU')} ₽</span>
-                      <span className="employee-detail__payout-date">{item.firstPayout.date}</span>
-                    </div>
-                  </div>
-                  <div className="employee-detail__salary-table-col">
-                    <span>{item.firstPayout.method}</span>
-                  </div>
-                  <div className="employee-detail__salary-table-col">
-                    <div className="employee-detail__payout">
-                      <span className="employee-detail__payout-amount">{item.secondPayout.amount.toLocaleString('ru-RU')} ₽</span>
-                      <span className="employee-detail__payout-date">{item.secondPayout.date}</span>
-                    </div>
-                  </div>
-                  <div className="employee-detail__salary-table-col">
-                    <span>{item.secondPayout.method}</span>
-                  </div>
-                  <div className="employee-detail__salary-table-col">
-                    <div className="employee-detail__payout">
-                      <span className="employee-detail__payout-amount">{item.balance.amount.toLocaleString('ru-RU')} ₽</span>
-                      <span className="employee-detail__payout-date">{item.balance.date}</span>
-                    </div>
-                  </div>
-                  <div className="employee-detail__salary-table-col">
-                    <span>{item.balance.method}</span>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 

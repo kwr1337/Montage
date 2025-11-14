@@ -384,6 +384,107 @@ class ApiService {
   }
 
   // Функция для форматирования ФИО в формате "Фамилия И. О."
+  // Получить список выплат
+  async getPayments(params?: {
+    page?: number;
+    per_page?: number;
+    with?: string[];
+    filter?: {
+      users?: number[];
+      date_from?: string;
+      date_to?: string;
+    };
+  }): Promise<any> {
+    let url = '/payments?';
+    if (params?.page) url += `page=${params.page}&`;
+    if (params?.per_page) url += `per_page=${params.per_page}&`;
+    if (params?.with) {
+      params.with.forEach((w) => {
+        url += `with[]=${w}&`;
+      });
+    }
+    if (params?.filter) {
+      if (params.filter.users) {
+        params.filter.users.forEach((userId) => {
+          url += `filter[users][]=${userId}&`;
+        });
+      }
+      if (params.filter.date_from) {
+        url += `filter[date_from]=${params.filter.date_from}&`;
+      }
+      if (params.filter.date_to) {
+        url += `filter[date_to]=${params.filter.date_to}&`;
+      }
+    }
+    url = url.replace(/&$/, ''); // Убираем последний &
+    
+    const response = await this.request<any>(url, {
+      method: 'GET',
+    });
+    return response;
+  }
+
+  // Создать выплату
+  async createPayment(data: {
+    user_id: number;
+    first_payment_date?: string | null;
+    first_payment_amount?: number | null;
+    first_payment_type?: string | null;
+    second_payment_date?: string | null;
+    second_payment_amount?: number | null;
+    second_payment_type?: string | null;
+    third_payment_date?: string | null;
+    third_payment_amount?: number | null;
+    third_payment_type?: string | null;
+    notes?: string | null;
+  }): Promise<any> {
+    const response = await this.request<any>('/payments', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return response;
+  }
+
+  // Редактировать выплату
+  async updatePayment(paymentId: number, data: {
+    user_id?: number;
+    first_payment_date?: string | null;
+    first_payment_amount?: number | null;
+    first_payment_type?: string | null;
+    second_payment_date?: string | null;
+    second_payment_amount?: number | null;
+    second_payment_type?: string | null;
+    third_payment_date?: string | null;
+    third_payment_amount?: number | null;
+    third_payment_type?: string | null;
+    notes?: string | null;
+  }): Promise<any> {
+    const response = await this.request<any>(`/payments/${paymentId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return response;
+  }
+
+  // Удалить выплату
+  async deletePayment(paymentId: number): Promise<any> {
+    const response = await this.request<any>(`/payments/${paymentId}`, {
+      method: 'DELETE',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+    return response;
+  }
+
   formatUserName(user: any): string {
     if (!user) return 'Пользователь';
 
@@ -399,6 +500,132 @@ class ApiService {
     }
 
     return first_name || 'Пользователь';
+  }
+
+  // Получить отчёт по выплатам (может возвращать файл или JSON)
+  async getPaymentsReport(params: {
+    period: string; // Дата, месяц отчета
+  }): Promise<Blob | any> {
+    const url = `${this.baseURL}/reports/payments?period=${params.period}`;
+    const token = localStorage.getItem('auth_token');
+    const tokenType = localStorage.getItem('token_type') || 'Bearer';
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        ...(token && { Authorization: `${tokenType} ${token}` }),
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Server error response:', errorText);
+      console.error('Response status:', response.status);
+      
+      // Если 401 - токен истек, разлогинить пользователя
+      if (response.status === 401) {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('token_type');
+        localStorage.removeItem('user');
+        window.location.href = '/';
+      }
+      
+      // Пытаемся извлечь сообщение об ошибке из HTML ответа
+      let errorMessage = `Ошибка сервера (${response.status})`;
+      if (errorText.includes('Permission denied') || errorText.includes('mkdir')) {
+        errorMessage = 'Ошибка на сервере: недостаточно прав для создания файла отчёта. Обратитесь к администратору.';
+      } else if (errorText.includes('<!DOCTYPE html>')) {
+        // Это HTML страница с ошибкой Laravel
+        errorMessage = 'Ошибка на сервере при генерации отчёта. Обратитесь к администратору.';
+      }
+      
+      throw new Error(errorMessage);
+    }
+
+    const contentType = response.headers.get('content-type');
+    
+    // Если это файл (Excel, например)
+    if (contentType && (
+      contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') ||
+      contentType.includes('application/vnd.ms-excel') ||
+      contentType.includes('application/octet-stream') ||
+      contentType.includes('application/xls')
+    )) {
+      return await response.blob();
+    }
+    
+    // Если это JSON
+    if (contentType && contentType.includes('application/json')) {
+      return await response.json();
+    }
+    
+    // По умолчанию возвращаем как blob
+    return await response.blob();
+  }
+
+  // Получить отчёт по номенклатуре проекта (может возвращать файл или JSON)
+  async getProjectNomenclatureReport(
+    projectId: number,
+    params: {
+      period_start: string;
+      period_end: string;
+    }
+  ): Promise<Blob | any> {
+    const url = `${this.baseURL}/projects/${projectId}/reports/nomenclature?period_start=${params.period_start}&period_end=${params.period_end}`;
+    const token = localStorage.getItem('auth_token');
+    const tokenType = localStorage.getItem('token_type') || 'Bearer';
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        ...(token && { Authorization: `${tokenType} ${token}` }),
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Server error response:', errorText);
+      console.error('Response status:', response.status);
+      
+      // Если 401 - токен истек, разлогинить пользователя
+      if (response.status === 401) {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('token_type');
+        localStorage.removeItem('user');
+        window.location.href = '/';
+      }
+      
+      // Пытаемся извлечь сообщение об ошибке из HTML ответа
+      let errorMessage = `Ошибка сервера (${response.status})`;
+      if (errorText.includes('Permission denied') || errorText.includes('mkdir')) {
+        errorMessage = 'Ошибка на сервере: недостаточно прав для создания файла отчёта. Обратитесь к администратору.';
+      } else if (errorText.includes('<!DOCTYPE html>')) {
+        // Это HTML страница с ошибкой Laravel
+        errorMessage = 'Ошибка на сервере при генерации отчёта. Обратитесь к администратору.';
+      }
+      
+      throw new Error(errorMessage);
+    }
+
+    const contentType = response.headers.get('content-type');
+    
+    // Если это файл (Excel, например)
+    if (contentType && (
+      contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') ||
+      contentType.includes('application/vnd.ms-excel') ||
+      contentType.includes('application/octet-stream') ||
+      contentType.includes('application/xls')
+    )) {
+      return await response.blob();
+    }
+    
+    // Если это JSON
+    if (contentType && contentType.includes('application/json')) {
+      return await response.json();
+    }
+    
+    // По умолчанию возвращаем как blob
+    return await response.blob();
   }
 }
 
