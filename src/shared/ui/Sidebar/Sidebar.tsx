@@ -54,12 +54,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeItem = 'projects', onNav
         LOGO
       </div>
       
-      <SearchInput
+      {/* <SearchInput
         value={searchValue}
         onChange={setSearchValue}
         placeholder="Поиск"
         className="sidebar__search"
-      />
+      /> */}
 
       <nav className="sidebar__nav">
         {menuItems.map((item) => (

@@ -60,8 +60,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             isPasswordVisible={showPassword}
           />
 
-          <button type="button" className="login__forgot">Восстановить пароль</button>
-
+          
           {error && <div className="login__error">{error}</div>}
 
           <Button text={isLoading ? 'Загрузка...' : 'Войти'} disabled={!formValid || isLoading} className="login__submit" onClick={handleLogin} />

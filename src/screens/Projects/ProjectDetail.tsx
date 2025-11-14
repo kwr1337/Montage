@@ -8,13 +8,34 @@ import calendarIconGrey from '../../shared/icons/calendarIconGrey.svg';
 import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
 import deleteIcon from '../../shared/icons/deleteIcon.svg';
 import addIcon from '../../shared/icons/addIcon.svg';
-import logoIcon from '../../shared/icons/logoIcon.png';
 import AddNomenclatureModal from '../../shared/ui/AddNomenclatureModal/AddNomenclatureModal';
 import EditNomenclatureModal from '../../shared/ui/EditNomenclatureModal/EditNomenclatureModal';
 import ImportModal from '../../shared/ui/ImportModal/ImportModal';
 import AddTrackingModal from '../../shared/ui/AddTrackingModal/AddTrackingModal';
 import DeleteTrackingModal from '../../shared/ui/DeleteTrackingModal/DeleteTrackingModal';
 import { Pagination } from '../../shared/ui/Pagination/Pagination';
+
+// Функция для получения инициалов (Иван Иванов -> ИИ)
+const getInitials = (employee: any) => {
+  if (!employee) return '—';
+  const { first_name, last_name } = employee;
+  const firstInitial = first_name ? first_name.charAt(0).toUpperCase() : '';
+  const lastInitial = last_name ? last_name.charAt(0).toUpperCase() : '';
+  return (lastInitial + firstInitial) || '—';
+};
+
+// Функция для получения цвета фона на основе имени
+const getAvatarColor = (text: string) => {
+  const colors = [
+    '#2787f5', '#26ab69', '#ff9e00', '#f5222d', 
+    '#722ed1', '#13c2c2', '#eb2f96', '#fa8c16'
+  ];
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    hash = text.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
 
 type ProjectDetailProps = {
   project: any;
@@ -1267,12 +1288,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   };
 
 
-  // Функция для форматирования даты в "15 дек 2025"
+  // Функция для форматирования даты в "15 дек 2025" (формат месяцев: Янв, Февр, Март, Апр, Май, Июнь, Июль, Авг, Сент, Октб, Нояб, Дек)
   const formatDateWithMonth = (dateString: string) => {
     if (!dateString) return '';
     const date = new Date(dateString);
     const day = date.getDate();
-    const months = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+    const months = ['янв', 'февр', 'март', 'апр', 'май', 'июнь', 'июль', 'авг', 'сент', 'октб', 'нояб', 'дек'];
     const month = months[date.getMonth()];
     const year = date.getFullYear();
     return `${day} ${month} ${year}`;
@@ -1565,7 +1586,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                         className="projects__detail-employee-avatar" 
                       />
                     ) : (
-                      <img src={logoIcon} alt={`${emp.last_name} ${emp.first_name}`} className="projects__detail-employee-avatar" />
+                      <div 
+                        className="projects__detail-employee-avatar projects__detail-employee-avatar--initials"
+                        style={{ backgroundColor: getAvatarColor(`${emp.last_name} ${emp.first_name}`) }}
+                      >
+                        {getInitials(emp)}
+                      </div>
                     )}
                     <span>{emp.last_name} {emp.first_name.charAt(0)}. {emp.second_name?.charAt(0)}.</span>
                   </div>

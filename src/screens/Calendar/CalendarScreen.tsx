@@ -13,7 +13,7 @@ export const CalendarScreen: React.FC = () => {
       />
       <div className="calendar__content">
         <h2>Календарь</h2>
-        <p>Здесь будет отображаться календарь событий и встреч</p>
+        <p>Функционал будет доступен в следующем релизе.</p>
       </div>
     </div>
   );

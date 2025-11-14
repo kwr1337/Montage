@@ -11,6 +11,28 @@ import StatusFilter from '../../shared/ui/StatusFilter/StatusFilter';
 import { Pagination } from '../../shared/ui/Pagination/Pagination';
 import './projects.scss';
 
+// Функция для получения инициалов (Иван Иванов -> ИИ)
+const getInitials = (employee: any) => {
+  if (!employee) return '—';
+  const { first_name, last_name } = employee;
+  const firstInitial = first_name ? first_name.charAt(0).toUpperCase() : '';
+  const lastInitial = last_name ? last_name.charAt(0).toUpperCase() : '';
+  return (lastInitial + firstInitial) || '—';
+};
+
+// Функция для получения цвета фона на основе имени
+const getAvatarColor = (text: string) => {
+  const colors = [
+    '#2787f5', '#26ab69', '#ff9e00', '#f5222d', 
+    '#722ed1', '#13c2c2', '#eb2f96', '#fa8c16'
+  ];
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    hash = text.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
+
 type ProjectsScreenProps = {
   onLogout?: () => void;
 };
@@ -853,12 +875,13 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                                   className="projects__employee-avatar" 
                                 />
                               ) : (
-                                <img 
-                                  key={emp.id} 
-                                  src={logoIcon} 
-                                  alt={`${emp.last_name} ${emp.first_name}`} 
-                                  className="projects__employee-avatar" 
-                                />
+                                <div 
+                                  key={emp.id}
+                                  className="projects__employee-avatar projects__employee-avatar--initials"
+                                  style={{ backgroundColor: getAvatarColor(`${emp.last_name} ${emp.first_name}`) }}
+                                >
+                                  {getInitials(emp)}
+                                </div>
                               )
                             ))}
                           </div>

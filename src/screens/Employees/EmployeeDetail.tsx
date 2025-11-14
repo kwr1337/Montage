@@ -5,7 +5,6 @@ import { Pagination } from '../../shared/ui/Pagination/Pagination';
 import dotsIcon from '../../shared/icons/dotsIcon.svg';
 import userDropdownIcon from '../../shared/icons/user-dropdown-icon.svg';
 import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
-import logoIcon from '../../shared/icons/logoIcon.png';
 import calendarIconGrey from '../../shared/icons/calendarIconGrey.svg';
 import { apiService } from '../../services/api';
 import './employee-detail.scss';
@@ -296,6 +295,26 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
     return fullName || 'Новый сотрудник';
   };
 
+  // Функция для получения инициалов (Иван Иванов -> ИИ)
+  const getInitials = () => {
+    const firstInitial = formData.first_name ? formData.first_name.charAt(0).toUpperCase() : '';
+    const lastInitial = formData.last_name ? formData.last_name.charAt(0).toUpperCase() : '';
+    return (lastInitial + firstInitial) || 'Н';
+  };
+
+  // Функция для получения цвета фона на основе имени
+  const getAvatarColor = (text: string) => {
+    const colors = [
+      '#2787f5', '#26ab69', '#ff9e00', '#f5222d', 
+      '#722ed1', '#13c2c2', '#eb2f96', '#fa8c16'
+    ];
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+      hash = text.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  };
+
   const dismissalDateDisplay = employee.dismissal_date ? formatDate(employee.dismissal_date) : '-';
   const employmentDateDisplay = formData.employment_date
     ? formatDate(formData.employment_date)
@@ -309,7 +328,19 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
           <div className="employee-detail__header">
             <div className="employee-detail__header-left">
               <div className="employee-detail__avatar">
-                <img src={logoIcon} alt={formatEmployeeName()} />
+                {employee.avatar_id || employee.avatar_url ? (
+                  <img 
+                    src={employee.avatar_url || `http://92.53.97.20/api/avatars/${employee.avatar_id}`} 
+                    alt={formatEmployeeName()} 
+                  />
+                ) : (
+                  <div 
+                    className="employee-detail__avatar-initials"
+                    style={{ backgroundColor: getAvatarColor(formatEmployeeName()) }}
+                  >
+                    {getInitials()}
+                  </div>
+                )}
               </div>
               <div className="employee-detail__info">
                 <div className="employee-detail__name-row">

@@ -14,7 +14,7 @@ export const DashboardScreen: React.FC = () => {
       />
       <div className="dashboard__content">
         <h2>Дашборд</h2>
-        <p>Здесь будет отображаться общая информация и статистика</p>
+        <p>Функционал будет доступен в следующем релизе.</p>
       </div>
     </div>
   );

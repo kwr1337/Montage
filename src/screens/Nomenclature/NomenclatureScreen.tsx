@@ -13,7 +13,7 @@ export const NomenclatureScreen: React.FC = () => {
       />
       <div className="nomenclature__content">
         <h2>Номенклатура</h2>
-        <p>Здесь будет отображаться каталог товаров и услуг</p>
+        <p>Функционал будет доступен в следующем релизе.</p>
       </div>
     </div>
   );

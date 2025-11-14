@@ -358,7 +358,18 @@
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    // background: #d9d9d9;
+    object-fit: cover;
+
+    &--initials {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-size: 8px;
+      font-weight: 500;
+      line-height: 1;
+      text-transform: uppercase;
+    }
   }
 
   &__employees {
@@ -376,9 +387,20 @@
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    // background: #d9d9d9;
+    object-fit: cover;
     border: 2px solid #ffffff;
     margin-left: -8px;
+
+    &--initials {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-size: 8px;
+      font-weight: 500;
+      line-height: 1;
+      text-transform: uppercase;
+    }
 
     &:first-child {
       margin-left: 0;
@@ -934,6 +956,18 @@
       height: 24px;
       border-radius: 50%;
       background: #d9d9d9;
+      object-fit: cover;
+
+      &--initials {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #ffffff;
+        font-size: 10px;
+        font-weight: 500;
+        line-height: 1;
+        text-transform: uppercase;
+      }
     }
 
     &-employees-more {

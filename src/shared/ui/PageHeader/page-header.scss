@@ -156,6 +156,18 @@
       border-radius: 50%;
       background: #d9d9d9;
       flex-shrink: 0;
+      object-fit: cover;
+
+      &--initials {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #ffffff;
+        font-size: 8px;
+        font-weight: 500;
+        line-height: 1;
+        text-transform: uppercase;
+      }
     }
 
     &-text {
@@ -203,6 +215,18 @@
       border-radius: 50%;
       background: #d9d9d9;
       flex-shrink: 0;
+      object-fit: cover;
+
+      &--initials {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #ffffff;
+        font-size: 8px;
+        font-weight: 500;
+        line-height: 1;
+        text-transform: uppercase;
+      }
     }
 
     &-text {

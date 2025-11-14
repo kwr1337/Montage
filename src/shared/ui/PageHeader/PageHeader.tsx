@@ -4,7 +4,6 @@ import { apiService } from '../../../services/api';
 import plusIcon from '../../icons/plus-icon.svg';
 import userDropdownIcon from '../../icons/user-dropdown-icon.svg';
 import logoutIcon from '../../icons/logoutIcon.svg';
-import logoIcon from '../../icons/logoIcon.png';
 import './page-header.scss';
 
 type PageHeaderProps = {
@@ -108,6 +107,28 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
     }
 
     return first_name || 'Пользователь';
+  };
+
+  // Функция для получения инициалов (Иван Иванов -> ИИ)
+  const getInitials = (user: any) => {
+    if (!user) return 'П';
+    const { first_name, last_name } = user;
+    const firstInitial = first_name ? first_name.charAt(0).toUpperCase() : '';
+    const lastInitial = last_name ? last_name.charAt(0).toUpperCase() : '';
+    return (lastInitial + firstInitial) || 'П';
+  };
+
+  // Функция для получения цвета фона на основе имени
+  const getAvatarColor = (text: string) => {
+    const colors = [
+      '#2787f5', '#26ab69', '#ff9e00', '#f5222d', 
+      '#722ed1', '#13c2c2', '#eb2f96', '#fa8c16'
+    ];
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+      hash = text.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
   };
 
   const userDisplayName = currentUser ? formatUserName(currentUser) : 'Пользователь';
@@ -217,7 +238,12 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                   className="page-header__user-avatar" 
                 />
               ) : (
-                <img src={logoIcon} alt={userDisplayName} className="page-header__user-avatar" />
+                <div 
+                  className="page-header__user-avatar page-header__user-avatar--initials"
+                  style={{ backgroundColor: getAvatarColor(userDisplayName) }}
+                >
+                  {getInitials(currentUser)}
+                </div>
               )}
               <span className="page-header__user-text">{userDisplayName}</span>
               <img
