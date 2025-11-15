@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import { SearchInput } from '../SearchInput/SearchInput';
+import React from 'react';
 import dashboardIconGrey from '../../icons/dashboardIconGrey.svg';
 import dashboardIconWhite from '../../icons/dashboardIconWhite.svg';
 import menuIconGrey from '../../icons/menuIconGrey.svg';
@@ -39,8 +38,6 @@ type SidebarProps = {
 };
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeItem = 'projects', onNavigate }) => {
-  const [searchValue, setSearchValue] = useState('');
-
   const handleClick = (itemId: string) => {
     if (onNavigate) {
       onNavigate(itemId);
@@ -53,13 +50,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeItem = 'projects', onNav
         <span className="sidebar__logo-icon" />
         LOGO
       </div>
-      
-      {/* <SearchInput
-        value={searchValue}
-        onChange={setSearchValue}
-        placeholder="Поиск"
-        className="sidebar__search"
-      /> */}
 
       <nav className="sidebar__nav">
         {menuItems.map((item) => (

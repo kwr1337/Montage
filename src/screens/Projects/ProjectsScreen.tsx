@@ -5,7 +5,6 @@ import menuIconGrey from '../../shared/icons/menuIconGrey.svg';
 import searchIcon from '../../shared/icons/searchIcon.svg';
 import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
 import brigadirIcon from '../../shared/icons/brigadirIcon.svg';
-import logoIcon from '../../shared/icons/logoIcon.png';
 import { PageHeader } from '../../shared/ui/PageHeader/PageHeader';
 import StatusFilter from '../../shared/ui/StatusFilter/StatusFilter';
 import { Pagination } from '../../shared/ui/Pagination/Pagination';

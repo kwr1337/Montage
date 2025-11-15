@@ -7,7 +7,6 @@ import searchIcon from '../../shared/icons/searchIcon.svg';
 import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
 import calendarIconGrey from '../../shared/icons/calendarIconGrey.svg';
 import otchetDownIcon from '../../shared/icons/otchetDown.svg';
-import * as XLSX from 'xlsx';
 import './reports.scss';
 
 type ReportType = 'nomenclature' | 'payments';
@@ -241,7 +240,7 @@ export const ReportsScreen: React.FC = () => {
   };
 
   // Скачивание отчёта по выплатам
-  const downloadPaymentsReport = async (report: Report) => {
+  const downloadPaymentsReport = async (_report: Report) => {
     setIsLoading(true);
     try {
       // Используем dateFrom или текущую дату, но берём первый день месяца
