@@ -74,7 +74,7 @@ export const EmployeesScreen: React.FC = () => {
     phone: '',
     email: '',
     role: 'Управляющий',
-    work_schedule: '5/2 будни',
+    work_schedule: '5/2',
     is_dismissed: false,
     employee_status: 'active',
     rate_per_hour: '',
@@ -117,9 +117,9 @@ export const EmployeesScreen: React.FC = () => {
     if (statusFilter === 'all') {
       matchesStatus = true;
     } else if (statusFilter === 'Работает') {
-      matchesStatus = !employee.is_dismissed && employee.employee_status === 'active';
+      matchesStatus = !employee.is_dismissed;
     } else if (statusFilter === 'Уволен') {
-      matchesStatus = employee.is_dismissed || employee.employee_status === 'dismissed' || employee.dismissal_date;
+      matchesStatus = employee.is_dismissed === true;
     }
 
     // Фильтр по должности
@@ -187,8 +187,8 @@ export const EmployeesScreen: React.FC = () => {
           }
           
         case 'status':
-          const aStatus = a.is_dismissed || a.employee_status === 'dismissed' ? 'Уволен' : 'Работает';
-          const bStatus = b.is_dismissed || b.employee_status === 'dismissed' ? 'Уволен' : 'Работает';
+          const aStatus = a.is_dismissed ? 'Уволен' : 'Работает';
+          const bStatus = b.is_dismissed ? 'Уволен' : 'Работает';
           if (sortDirection === 'desc') {
             return bStatus.localeCompare(aStatus, 'ru');
           } else {
@@ -346,7 +346,7 @@ export const EmployeesScreen: React.FC = () => {
       event.stopPropagation();
     }
     const nonDismissedIds = sortedEmployees
-      .filter(emp => !emp.is_dismissed && emp.employee_status !== 'dismissed')
+      .filter(emp => !emp.is_dismissed)
       .map(emp => emp.id);
     
     if (selectedEmployeeIds.size === nonDismissedIds.length && nonDismissedIds.length > 0) {
@@ -436,8 +436,15 @@ export const EmployeesScreen: React.FC = () => {
           onSave={(updatedEmployee) => {
             // Обновляем данные сотрудника в списке
             setEmployees((prev) =>
-              prev.map((emp) => (emp.id === updatedEmployee.id ? updatedEmployee : emp))
+              prev.map((emp) => {
+                if (emp.id === updatedEmployee.id) {
+                  // Объединяем старые данные с новыми, чтобы не потерять поля
+                  return { ...emp, ...updatedEmployee };
+                }
+                return emp;
+              })
             );
+            // Данные selectedEmployeeData обновятся автоматически через employees.find в следующем рендере
           }}
           onCreate={(createdEmployee) => {
             if (!createdEmployee || !createdEmployee.id) {
@@ -580,11 +587,48 @@ export const EmployeesScreen: React.FC = () => {
 
           <button 
             className="employees__dismiss-btn"
-            onClick={() => {
+            onClick={async () => {
               if (selectedEmployeeIds.size === 0) {
                 return;
               }
-              // TODO: Реализовать увольнение выбранных сотрудников
+
+              const confirmMessage = `Вы уверены, что хотите уволить ${selectedEmployeeIds.size} ${selectedEmployeeIds.size === 1 ? 'сотрудника' : 'сотрудников'}?`;
+              if (!confirm(confirmMessage)) {
+                return;
+              }
+
+              try {
+                const dismissPromises = Array.from(selectedEmployeeIds).map(async (employeeId) => {
+                  const dismissalDate = new Date().toISOString().split('T')[0];
+                  const payload = {
+                    is_dismissed: true,
+                    dismissal_date: dismissalDate,
+                    employee_status: 'dismissed',
+                  };
+                  return apiService.updateUser(employeeId, payload);
+                });
+
+                await Promise.all(dismissPromises);
+
+                // Обновляем список сотрудников
+                const updatedEmployees = employees.map((emp) => {
+                  if (selectedEmployeeIds.has(emp.id)) {
+                    return {
+                      ...emp,
+                      is_dismissed: true,
+                      dismissal_date: new Date().toISOString().split('T')[0],
+                      employee_status: 'dismissed',
+                    };
+                  }
+                  return emp;
+                });
+                setEmployees(updatedEmployees);
+
+                // Очищаем выбор
+                setSelectedEmployeeIds(new Set());
+              } catch (error: any) {
+                console.error('Error dismissing employees:', error);
+              }
             }}
           >
             Уволить
@@ -600,7 +644,7 @@ export const EmployeesScreen: React.FC = () => {
                 type="checkbox" 
                 className="employees__checkbox"
                 checked={(() => {
-                  const nonDismissed = sortedEmployees.filter(emp => !emp.is_dismissed && emp.employee_status !== 'dismissed');
+                  const nonDismissed = sortedEmployees.filter(emp => !emp.is_dismissed);
                   return nonDismissed.length > 0 && 
                          nonDismissed.every(emp => selectedEmployeeIds.has(emp.id));
                 })()}
@@ -685,7 +729,7 @@ export const EmployeesScreen: React.FC = () => {
             </div>
           ) : (
             paginatedEmployees.map((employee) => {
-              const isDismissed = employee.is_dismissed || employee.employee_status === 'dismissed' || employee.dismissal_date;
+              const isDismissed = employee.is_dismissed === true;
               const isSelected = selectedEmployeeIds.has(employee.id);
               
               return (
@@ -740,7 +784,7 @@ export const EmployeesScreen: React.FC = () => {
                       {isDismissed ? (
                         <>
                           <span className="employees__status-text employees__status-text--dismissed">Уволен</span>
-                          {employee.dismissal_date && (
+                          {employee.is_dismissed && employee.dismissal_date && (
                             <span className="employees__status-date">{formatDate(employee.dismissal_date)}</span>
                           )}
                         </>

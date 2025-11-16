@@ -17,11 +17,48 @@ type EmployeeDetailProps = {
   isNew?: boolean;
 };
 export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack, onSave, onCreate, isNew = false }) => {
+  // Проверка прав на редактирование сотрудников
+  const canEditEmployee = () => {
+    const currentUser = apiService.getCurrentUser();
+    if (!currentUser) {
+      console.log('canEditEmployee: No current user');
+      return false;
+    }
+    
+    console.log('canEditEmployee: currentUser:', currentUser);
+    console.log('canEditEmployee: is_system_admin:', currentUser.is_system_admin);
+    console.log('canEditEmployee: role:', currentUser.role);
+    console.log('canEditEmployee: position:', currentUser.position);
+    
+    // Админы системы
+    if (currentUser.is_system_admin === true) {
+      console.log('canEditEmployee: User is system admin');
+      return true;
+    }
+    
+    // ГИП или Бухгалтер - проверяем разные варианты названия
+    const role = (currentUser.role || currentUser.position || '').toLowerCase();
+    const isGIP = role.includes('гип') || role === 'главный инженер проекта';
+    const isBuhgalter = role.includes('бухгалтер') || role === 'бухгалтер';
+    
+    console.log('canEditEmployee: role (lowercase):', role);
+    console.log('canEditEmployee: isGIP:', isGIP);
+    console.log('canEditEmployee: isBuhgalter:', isBuhgalter);
+    
+    if (isGIP || isBuhgalter) {
+      console.log('canEditEmployee: User has edit permissions');
+      return true;
+    }
+    
+    console.log('canEditEmployee: User does NOT have edit permissions');
+    return false;
+  };
+
   const mapWorkSchedule = (value?: string) => {
     if (!value) {
-      return '5/2 будни';
+      return '5/2';
     }
-    return value === '5/2' ? '5/2 будни' : value;
+    return value === '5/2' ? '5/2 ' : value;
   };
 
   const [formData, setFormData] = useState(() => ({
@@ -32,9 +69,9 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
     email: employee.email || '',
     position: employee.role || 'Управляющий',
     work_schedule: mapWorkSchedule(employee.work_schedule),
-    status: employee.is_dismissed || employee.dismissal_date ? 'Уволен' : 'Работает',
+    status: employee.is_dismissed ? 'Уволен' : 'Работает',
     rate_per_hour: employee.rate_per_hour ? String(employee.rate_per_hour) : '',
-    password: isNew ? '' : '*************',
+    password: isNew ? '' : (employee.password || ''),
     birth_date: employee.birth_date || '',
     gender: employee.gender || 'male',
     employment_date: employee.employment_date || '',
@@ -61,7 +98,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
 
   // Опции для выпадающих списков
   const positionOptions = ['Управляющий', 'Менеджер', 'Монтажник', 'Инженер', 'Бухгалтер', 'Сметчик', 'Бригадир'];
-  const scheduleOptions = ['5/2 будни', '2/2'];
+  const scheduleOptions = ['5/2', '2/2'];
   const statusOptions = ['Работает', 'Уволен'];
   const genderOptions = [
     { value: 'male', label: 'Мужской' },
@@ -97,24 +134,56 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
       return;
     }
 
-    setFormData({
-      first_name: employee.first_name || '',
-      last_name: employee.last_name || '',
-      second_name: employee.second_name || '',
-      phone: employee.phone || '',
-      email: employee.email || '',
-      position: employee.role || 'Управляющий',
-      work_schedule: mapWorkSchedule(employee.work_schedule),
-      status: employee.is_dismissed || employee.dismissal_date ? 'Уволен' : 'Работает',
-      rate_per_hour: employee.rate_per_hour ? String(employee.rate_per_hour) : '',
-      password: '*************',
-      birth_date: employee.birth_date || '',
-      gender: employee.gender || 'male',
-      employment_date: employee.employment_date || '',
-      dateFrom: '',
-      dateTo: '',
-    });
-  }, [employee, isNew]);
+    // Загружаем полные данные сотрудника, включая пароль
+    const loadEmployeeData = async () => {
+      if (!employee?.id) return;
+      
+      try {
+        const response = await apiService.getUserById(employee.id);
+        const fullEmployeeData = response?.data ?? response ?? employee;
+        
+        setFormData({
+          first_name: fullEmployeeData.first_name || employee.first_name || '',
+          last_name: fullEmployeeData.last_name || employee.last_name || '',
+          second_name: fullEmployeeData.second_name || employee.second_name || '',
+          phone: fullEmployeeData.phone || employee.phone || '',
+          email: fullEmployeeData.email || employee.email || '',
+          position: fullEmployeeData.role || employee.role || 'Управляющий',
+          work_schedule: mapWorkSchedule(fullEmployeeData.work_schedule || employee.work_schedule),
+          status: fullEmployeeData.is_dismissed ? 'Уволен' : 'Работает',
+          rate_per_hour: fullEmployeeData.rate_per_hour ? String(fullEmployeeData.rate_per_hour) : (employee.rate_per_hour ? String(employee.rate_per_hour) : ''),
+          password: fullEmployeeData.password || employee.password || '',
+          birth_date: fullEmployeeData.birth_date || employee.birth_date || '',
+          gender: fullEmployeeData.gender || employee.gender || 'male',
+          employment_date: fullEmployeeData.employment_date || employee.employment_date || '',
+          dateFrom: '',
+          dateTo: '',
+        });
+      } catch (error) {
+        console.error('Error loading employee data:', error);
+        // Если не удалось загрузить, используем данные из employee
+        setFormData({
+          first_name: employee.first_name || '',
+          last_name: employee.last_name || '',
+          second_name: employee.second_name || '',
+          phone: employee.phone || '',
+          email: employee.email || '',
+          position: employee.role || 'Управляющий',
+          work_schedule: mapWorkSchedule(employee.work_schedule),
+          status: employee.is_dismissed ? 'Уволен' : 'Работает',
+          rate_per_hour: employee.rate_per_hour ? String(employee.rate_per_hour) : '',
+          password: employee.password || '',
+          birth_date: employee.birth_date || '',
+          gender: employee.gender || 'male',
+          employment_date: employee.employment_date || '',
+          dateFrom: '',
+          dateTo: '',
+        });
+      }
+    };
+
+    loadEmployeeData();
+  }, [employee?.id, isNew]);
 
   // Форматирование даты в формате дд.мм.гггг
   const formatDate = (dateString: string | null) => {
@@ -401,29 +470,24 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
     const trimmedEmail = formData.email.trim();
     const trimmedPhone = formData.phone.trim();
 
+    // Валидация только для создания нового сотрудника
+    if (isNew) {
     if (!trimmedLastName || !trimmedFirstName) {
-      alert('Заполните фамилию и имя сотрудника');
       return;
     }
 
     if (!trimmedEmail) {
-      alert('Укажите электронную почту');
       return;
     }
 
     if (!trimmedPhone) {
-      alert('Укажите номер телефона');
       return;
     }
-
-    if (isNew) {
       if (!formData.password.trim()) {
-        alert('Введите пароль для сотрудника');
         return;
       }
 
       if (!formData.birth_date) {
-        alert('Укажите дату рождения');
         return;
       }
 
@@ -448,7 +512,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
           position: formData.position,
           employee_status: formData.status === 'Работает' ? 'active' : 'dismissed',
           rate_per_hour: Number.isFinite(rateValue) ? rateValue : 0,
-          work_schedule: formData.work_schedule === '5/2 будни' ? '5/2' : formData.work_schedule,
+          work_schedule: formData.work_schedule === '5/2' ? '5/2' : formData.work_schedule,
         };
 
         const response = await apiService.registerEmployee(payload);
@@ -466,7 +530,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
           email: createdEmployee.email || '',
           position: createdEmployee.role || createdEmployee.position || formData.position,
           work_schedule: mapWorkSchedule(createdEmployee.work_schedule),
-          status: createdEmployee.employee_status === 'dismissed' || createdEmployee.is_dismissed ? 'Уволен' : 'Работает',
+          status: createdEmployee.is_dismissed ? 'Уволен' : 'Работает',
           rate_per_hour: createdEmployee.rate_per_hour ? String(createdEmployee.rate_per_hour) : '',
           password: '',
           birth_date: createdEmployee.birth_date || formData.birth_date,
@@ -485,7 +549,6 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
         return;
       } catch (error) {
         console.error('Error creating employee:', error);
-        alert('Не удалось создать сотрудника. Проверьте данные и попробуйте ещё раз.');
       } finally {
         setIsSaving(false);
       }
@@ -495,27 +558,82 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
 
     const rateValue = formData.rate_per_hour ? Number(formData.rate_per_hour) : 0;
 
-    const updatedEmployee = {
-      ...employee,
-      first_name: trimmedFirstName,
-      last_name: trimmedLastName,
-      second_name: formData.second_name.trim(),
-      phone: trimmedPhone,
-      email: trimmedEmail,
-      role: formData.position,
-      work_schedule: formData.work_schedule,
-      employee_status: formData.status === 'Работает' ? 'active' : 'dismissed',
-      is_dismissed: formData.status !== 'Работает',
-      rate_per_hour: Number.isFinite(rateValue) ? rateValue : 0,
-      birth_date: formData.birth_date || employee.birth_date,
-      gender: formData.gender || employee.gender,
-      employment_date: formData.employment_date || employee.employment_date,
-    };
-
-    if (onSave) {
-      onSave(updatedEmployee);
+    // Проверка прав перед отправкой запроса (для редактирования)
+    if (!isNew && !canEditEmployee()) {
+      return;
     }
-    onBack();
+
+    setIsSaving(true);
+    try {
+      // Формируем payload для обновления (все поля необязательные)
+      const payload: any = {};
+      
+      // Добавляем только непустые поля (чтобы не перезаписывать существующие данные пустыми значениями)
+      if (trimmedFirstName) payload.first_name = trimmedFirstName;
+      if (trimmedLastName) payload.last_name = trimmedLastName;
+      const trimmedSecondName = formData.second_name.trim();
+      if (trimmedSecondName) payload.second_name = trimmedSecondName;
+      if (trimmedEmail) payload.email = trimmedEmail;
+      if (trimmedPhone) payload.phone = trimmedPhone;
+      if (formData.position) {
+        payload.role = formData.position;
+        payload.position = formData.position;
+      }
+      if (formData.work_schedule) {
+        payload.work_schedule = formData.work_schedule === '5/2 ' ? '5/2' : formData.work_schedule;
+      }
+      if (formData.status) {
+        payload.employee_status = formData.status === 'Работает' ? 'active' : 'dismissed';
+        // Если статус "Уволен", устанавливаем is_dismissed и dismissal_date
+        if (formData.status === 'Уволен') {
+          payload.is_dismissed = true;
+          payload.dismissal_date = new Date().toISOString().split('T')[0];
+        }
+        // Если статус "Работает", всегда сбрасываем эти поля (независимо от текущего состояния)
+        else if (formData.status === 'Работает') {
+          payload.is_dismissed = false;
+          // Отправляем null для сброса даты увольнения в БД
+          payload.dismissal_date = null;
+        }
+      }
+      // rate_per_hour может быть 0, поэтому проверяем на undefined/null
+      if (formData.rate_per_hour !== '' && formData.rate_per_hour !== undefined && formData.rate_per_hour !== null) {
+        if (Number.isFinite(rateValue)) {
+          payload.rate_per_hour = rateValue;
+        }
+      }
+      if (formData.birth_date) payload.birth_date = formData.birth_date;
+      if (formData.gender) payload.gender = formData.gender;
+      if (formData.employment_date) payload.employment_date = formData.employment_date;
+      
+      // Пароль обновляем только если он был введен
+      if (formData.password && formData.password.trim()) {
+        payload.password = formData.password.trim();
+      }
+
+      // НЕ изменяем is_employee (тип пользователя) - это запрещено
+      // Права на редактирование проверяются на бэкенде
+
+      await apiService.updateUser(employee.id, payload);
+      // Формируем обновленного сотрудника с учетом всех изменений
+      const updatedEmployee = {
+        ...employee,
+        ...payload,
+        // Убеждаемся, что статус правильно установлен
+        is_dismissed: formData.status === 'Уволен' ? true : false,
+        dismissal_date: formData.status === 'Уволен' ? payload.dismissal_date : null,
+        employee_status: formData.status === 'Работает' ? 'active' : 'dismissed',
+      };
+
+      if (onSave) {
+        onSave(updatedEmployee);
+      }
+      onBack();
+    } catch (error: any) {
+      console.error('Error updating employee:', error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
@@ -550,7 +668,10 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
     return colors[Math.abs(hash) % colors.length];
   };
 
-  const dismissalDateDisplay = employee.dismissal_date ? formatDate(employee.dismissal_date) : '-';
+  // Дата увольнения: если есть дата - показываем, если нет - "-"
+  const dismissalDateDisplay = employee.dismissal_date 
+    ? formatDate(employee.dismissal_date) 
+    : '-';
   const employmentDateDisplay = formData.employment_date
     ? formatDate(formData.employment_date)
     : (employee.employment_date ? formatDate(employee.employment_date) : '-') || '-';
@@ -604,8 +725,36 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
                     <div className="employee-detail__dots-menu">
                       <button 
                         className="employee-detail__dots-menu-item"
-                        onClick={() => {
+                        onClick={async () => {
                           setIsDotsMenuOpen(false);
+                          
+                          if (!confirm('Вы уверены, что хотите уволить этого сотрудника?')) {
+                            return;
+                          }
+
+                          try {
+                            const dismissalDate = new Date().toISOString().split('T')[0];
+                            const payload = {
+                              is_dismissed: true,
+                              dismissal_date: dismissalDate,
+                              employee_status: 'dismissed',
+                            };
+
+                            const response = await apiService.updateUser(employee.id, payload);
+                            const updatedEmployee = response?.data ?? response ?? { ...employee, ...payload };
+
+                            // Обновляем форму
+                            setFormData({
+                              ...formData,
+                              status: 'Уволен',
+                            });
+
+                            if (onSave) {
+                              onSave(updatedEmployee);
+                            }
+                          } catch (error: any) {
+                            console.error('Error dismissing employee:', error);
+                          }
                         }}
                       >
                         Уволить
@@ -689,7 +838,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
                   className="employee-detail__dropdown"
                   onClick={() => setIsScheduleDropdownOpen(!isScheduleDropdownOpen)}
                 >
-                  <span>{formData.work_schedule || '5/2 будни'}</span>
+                  <span>{formData.work_schedule || '5/2'}</span>
                   <img src={userDropdownIcon} alt="▼" />
                 </div>
                 {isScheduleDropdownOpen && (

@@ -73,7 +73,11 @@ class ApiService {
         window.location.href = '/'; // Перенаправляем на страницу входа
       }
       
-      throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
+      // Создаем ошибку с информацией о статусе для лучшей обработки
+      const error = new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
+      (error as any).status = response.status;
+      (error as any).statusText = response.statusText;
+      throw error;
     }
 
     const contentType = response.headers.get('content-type');
@@ -173,8 +177,29 @@ class ApiService {
     return response;
   }
 
+  async getUserById(userId: number): Promise<any> {
+    const response = await this.request<any>(`/users/${userId}`, {
+      method: 'GET',
+    });
+    return response;
+  }
+
   async registerEmployee(data: any): Promise<any> {
     const response = await this.request<any>('/auth/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return response;
+  }
+
+  // Обновление пользователя
+  async updateUser(userId: number, data: any): Promise<any> {
+    const url = `/users/${userId}/update`;
+    const response = await this.request<any>(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
