@@ -525,13 +525,42 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     if (event) {
       event.stopPropagation();
     }
+    
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+    
+    const isArchived = project.is_archived === 1 || project.is_archived === true || project.status === 'Архив';
+    
     setSelectedProjectIds(prev => {
       const newSet = new Set(prev);
+      
+      // Если проект уже выбран, просто снимаем выбор
       if (newSet.has(projectId)) {
         newSet.delete(projectId);
-      } else {
-        newSet.add(projectId);
+        return newSet;
       }
+      
+      // Проверяем, есть ли уже выбранные проекты
+      if (newSet.size > 0) {
+        // Проверяем, все ли выбранные проекты имеют такой же статус архивации
+        const selectedProjects = Array.from(newSet).map(id => projects.find(p => p.id === id)).filter(Boolean);
+        const hasArchived = selectedProjects.some(p => p.is_archived === 1 || p.is_archived === true || p.status === 'Архив');
+        const hasNonArchived = selectedProjects.some(p => !(p.is_archived === 1 || p.is_archived === true || p.status === 'Архив'));
+        
+        // Если пытаемся выбрать архивный проект, а уже выбраны неархивные - запрещаем
+        if (isArchived && hasNonArchived) {
+          alert('Нельзя одновременно выбрать архивированные и неархивированные проекты. Снимите выбор с неархивированных проектов.');
+          return prev;
+        }
+        
+        // Если пытаемся выбрать неархивный проект, а уже выбраны архивные - запрещаем
+        if (!isArchived && hasArchived) {
+          alert('Нельзя одновременно выбрать архивированные и неархивированные проекты. Снимите выбор с архивированных проектов.');
+          return prev;
+        }
+      }
+      
+      newSet.add(projectId);
       return newSet;
     });
   };
@@ -541,62 +570,118 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     if (event) {
       event.stopPropagation();
     }
-    const filteredProjects = projects.filter(project => {
-      if (statusFilter === 'all') return true;
-      return project.status === statusFilter;
-    });
-    const filteredProjectIds = filteredProjects
-      .filter(p => !(p.is_archived === 1 || p.is_archived === true)) // Не выбираем уже архивные
-      .map(p => p.id);
+    const filteredProjects = sortedProjects; // Используем уже отфильтрованные и отсортированные проекты
+    const filteredProjectIds = filteredProjects.map(p => p.id);
     
-    if (selectedProjectIds.size === filteredProjectIds.length && filteredProjectIds.length > 0) {
+    // Проверяем, все ли проекты уже выбраны
+    const allSelected = filteredProjectIds.length > 0 && 
+                       filteredProjectIds.every(id => selectedProjectIds.has(id));
+    
+    if (allSelected) {
       // Снять выделение со всех
       setSelectedProjectIds(new Set());
     } else {
-      // Выбрать всех (кроме архивных)
+      // Выбрать всех (включая архивные, если они в фильтре)
       setSelectedProjectIds(new Set(filteredProjectIds));
     }
   };
 
-  // Функция архивирования выбранных проектов
+  // Функция архивирования/снятия с архива выбранных проектов
   const handleArchiveProjects = async () => {
     if (selectedProjectIds.size === 0) return;
 
     const selectedIdsArray = Array.from(selectedProjectIds);
+    
+    // Определяем, какие проекты архивные, а какие нет
+    const selectedProjects = selectedIdsArray.map(id => projects.find(p => p.id === id)).filter(Boolean);
+    const archivedProjects = selectedProjects.filter(p => p.is_archived === 1 || p.is_archived === true || p.status === 'Архив');
+    const nonArchivedProjects = selectedProjects.filter(p => !(p.is_archived === 1 || p.is_archived === true || p.status === 'Архив'));
+    
+    // Проверяем на смешанный выбор
+    if (archivedProjects.length > 0 && nonArchivedProjects.length > 0) {
+      alert('Нельзя одновременно архивировать и снимать с архива проекты. Выберите только архивированные или только неархивированные проекты.');
+      return;
+    }
 
     setIsArchiving(true);
     try {
-      // Архивируем все выбранные проекты параллельно
-      const archivePromises = selectedIdsArray.map(projectId => 
-        apiService.archiveProject(projectId)
-      );
-      
-      await Promise.all(archivePromises);
-      
-      // Обновляем список проектов
-      const updatedProjects = projects.map(project => {
-        if (selectedProjectIds.has(project.id)) {
-          return { ...project, is_archived: 1, status: 'Архив' };
+      if (archivedProjects.length > 0) {
+        // Снимаем с архива - обновляем is_archived через updateProject
+        const unarchivePromises = archivedProjects.map(project => {
+          // Сохраняем оригинальный статус перед архивированием, если его нет
+          const originalStatus = project.status_before_archive || (project.status === 'Архив' ? 'Новый' : project.status) || 'Новый';
+          
+          return apiService.updateProject(project.id, {
+            is_archived: 0,
+            status: originalStatus
+          });
+        });
+        
+        await Promise.all(unarchivePromises);
+        
+        // Обновляем список проектов
+        const updatedProjects = projects.map(project => {
+          if (selectedProjectIds.has(project.id)) {
+            // Определяем новый статус (используем сохраненный или "Новый")
+            const originalStatus = project.status_before_archive || (project.status === 'Архив' ? 'Новый' : project.status) || 'Новый';
+            return { ...project, is_archived: 0, status: originalStatus };
+          }
+          return project;
+        });
+        
+        setProjects(updatedProjects);
+      } else {
+        // Архивируем
+        const archivePromises = nonArchivedProjects.map(project => 
+          apiService.archiveProject(project.id)
+        );
+        
+        await Promise.all(archivePromises);
+        
+        // Обновляем список проектов
+        const updatedProjects = projects.map(project => {
+          if (selectedProjectIds.has(project.id)) {
+            return { ...project, is_archived: 1, status: 'Архив' };
+          }
+          return project;
+        });
+        
+        setProjects(updatedProjects);
+        
+        // Если архивируемый проект открыт, закрываем его
+        if (selectedProject && selectedProjectIds.has(selectedProject.id)) {
+          setSelectedProjectId(null);
+          localStorage.removeItem('selectedProjectId');
         }
-        return project;
-      });
-      
-      setProjects(updatedProjects);
-      
-      // Если архивируемый проект открыт, закрываем его
-      if (selectedProject && selectedProjectIds.has(selectedProject.id)) {
-        setSelectedProjectId(null);
-        localStorage.removeItem('selectedProjectId');
       }
       
       // Очищаем выбор
       setSelectedProjectIds(new Set());
     } catch (error) {
-      console.error('Error archiving projects:', error);
-      alert('Ошибка при архивировании проектов. Попробуйте еще раз.');
+      console.error('Error archiving/unarchiving projects:', error);
+      alert('Ошибка при выполнении операции. Попробуйте еще раз.');
     } finally {
       setIsArchiving(false);
     }
+  };
+  
+  // Определяем текст кнопки и действие
+  const getArchiveButtonText = () => {
+    if (selectedProjectIds.size === 0) {
+      return 'Перенести в архив';
+    }
+    
+    const selectedProjects = Array.from(selectedProjectIds)
+      .map(id => projects.find(p => p.id === id))
+      .filter(Boolean);
+    
+    const hasArchived = selectedProjects.some(p => p.is_archived === 1 || p.is_archived === true || p.status === 'Архив');
+    
+    if (isArchiving) {
+      return hasArchived ? 'Снятие с архива...' : 'Архивирование...';
+    }
+    
+    return hasArchived ? 'Убрать из архива' : 'Перенести в архив';
   };
 
   return (
@@ -640,9 +725,9 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
           <button 
             className="projects__archive-btn"
             onClick={handleArchiveProjects}
-            disabled={isArchiving}
+            disabled={isArchiving || selectedProjectIds.size === 0}
           >
-            {isArchiving ? 'Архивирование...' : 'Перенести в архив'}
+            {getArchiveButtonText()}
           </button>
         </div>
 
@@ -653,13 +738,9 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                 type="checkbox" 
                 className="projects__checkbox"
                 checked={(() => {
-                  const filteredProjects = projects.filter(project => {
-                    if (statusFilter === 'all') return true;
-                    return project.status === statusFilter;
-                  });
-                  const filteredNonArchived = filteredProjects.filter(p => !(p.is_archived === 1 || p.is_archived === true));
-                  return filteredNonArchived.length > 0 && 
-                         filteredNonArchived.every(p => selectedProjectIds.has(p.id));
+                  const filteredProjectIds = sortedProjects.map(p => p.id);
+                  return filteredProjectIds.length > 0 && 
+                         filteredProjectIds.every(id => selectedProjectIds.has(id));
                 })()}
                 onChange={(e) => {
                   e.stopPropagation();
@@ -781,7 +862,16 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                 <div 
                 key={project.id} 
                 className={`projects__table-row ${isArchived ? 'projects__table-row--archived' : ''}`}
-                onClick={() => !isArchived && navigateToProject(project.id)}
+                onClick={(e) => {
+                  // Не переходим в проект, если кликнули на чекбокс
+                  if ((e.target as HTMLElement).closest('.projects__checkbox')) {
+                    return;
+                  }
+                  // Не переходим в архивный проект
+                  if (!isArchived) {
+                    navigateToProject(project.id);
+                  }
+                }}
               >
                 <div className="projects__table-row-col">
                   <input 
@@ -790,13 +880,10 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                     checked={selectedProjectIds.has(project.id)}
                     onChange={(e) => {
                       e.stopPropagation();
-                      if (!isArchived) {
-                        handleProjectSelect(project.id, e as any);
-                      }
+                      handleProjectSelect(project.id, e as any);
                     }}
                     onClick={(e) => e.stopPropagation()}
-                    disabled={isArchived}
-                    style={{ cursor: isArchived ? 'not-allowed' : 'pointer' }}
+                    style={{ cursor: 'pointer' }}
                   />
                   <span>{project.id}</span>
                 </div>
