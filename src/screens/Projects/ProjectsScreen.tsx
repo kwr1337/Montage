@@ -605,51 +605,64 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
 
     setIsArchiving(true);
     try {
-      if (archivedProjects.length > 0) {
-        // Снимаем с архива - обновляем is_archived через updateProject
-        const unarchivePromises = archivedProjects.map(project => {
-          // Сохраняем оригинальный статус перед архивированием, если его нет
-          const originalStatus = project.status_before_archive || (project.status === 'Архив' ? 'Новый' : project.status) || 'Новый';
-          
-          return apiService.updateProject(project.id, {
-            is_archived: 0,
-            status: originalStatus
-          });
-        });
+      // Используем один и тот же метод archiveProject для архивирования и разархивирования
+      // Бэкенд сам определяет, нужно ли архивировать или разархивировать
+      const allSelectedProjects = selectedIdsArray.map(id => projects.find(p => p.id === id)).filter(Boolean);
+      const archivePromises = allSelectedProjects.map(project => 
+        apiService.archiveProject(project.id)
+      );
+      
+      await Promise.all(archivePromises);
+      
+      // Перезагружаем список проектов с сервера для получения актуальных данных
+      try {
+        const response = await apiService.getProjects(currentPage, itemsPerPage);
         
-        await Promise.all(unarchivePromises);
+        let projectsList: any[] = [];
+        if (Array.isArray(response)) {
+          projectsList = response;
+          setProjects(response);
+        } else if (response && response.data) {
+          if (Array.isArray(response.data)) {
+            projectsList = response.data;
+            setProjects(response.data);
+            if (response.last_page) {
+              setTotalPages(response.last_page);
+            } else if (response.meta) {
+              const total = response.meta.total || response.data.length;
+              setTotalPages(Math.ceil(total / itemsPerPage));
+            } else if (response.pagination) {
+              setTotalPages(response.pagination.total_pages || 1);
+            }
+          }
+        }
         
-        // Обновляем список проектов
+        // Загружаем израсходованные суммы для всех проектов
+        if (projectsList.length > 0) {
+          loadProjectsSpent(projectsList);
+        }
+      } catch (error) {
+        console.error('Error refreshing projects after archive/unarchive:', error);
+        // В случае ошибки обновляем локально
         const updatedProjects = projects.map(project => {
           if (selectedProjectIds.has(project.id)) {
-            // Определяем новый статус (используем сохраненный или "Новый")
-            const originalStatus = project.status_before_archive || (project.status === 'Архив' ? 'Новый' : project.status) || 'Новый';
-            return { ...project, is_archived: 0, status: originalStatus };
+            const isCurrentlyArchived = project.is_archived === 1 || project.is_archived === true || project.status === 'Архив';
+            
+            if (isCurrentlyArchived) {
+              return { ...project, is_archived: 0 };
+            } else {
+              return { ...project, is_archived: 1, status: 'Архив' };
+            }
           }
           return project;
         });
-        
         setProjects(updatedProjects);
-      } else {
-        // Архивируем
-        const archivePromises = nonArchivedProjects.map(project => 
-          apiService.archiveProject(project.id)
-        );
-        
-        await Promise.all(archivePromises);
-        
-        // Обновляем список проектов
-        const updatedProjects = projects.map(project => {
-          if (selectedProjectIds.has(project.id)) {
-            return { ...project, is_archived: 1, status: 'Архив' };
-          }
-          return project;
-        });
-        
-        setProjects(updatedProjects);
-        
-        // Если архивируемый проект открыт, закрываем его
-        if (selectedProject && selectedProjectIds.has(selectedProject.id)) {
+      }
+      
+      // Если архивируемый проект открыт, закрываем его
+      if (selectedProject && selectedProjectIds.has(selectedProject.id)) {
+        const isCurrentlyArchived = selectedProject.is_archived === 1 || selectedProject.is_archived === true || selectedProject.status === 'Архив';
+        if (!isCurrentlyArchived) {
           setSelectedProjectId(null);
           localStorage.removeItem('selectedProjectId');
         }
