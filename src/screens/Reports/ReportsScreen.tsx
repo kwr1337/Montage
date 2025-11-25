@@ -224,10 +224,22 @@ export const ReportsScreen: React.FC = () => {
         link.click();
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
+      } else if (response && typeof response === 'object' && 'report_url' in response) {
+        // Если ответ - JSON с report_url, скачиваем файл по URL
+        const reportUrl = (response as any).report_url;
+        if (reportUrl) {
+          // Создаем временную ссылку для скачивания
+          const link = document.createElement('a');
+          link.href = reportUrl;
+          link.download = reportUrl.split('/').pop() || 'report.xlsx';
+          link.target = '_blank';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
       } else {
-        // Если ответ - JSON, возможно это данные для формирования файла на клиенте
+        // Если ответ - JSON без report_url
         console.log('Nomenclature report data (JSON):', response);
-        // TODO: Если API возвращает JSON, нужно сформировать XLS файл на клиенте
         alert('Функция формирования отчёта из JSON данных в разработке');
       }
     } catch (error: any) {
@@ -275,10 +287,22 @@ export const ReportsScreen: React.FC = () => {
         link.click();
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
+      } else if (response && typeof response === 'object' && 'report_url' in response) {
+        // Если ответ - JSON с report_url, скачиваем файл по URL
+        const reportUrl = (response as any).report_url;
+        if (reportUrl) {
+          // Создаем временную ссылку для скачивания
+          const link = document.createElement('a');
+          link.href = reportUrl;
+          link.download = reportUrl.split('/').pop() || 'report.xlsx';
+          link.target = '_blank';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
       } else {
-        // Если ответ - JSON, возможно это данные для формирования файла на клиенте
+        // Если ответ - JSON без report_url
         console.log('Payments report data (JSON):', response);
-        // TODO: Если API возвращает JSON, нужно сформировать XLS файл на клиенте
         alert('Функция формирования отчёта из JSON данных в разработке');
       }
     } catch (error: any) {
@@ -305,7 +329,7 @@ export const ReportsScreen: React.FC = () => {
     const day = String(date.getDate()).padStart(2, '0');
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = date.getFullYear();
-    return `${day}.${month}.${year}`;
+    return `${day}/${month}/${year}`;
   };
 
   return (
@@ -347,7 +371,10 @@ export const ReportsScreen: React.FC = () => {
                     type="date"
                     className="reports__date-input"
                     value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
+                    onChange={(e) => {
+                      setDateFrom(e.target.value);
+                      setCurrentPage(1); // Сбрасываем страницу при изменении фильтра
+                    }}
                   />
                   {dateFrom ? (
                     <span className="reports__date-display">
@@ -374,7 +401,10 @@ export const ReportsScreen: React.FC = () => {
                     type="date"
                     className="reports__date-input"
                     value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
+                    onChange={(e) => {
+                      setDateTo(e.target.value);
+                      setCurrentPage(1); // Сбрасываем страницу при изменении фильтра
+                    }}
                   />
                   {dateTo ? (
                     <span className="reports__date-display">

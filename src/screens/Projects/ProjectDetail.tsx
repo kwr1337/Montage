@@ -13,7 +13,10 @@ import EditNomenclatureModal from '../../shared/ui/EditNomenclatureModal/EditNom
 import ImportModal from '../../shared/ui/ImportModal/ImportModal';
 import AddTrackingModal from '../../shared/ui/AddTrackingModal/AddTrackingModal';
 import DeleteTrackingModal from '../../shared/ui/DeleteTrackingModal/DeleteTrackingModal';
+import { CommentModal } from '../../shared/ui/CommentModal/CommentModal';
+import commentMobIcon from '../../shared/icons/commentMob.svg';
 import { Pagination } from '../../shared/ui/Pagination/Pagination';
+import '../../shared/ui/CommentModal/comment-modal.scss';
 
 // Функция для получения инициалов (Иван Иванов -> ИИ)
 const getInitials = (employee: any) => {
@@ -60,6 +63,37 @@ const EDITABLE_PROJECT_STATUS_OPTIONS = [
 const EDITABLE_PROJECT_STATUS_VALUES = EDITABLE_PROJECT_STATUS_OPTIONS.map((option) => option.value);
 const DEFAULT_EDITABLE_PROJECT_STATUS = EDITABLE_PROJECT_STATUS_OPTIONS[0].value;
 
+// Функция для форматирования единиц измерения
+const formatUnit = (unit: string | null | undefined): string => {
+  if (!unit) return '';
+  
+  const unitTrimmed = unit.trim();
+  const unitLower = unitTrimmed.toLowerCase();
+  
+  // Шт/шт/ШТ -> Шт.
+  if (unitLower === 'шт') {
+    return 'Шт.';
+  }
+  
+  // Литр/литр/ЛИТР/л/Л -> Л
+  if (unitLower === 'литр' || unitLower === 'л') {
+    return 'Л';
+  }
+  
+  // Метр/метр/МЕТР/м/М -> М
+  if (unitLower === 'метр' || unitLower === 'м') {
+    return 'М';
+  }
+  
+  // Если единица уже в правильном формате (Шт., Л, М), возвращаем как есть
+  if (unitTrimmed === 'Шт.' || unitTrimmed === 'Л' || unitTrimmed === 'М') {
+    return unitTrimmed;
+  }
+  
+  // Для всех остальных случаев возвращаем как есть
+  return unitTrimmed;
+};
+
 export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, onProjectUpdate, onProjectCreate, isNew = false }) => {
   const [localProject, setLocalProject] = useState(project);
   // Восстанавливаем activeTab из localStorage при загрузке
@@ -94,6 +128,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   const [isForemanDropdownOpen, setIsForemanDropdownOpen] = useState(false);
   const [isDotsMenuOpen, setIsDotsMenuOpen] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -107,8 +142,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   const [foremen, setForemen] = useState<any[]>([]);
   const [_selectedForemanId, setSelectedForemanId] = useState<number | null>(null);
   const [allEmployees, setAllEmployees] = useState<any[]>([]); // Все доступные сотрудники (is_employee = true)
+  const [isEmployeesTooltipVisible, setIsEmployeesTooltipVisible] = useState(false);
   const [isEditingHeader, setIsEditingHeader] = useState(false);
   const [editedProjectName, setEditedProjectName] = useState(project.name || '');
+  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
+  const [selectedComment, setSelectedComment] = useState<{ comment: string; employeeName: string; date: string } | null>(null);
   const [editedStatus, setEditedStatus] = useState(
     project.status && EDITABLE_PROJECT_STATUS_VALUES.includes(project.status)
       ? project.status
@@ -196,7 +234,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     if (!employees || !Array.isArray(employees)) return [];
     return employees.filter((emp: any) => {
       // Сотрудник считается активным, если у него нет end_working_date
-      return !emp.pivot?.end_working_date;
+      // Проверяем pivot?.end_working_date - если есть дата (не null, не undefined, не пустая строка), значит сотрудник удален
+      const endWorkingDate = emp.pivot?.end_working_date;
+      // Сотрудник активен, если end_working_date отсутствует или равен null/undefined/пустой строке
+      return !endWorkingDate || endWorkingDate === null || endWorkingDate === undefined || endWorkingDate === '';
     });
   };
 
@@ -293,8 +334,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
               }, 0);
               
               // Получаем последние часы (из самого последнего отчета)
+              let lastReport: any = null;
               if (reports.length > 0) {
-                const lastReport = reports[0];
+                lastReport = reports[0];
                 const lastHoursWorked = Number(lastReport.hours_worked) || 0;
                 const isLastAbsent = lastReport.absent === true || lastReport.absent === 1 || lastReport.absent === '1';
                 lastHours = isLastAbsent ? 0 : lastHoursWorked;
@@ -303,29 +345,50 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
               // Рассчитываем суммы
               totalSum = hours * rate;
               lastSum = lastHours * rate;
+              
+              return {
+                id: employee.id,
+                name: `${employee.last_name} ${employee.first_name.charAt(0)}. ${employee.second_name.charAt(0)}.`,
+                role: employee.role || 'Не указана',
+                status: status,
+                deletionDate: deletionDate,
+                startDate: startWorkingDate ?
+                          new Date(startWorkingDate).toLocaleDateString('ru-RU', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric'
+                          }) : 'Не указана',
+                days: daysInProject,
+                hours: hours,
+                lastHours: lastHours,
+                lastReport: lastReport, // Сохраняем последний отчет для проверки комментария
+                rate: rate,
+                lastSum: lastSum,
+                totalSum: totalSum
+              };
             } catch (error) {
               console.error(`Error loading work reports for employee ${employee.id}:`, error);
+              return {
+                id: employee.id,
+                name: `${employee.last_name} ${employee.first_name.charAt(0)}. ${employee.second_name.charAt(0)}.`,
+                role: employee.role || 'Не указана',
+                status: status,
+                deletionDate: deletionDate,
+                startDate: startWorkingDate ?
+                          new Date(startWorkingDate).toLocaleDateString('ru-RU', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric'
+                          }) : 'Не указана',
+                days: daysInProject,
+                hours: 0,
+                lastHours: 0,
+                lastReport: null,
+                rate: rate,
+                lastSum: 0,
+                totalSum: 0
+              };
             }
-            
-            return {
-              id: employee.id,
-              name: `${employee.last_name} ${employee.first_name.charAt(0)}. ${employee.second_name.charAt(0)}.`,
-              role: employee.role || 'Не указана',
-              status: status,
-              deletionDate: deletionDate,
-              startDate: startWorkingDate ?
-                        new Date(startWorkingDate).toLocaleDateString('ru-RU', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric'
-                        }) : 'Не указана',
-              days: daysInProject,
-              hours: hours,
-              lastHours: lastHours,
-              rate: rate,
-              lastSum: lastSum,
-              totalSum: totalSum
-            };
           })
         );
           
@@ -456,7 +519,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                 id: item.id,
                 name: item.name,
                 status: item.is_deleted ? `Удалён\n${new Date(item.deleted_at).toLocaleDateString('ru-RU')}` : 'Активен',
-                unit: item.unit,
+                unit: formatUnit(item.unit),
                 plan: item.pivot?.start_amount || 0,
                 changes: lastChange,
                 fact: 0 // Пока нет данных из мобильной версии
@@ -475,6 +538,23 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   }, [localProject.id]);
 
   const handleInputChange = (field: string, value: string) => {
+    // Для поля budget проверяем, что значение не отрицательное
+    if (field === 'budget') {
+      const numValue = parseFloat(value);
+      // Если значение отрицательное или пустое, устанавливаем пустую строку или 0
+      if (value === '' || value === '-') {
+        setFormData(prev => ({
+          ...prev,
+          [field]: value
+        }));
+        return;
+      }
+      if (!isNaN(numValue) && numValue < 0) {
+        // Если значение отрицательное, не обновляем
+        return;
+      }
+    }
+    
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -597,12 +677,25 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       rate_per_hour: emp.pivot?.rate_per_hour || emp.rate_per_hour || 0,
     }));
 
+    // Проверяем и исправляем budget, если он отрицательный
+    let budgetValue = null;
+    if (formData.budget) {
+      const parsedBudget = parseFloat(formData.budget.toString());
+      if (!isNaN(parsedBudget) && parsedBudget >= 0) {
+        budgetValue = parsedBudget;
+      } else if (!isNaN(parsedBudget) && parsedBudget < 0) {
+        // Если значение отрицательное, устанавливаем 0
+        budgetValue = 0;
+        setFormData(prev => ({ ...prev, budget: '0' }));
+      }
+    }
+
     const basePayload: any = {
       name: trimmedName,
       project_manager_id: effectiveProjectManagerId,
       start_date: formData.startDate || null,
       end_date: formData.endDate || null,
-      budget: formData.budget ? parseFloat(formData.budget.toString()) : null,
+      budget: budgetValue,
       address: formData.address,
       description: localProject.description || '',
       status: statusForSave,
@@ -683,11 +776,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   };
 
   const handleCancel = () => {
-    if (isNewProject) {
-      onBack();
-      return;
-    }
-
     // Сброс к исходным данным
     // Получаем всех бригадиров из проекта
     let foremenList: any[] = [];
@@ -714,6 +802,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       foreman: '',
       budget: localProject.budget || ''
     });
+
+    // Возвращаемся на страницу проектов
+    onBack();
   };
 
   const handleAddNomenclature = async (data: { nomenclatureId: number; nomenclature: string; unit: string; quantity: number }) => {
@@ -728,7 +819,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         id: data.nomenclatureId,
         name: data.nomenclature,
         status: 'Активен',
-        unit: data.unit,
+        unit: formatUnit(data.unit),
         plan: data.quantity,
         changes: null,
         fact: 0
@@ -755,7 +846,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
           // Разворачиваем массив, чтобы последние изменения были первыми
           const formattedHistory = changesResponse.data.reverse().map((change: any) => ({
             date: new Date(change.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }),
-            quantity: `${change.amount_change} ${item.unit || ''}`,
+            quantity: `${change.amount_change} ${formatUnit(item.unit) || ''}`,
             changedBy: change.user?.last_name || 'Неизвестно' // TODO: получить данные пользователя из API
           }));
           setNomenclatureHistory(formattedHistory);
@@ -791,7 +882,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
           // Разворачиваем массив, чтобы последние изменения были первыми
           const formattedHistory = changesResponse.data.reverse().map((change: any) => ({
             date: new Date(change.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }),
-            quantity: `${change.amount_change} ${editingItem.unit || ''}`,
+            quantity: `${change.amount_change} ${formatUnit(editingItem.unit) || ''}`,
             changedBy: change.user?.last_name || 'Неизвестно'
           }));
           setNomenclatureHistory(formattedHistory);
@@ -1554,8 +1645,45 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                           >
                             {isArchiving ? 'Архивирование...' : 'Перенести в архив'}
                           </button>
-                          <button className="projects__detail-dots-menu-item projects__detail-dots-menu-item--delete">
-                            Удалить
+                          <button 
+                            className="projects__detail-dots-menu-item projects__detail-dots-menu-item--delete"
+                            onClick={async () => {
+                              if (!localProject.id || isDeleting) return;
+                              
+                              const confirmMessage = `Вы уверены, что хотите удалить проект "${localProject.name}"?`;
+                              if (!confirm(confirmMessage)) {
+                                return;
+                              }
+                              
+                              setIsDeleting(true);
+                              try {
+                                await apiService.deleteProject(localProject.id);
+                                
+                                // Обновляем проект локально
+                                const updatedProject = {
+                                  ...localProject,
+                                  is_deleted: true
+                                };
+                                
+                                setLocalProject(updatedProject);
+                                
+                                // Уведомляем родительский компонент об обновлении
+                                if (onProjectUpdate) {
+                                  onProjectUpdate(updatedProject);
+                                }
+                                
+                                // Закрываем проект и возвращаемся к списку
+                                onBack();
+                              } catch (error) {
+                                console.error('Error deleting project:', error);
+                              } finally {
+                                setIsDeleting(false);
+                                setIsDotsMenuOpen(false);
+                              }
+                            }}
+                            disabled={isDeleting}
+                          >
+                            {isDeleting ? 'Удаление...' : 'Удалить'}
                           </button>
                         </div>
                       )}
@@ -1600,9 +1728,29 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
             </div>
             {(() => {
               const activeEmployees = getActiveEmployees(localProject.employees);
+              // Дополнительная фильтрация: убеждаемся, что в tooltip попадают только активные сотрудники
+              const hiddenEmployees = activeEmployees
+                .slice(3)
+                .filter((emp: any) => !emp.pivot?.end_working_date);
               return activeEmployees.length > 3 && (
-                <div className="projects__detail-employees-more">
+                <div 
+                  className="projects__detail-employees-more"
+                  onMouseEnter={() => setIsEmployeesTooltipVisible(true)}
+                  onMouseLeave={() => setIsEmployeesTooltipVisible(false)}
+                  style={{ position: 'relative' }}
+                >
                   <span>+{activeEmployees.length - 3}</span>
+                  {isEmployeesTooltipVisible && hiddenEmployees.length > 0 && (
+                    <div className="projects__detail-employees-tooltip">
+                      {hiddenEmployees
+                        .filter((emp: any) => !emp.pivot?.end_working_date)
+                        .map((emp: any) => (
+                          <div key={emp.id} className="projects__detail-employees-tooltip-item">
+                            {formatUserName(emp)}
+                          </div>
+                        ))}
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -1768,10 +1916,28 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                 <div className="projects__form-field projects__form-field--single">
                   <label>Выделено на ФОТ</label>
                   <input
-                    type="number"
+                    type="text"
                     className="projects__form-input projects__form-input--editable"
-                    value={formData.budget}
-                    onChange={(e) => handleInputChange('budget', e.target.value)}
+                    value={formData.budget ? `${formData.budget} ₽` : ''}
+                    onChange={(e) => {
+                      // Убираем символ ₽, пробелы и все нечисловые символы (кроме точки для десятичных)
+                      let value = e.target.value.replace(/[₽\s]/g, '').trim();
+                      // Оставляем только цифры и одну точку для десятичных чисел
+                      value = value.replace(/[^\d.]/g, '');
+                      // Разрешаем только одну точку
+                      const parts = value.split('.');
+                      if (parts.length > 2) {
+                        value = parts[0] + '.' + parts.slice(1).join('');
+                      }
+                      handleInputChange('budget', value);
+                    }}
+                    onBlur={() => {
+                      // При потере фокуса проверяем и исправляем значение
+                      const numValue = parseFloat(formData.budget);
+                      if (!isNaN(numValue) && numValue < 0) {
+                        handleInputChange('budget', '0');
+                      }
+                    }}
                     placeholder="Введите сумму"
                   />
                 </div>
@@ -1942,15 +2108,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                   )}
                 </div>
                 
-                {/* Кнопки справа */}
-                <div className="projects__specification-bottom-buttons">
-                  <button className="projects__specification-bottom-btn projects__specification-bottom-btn--cancel">
-                    Отмена
-                  </button>
-                  <button className="projects__specification-bottom-btn projects__specification-bottom-btn--save">
-                    Сохранить
-                  </button>
-                </div>
               </div>
             </div>
           )}
@@ -2068,7 +2225,35 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                       <span>{item.hours}</span>
                     </div>
                     <div className="projects__tracking-col">
-                      <span>{item.lastHours}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+                        <span>{item.lastHours}</span>
+                        {item.lastReport && item.lastReport.notes && item.lastReport.notes.trim() !== '' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedComment({
+                                comment: item.lastReport.notes,
+                                employeeName: item.name,
+                                date: item.lastReport.report_date,
+                              });
+                              setIsCommentModalOpen(true);
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              padding: '0',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                            aria-label="Показать комментарий"
+                          >
+                            <img src={commentMobIcon} alt="Комментарий" style={{ width: '16px', height: '16px' }} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="projects__tracking-col">
                       <span>{item.rate.toLocaleString('ru-RU')} ₽</span>
@@ -2109,15 +2294,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                   })()}
                 </div>
                 
-                {/* Кнопки справа */}
-                <div className="projects__tracking-bottom-buttons">
-                  <button className="projects__tracking-bottom-btn projects__tracking-bottom-btn--cancel">
-                    Отмена
-                  </button>
-                  <button className="projects__tracking-bottom-btn projects__tracking-bottom-btn--save">
-                    Сохранить
-                  </button>
-                </div>
               </div>
             </div>
           )}
@@ -2171,6 +2347,19 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         onDelete={handleDeleteTracking}
         employees={employeesToDelete}
       />
+
+      {selectedComment && (
+        <CommentModal
+          isOpen={isCommentModalOpen}
+          onClose={() => {
+            setIsCommentModalOpen(false);
+            setSelectedComment(null);
+          }}
+          comment={selectedComment.comment}
+          employeeName={selectedComment.employeeName}
+          date={selectedComment.date}
+        />
+      )}
     </>
   );
 };

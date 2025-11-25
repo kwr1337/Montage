@@ -367,11 +367,46 @@ export const SalaryScreen: React.FC = () => {
     }
 
     // Фильтр по дате
-    if (dateFrom) {
-      // TODO: Реализовать фильтрацию по дате
-    }
-    if (dateTo) {
-      // TODO: Реализовать фильтрацию по дате
+    if (dateFrom || dateTo) {
+      filtered = filtered.filter((payment) => {
+        // Получаем дату выплаты (используем первую доступную дату)
+        const paymentDateStr = payment.first_payment_date 
+          || payment.second_payment_date 
+          || payment.third_payment_date;
+        
+        if (!paymentDateStr) {
+          // Если нет даты выплаты, исключаем из результатов при активном фильтре
+          return false;
+        }
+        
+        const paymentDate = new Date(paymentDateStr);
+        if (Number.isNaN(paymentDate.getTime())) {
+          return false;
+        }
+        
+        // Сбрасываем время для корректного сравнения дат
+        const paymentDateOnly = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), paymentDate.getDate());
+        
+        // Фильтр "от даты"
+        if (dateFrom) {
+          const fromDate = new Date(dateFrom);
+          const fromDateOnly = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
+          if (paymentDateOnly < fromDateOnly) {
+            return false;
+          }
+        }
+        
+        // Фильтр "до даты"
+        if (dateTo) {
+          const toDate = new Date(dateTo);
+          const toDateOnly = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate());
+          if (paymentDateOnly > toDateOnly) {
+            return false;
+          }
+        }
+        
+        return true;
+      });
     }
 
     return filtered;
@@ -428,7 +463,7 @@ export const SalaryScreen: React.FC = () => {
     const day = String(date.getDate()).padStart(2, '0');
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = date.getFullYear();
-    return `${day}.${month}.${year}`;
+    return `${day}/${month}/${year}`;
   };
 
   // Форматирование даты для таблицы выплат: "11 сен 2025"
@@ -576,7 +611,10 @@ export const SalaryScreen: React.FC = () => {
                     type="date"
                     className="salary__date-input"
                     value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
+                    onChange={(e) => {
+                      setDateFrom(e.target.value);
+                      setCurrentPage(1); // Сбрасываем страницу при изменении фильтра
+                    }}
                   />
                   {dateFrom ? (
                     <span className="salary__date-display">
@@ -603,7 +641,10 @@ export const SalaryScreen: React.FC = () => {
                     type="date"
                     className="salary__date-input"
                     value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
+                    onChange={(e) => {
+                      setDateTo(e.target.value);
+                      setCurrentPage(1); // Сбрасываем страницу при изменении фильтра
+                    }}
                   />
                   {dateTo ? (
                     <span className="salary__date-display">
@@ -771,16 +812,32 @@ export const SalaryScreen: React.FC = () => {
                       {payment.second_payment_type || 'Ожидание'}
                     </div>
                     <div className="salary__table-row-col salary__table-row-col--payment">
-                      {payment.third_payment_amount ? (
-                        <>
-                          <div className="salary__payment-amount">{formatCurrency(payment.third_payment_amount)}</div>
-                          <div className="salary__payment-date">
-                            {payment.third_payment_date ? formatDateForPayment(payment.third_payment_date) : ''}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="salary__payment-pending">Ожидание...</div>
-                      )}
+                      {(() => {
+                        // Рассчитываем остаток автоматически
+                        const total = payment.total || 0;
+                        const firstAmount = payment.first_payment_amount || 0;
+                        const secondAmount = payment.second_payment_amount || 0;
+                        const balance = Math.max(0, total - firstAmount - secondAmount);
+                        
+                        // Если есть третья выплата, показываем её, иначе показываем рассчитанный остаток
+                        const displayAmount = payment.third_payment_amount || balance;
+                        const displayDate = payment.third_payment_date;
+                        
+                        if (displayAmount > 0) {
+                          return (
+                            <>
+                              <div className="salary__payment-amount">{formatCurrency(displayAmount)}</div>
+                              {displayDate && (
+                                <div className="salary__payment-date">
+                                  {formatDateForPayment(displayDate)}
+                                </div>
+                              )}
+                            </>
+                          );
+                        } else {
+                          return <div className="salary__payment-pending">Ожидание...</div>;
+                        }
+                      })()}
                     </div>
                     <div className="salary__table-row-col salary__table-row-col--method">
                       {payment.third_payment_type || 'Ожидание...'}
@@ -860,6 +917,7 @@ export const SalaryScreen: React.FC = () => {
           employeeId: editingPayment.user_id,
           employeeName: editingPayment.employeeName || '',
           employeePosition: editingPayment.employeePosition || '',
+          total: editingPayment.total || 0,
           firstPayment: editingPayment.first_payment_amount ? {
             amount: editingPayment.first_payment_amount,
             date: editingPayment.first_payment_date || '',

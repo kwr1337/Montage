@@ -94,7 +94,15 @@ const ImportModal: React.FC<ImportModalProps> = ({
         <div className="import-modal__content">
           {/* Ссылка на шаблон */}
           <div className="import-modal__template-link">
-            Шаблон: https://www.qrcode-monkey.com/ru/#
+            Шаблон:{' '}
+            <a 
+              href="https://docs.google.com/spreadsheets/d/1XI19fKKhvKeNL30NRor6hWltLZzNbHGSyiQt1IPU5VM/edit?gid=1262826783#gid=1262826783" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="import-modal__template-link-url"
+            >
+              https://docs.google.com/spreadsheets/d/1XI19fKKhvKeNL30NRor6hWltLZzNbHGSyiQt1IPU5VM/edit?gid=1262826783#gid=1262826783
+            </a>
           </div>
 
           {/* Область загрузки */}

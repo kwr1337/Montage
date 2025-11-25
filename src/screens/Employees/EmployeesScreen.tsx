@@ -11,6 +11,57 @@ import './employees.scss';
 
 type EmployeeHistoryEntry = number | 'new' | null;
 
+// Функция для установки end_working_date во всех проектах при увольнении сотрудника
+const updateEmployeeEndDateInAllProjects = async (employeeId: number, dismissalDate: string) => {
+  try {
+    // Получаем все проекты (используем большой per_page для получения всех проектов)
+    const response = await apiService.getProjects(1, 1000);
+    const projects = response?.data?.data || response?.data || [];
+    
+    // Для каждого проекта проверяем, есть ли там увольняемый сотрудник
+    const updatePromises = projects.map(async (project: any) => {
+      if (!project.id || !project.employees || !Array.isArray(project.employees)) {
+        return;
+      }
+      
+      // Ищем сотрудника в проекте
+      const employeeInProject = project.employees.find((emp: any) => emp.id === employeeId);
+      
+      // Если сотрудник найден и у него нет end_working_date, обновляем проект
+      if (employeeInProject && !employeeInProject.pivot?.end_working_date) {
+        // Формируем массив всех сотрудников проекта с обновленным end_working_date для увольняемого
+        const employeeArray = project.employees.map((emp: any) => {
+          if (emp.id === employeeId) {
+            return {
+              id: emp.id,
+              start_working_date: emp.pivot?.start_working_date || project.start_date,
+              end_working_date: dismissalDate,
+              rate_per_hour: emp.pivot?.rate_per_hour || emp.rate_per_hour || 0
+            };
+          } else {
+            return {
+              id: emp.id,
+              start_working_date: emp.pivot?.start_working_date || project.start_date,
+              end_working_date: emp.pivot?.end_working_date || null,
+              rate_per_hour: emp.pivot?.rate_per_hour || emp.rate_per_hour || 0
+            };
+          }
+        });
+        
+        // Обновляем проект
+        await apiService.updateProject(project.id, {
+          employee: employeeArray
+        });
+      }
+    });
+    
+    await Promise.all(updatePromises);
+  } catch (error) {
+    console.error('Error updating employee end date in projects:', error);
+    // Не прерываем процесс увольнения, если обновление проектов не удалось
+  }
+};
+
 export const EmployeesScreen: React.FC = () => {
   // Состояние для выбранного сотрудника
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(() => {
@@ -126,7 +177,8 @@ export const EmployeesScreen: React.FC = () => {
     let matchesPosition = true;
     if (positionFilter !== 'all') {
       const position = employee.role || '';
-      matchesPosition = position.toLowerCase().includes(positionFilter.toLowerCase());
+      // Точное совпадение или частичное для совместимости
+      matchesPosition = position === positionFilter || position.toLowerCase().includes(positionFilter.toLowerCase());
     }
 
     // Фильтр по поиску
@@ -381,12 +433,17 @@ export const EmployeesScreen: React.FC = () => {
     }
   };
 
-  // Получаем уникальные должности для фильтра
-  const uniquePositions = Array.from(new Set(
-    employees
-      .map((emp: any) => emp.role || '')
-      .filter((pos: string) => pos)
-  ));
+  // Список всех должностей для фильтра
+  const allPositions = [
+    'Управляющий',
+    'Менеджер',
+    'Монтажник',
+    'Инженер',
+    'Бухгалтер',
+    'Сметчик',
+    'Бригадир',
+    'Главный Инженер Проекта(ГИП)'
+  ];
 
   // Обработчик фильтра по должности
   const [isPositionDropdownOpen, setIsPositionDropdownOpen] = useState(false);
@@ -553,7 +610,7 @@ export const EmployeesScreen: React.FC = () => {
                   >
                     Все должности
                   </div>
-                  {uniquePositions.map((position: string) => (
+                  {allPositions.map((position: string) => (
                     <div
                       key={position}
                       className={`employees__position-filter-option ${positionFilter === position ? 'employees__position-filter-option--selected' : ''}`}
@@ -598,8 +655,16 @@ export const EmployeesScreen: React.FC = () => {
               }
 
               try {
+                const dismissalDate = new Date().toISOString().split('T')[0];
+                
+                // Сначала обновляем end_working_date во всех проектах для всех увольняемых сотрудников
+                const updateProjectsPromises = Array.from(selectedEmployeeIds).map((employeeId) =>
+                  updateEmployeeEndDateInAllProjects(employeeId, dismissalDate)
+                );
+                await Promise.all(updateProjectsPromises);
+                
+                // Затем обновляем данные сотрудников
                 const dismissPromises = Array.from(selectedEmployeeIds).map(async (employeeId) => {
-                  const dismissalDate = new Date().toISOString().split('T')[0];
                   const payload = {
                     is_dismissed: true,
                     dismissal_date: dismissalDate,

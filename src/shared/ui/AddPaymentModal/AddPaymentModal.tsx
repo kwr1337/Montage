@@ -14,6 +14,7 @@ type PaymentEditData = {
   employeeId: number;
   employeeName: string;
   employeePosition: string;
+  total?: number;
   firstPayment?: {
     amount: number;
     date: string;
@@ -159,12 +160,33 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
         date: secondPayment.date,
         method: secondPayment.method,
       } : undefined,
-      // Остаток передаем только если он указан (для редактирования)
-      thirdPayment: thirdPayment.amount && thirdPayment.date ? {
-        amount: thirdPayment.amount,
-        date: thirdPayment.date,
-        method: thirdPayment.method,
-      } : undefined,
+      // Остаток рассчитываем автоматически
+      thirdPayment: (() => {
+        if (editData?.total) {
+          // Для редактирования рассчитываем остаток автоматически
+          const total = editData.total;
+          const firstAmount = parseFloat(firstPayment.amount) || 0;
+          const secondAmount = parseFloat(secondPayment.amount) || 0;
+          const calculatedBalance = Math.max(0, total - firstAmount - secondAmount);
+          
+          // Если остаток больше 0 и есть дата, создаем третью выплату
+          if (calculatedBalance > 0 && thirdPayment.date) {
+            return {
+              amount: calculatedBalance.toString(),
+              date: thirdPayment.date,
+              method: thirdPayment.method,
+            };
+          }
+        } else if (thirdPayment.amount && thirdPayment.date) {
+          // Для новой выплаты используем значение из формы
+          return {
+            amount: thirdPayment.amount,
+            date: thirdPayment.date,
+            method: thirdPayment.method,
+          };
+        }
+        return undefined;
+      })(),
       comment: comment || undefined,
     };
 
@@ -199,8 +221,17 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
         date: parseDateString(editData.secondPayment?.date || ''),
         method: editData.secondPayment?.method || 'Наличные',
       });
+      // Рассчитываем остаток автоматически
+      const total = editData.total || 0;
+      const firstAmount = editData.firstPayment?.amount || 0;
+      const secondAmount = editData.secondPayment?.amount || 0;
+      const calculatedBalance = Math.max(0, total - firstAmount - secondAmount);
+      
+      // Если есть третья выплата, используем её, иначе используем рассчитанный остаток
+      const thirdAmount = editData.thirdPayment?.amount || calculatedBalance;
+      
       setThirdPayment({
-        amount: editData.thirdPayment?.amount?.toString() || '',
+        amount: thirdAmount > 0 ? thirdAmount.toString() : '',
         date: parseDateString(editData.thirdPayment?.date || ''),
         method: editData.thirdPayment?.method || 'Наличные',
       });
@@ -214,6 +245,22 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
       setComment('');
     }
   }, [editData, isOpen]);
+
+  // Автоматический расчет остатка при изменении первой или второй выплаты
+  React.useEffect(() => {
+    if (editData?.total) {
+      const total = editData.total;
+      const firstAmount = parseFloat(firstPayment.amount) || 0;
+      const secondAmount = parseFloat(secondPayment.amount) || 0;
+      const calculatedBalance = Math.max(0, total - firstAmount - secondAmount);
+      
+      // Обновляем остаток автоматически при изменении первой или второй выплаты
+      setThirdPayment(prev => ({
+        ...prev,
+        amount: calculatedBalance > 0 ? calculatedBalance.toString() : '',
+      }));
+    }
+  }, [firstPayment.amount, secondPayment.amount, editData?.total]);
 
   // Закрытие dropdown при клике вне
   React.useEffect(() => {
@@ -458,9 +505,21 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
                   <input
                     type="text"
                     className="add-payment-modal__input"
-                    value={thirdPayment.amount ? formatCurrency(thirdPayment.amount) : ''}
-                    onChange={(e) => handleAmountChange(e.target.value, setThirdPayment, thirdPayment)}
+                    readOnly
+                    value={(() => {
+                      // Рассчитываем остаток автоматически
+                      if (editData?.total) {
+                        const total = editData.total;
+                        const firstAmount = parseFloat(firstPayment.amount) || 0;
+                        const secondAmount = parseFloat(secondPayment.amount) || 0;
+                        const calculatedBalance = Math.max(0, total - firstAmount - secondAmount);
+                        return calculatedBalance > 0 ? formatCurrency(calculatedBalance.toString()) : '';
+                      }
+                      // Если нет editData (новая выплата), показываем пустое значение
+                      return '';
+                    })()}
                     placeholder="0 ₽"
+                    style={{ backgroundColor: '#f5f5f5', cursor: 'not-allowed' }}
                   />
                 </div>
                 <div className="add-payment-modal__field">

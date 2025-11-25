@@ -253,6 +253,16 @@ class ApiService {
     }
   }
 
+  async deleteProject(projectId: number): Promise<any> {
+    const response = await this.request<any>(`/projects/${projectId}`, {
+      method: 'DELETE',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+    return response;
+  }
+
   // Получить историю изменений номенклатуры в проекте
   async getNomenclatureChanges(projectId: number, nomenclatureId: number, page: number = 1, perPage: number = 100): Promise<any> {
     const response = await this.request<any>(`/projects/${projectId}/nomenclature/${nomenclatureId}/changes?page=${page}&per_page=${perPage}`, {

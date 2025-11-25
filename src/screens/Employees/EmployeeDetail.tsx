@@ -16,6 +16,57 @@ type EmployeeDetailProps = {
   onCreate?: (createdEmployee: any) => void;
   isNew?: boolean;
 };
+// Функция для установки end_working_date во всех проектах при увольнении сотрудника
+const updateEmployeeEndDateInAllProjects = async (employeeId: number, dismissalDate: string) => {
+  try {
+    // Получаем все проекты (используем большой per_page для получения всех проектов)
+    const response = await apiService.getProjects(1, 1000);
+    const projects = response?.data?.data || response?.data || [];
+    
+    // Для каждого проекта проверяем, есть ли там увольняемый сотрудник
+    const updatePromises = projects.map(async (project: any) => {
+      if (!project.id || !project.employees || !Array.isArray(project.employees)) {
+        return;
+      }
+      
+      // Ищем сотрудника в проекте
+      const employeeInProject = project.employees.find((emp: any) => emp.id === employeeId);
+      
+      // Если сотрудник найден и у него нет end_working_date, обновляем проект
+      if (employeeInProject && !employeeInProject.pivot?.end_working_date) {
+        // Формируем массив всех сотрудников проекта с обновленным end_working_date для увольняемого
+        const employeeArray = project.employees.map((emp: any) => {
+          if (emp.id === employeeId) {
+            return {
+              id: emp.id,
+              start_working_date: emp.pivot?.start_working_date || project.start_date,
+              end_working_date: dismissalDate,
+              rate_per_hour: emp.pivot?.rate_per_hour || emp.rate_per_hour || 0
+            };
+          } else {
+            return {
+              id: emp.id,
+              start_working_date: emp.pivot?.start_working_date || project.start_date,
+              end_working_date: emp.pivot?.end_working_date || null,
+              rate_per_hour: emp.pivot?.rate_per_hour || emp.rate_per_hour || 0
+            };
+          }
+        });
+        
+        // Обновляем проект
+        await apiService.updateProject(project.id, {
+          employee: employeeArray
+        });
+      }
+    });
+    
+    await Promise.all(updatePromises);
+  } catch (error) {
+    console.error('Error updating employee end date in projects:', error);
+    // Не прерываем процесс увольнения, если обновление проектов не удалось
+  }
+};
+
 export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack, onSave, onCreate, isNew = false }) => {
   // Проверка прав на редактирование сотрудников
   const canEditEmployee = () => {
@@ -185,7 +236,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
     loadEmployeeData();
   }, [employee?.id, isNew]);
 
-  // Форматирование даты в формате дд.мм.гггг
+  // Форматирование даты в формате дд/мм/гггг
   const formatDate = (dateString: string | null) => {
     if (!dateString) return null;
     try {
@@ -193,7 +244,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
       const day = String(date.getDate()).padStart(2, '0');
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const year = date.getFullYear();
-      return `${day}.${month}.${year}`;
+      return `${day}/${month}/${year}`;
     } catch {
       return null;
     }
@@ -246,12 +297,16 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
         console.log('Loading salary history for employee ID:', employeeId);
         console.log('Employee object:', employee);
         
-        // Загружаем все выплаты для сотрудника
+        // Загружаем все выплаты для сотрудника с фильтрацией по датам
+        const filter: any = {
+          users: [employeeId],
+        };
+        if (formData.dateFrom) filter.date_from = formData.dateFrom;
+        if (formData.dateTo) filter.date_to = formData.dateTo;
+        
         const response = await apiService.getPayments({
           per_page: 1000,
-          filter: {
-            users: [employeeId],
-          },
+          filter: filter,
         });
 
         console.log('Payments API response:', response);
@@ -280,6 +335,48 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
         });
 
         console.log(`Filtered payments for employee ${employeeId}:`, paymentsData.length, paymentsData);
+
+        // Дополнительная клиентская фильтрация по датам (на случай, если API не отфильтровал)
+        if (formData.dateFrom || formData.dateTo) {
+          paymentsData = paymentsData.filter((payment: any) => {
+            // Получаем дату выплаты (используем первую доступную дату)
+            const paymentDateStr = payment.first_payment_date 
+              || payment.second_payment_date 
+              || payment.third_payment_date;
+            
+            if (!paymentDateStr) {
+              return false;
+            }
+            
+            const paymentDate = new Date(paymentDateStr);
+            if (Number.isNaN(paymentDate.getTime())) {
+              return false;
+            }
+            
+            // Сбрасываем время для корректного сравнения дат
+            const paymentDateOnly = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), paymentDate.getDate());
+            
+            // Фильтр "от даты"
+            if (formData.dateFrom) {
+              const fromDate = new Date(formData.dateFrom);
+              const fromDateOnly = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
+              if (paymentDateOnly < fromDateOnly) {
+                return false;
+              }
+            }
+            
+            // Фильтр "до даты"
+            if (formData.dateTo) {
+              const toDate = new Date(formData.dateTo);
+              const toDateOnly = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate());
+              if (paymentDateOnly > toDateOnly) {
+                return false;
+              }
+            }
+            
+            return true;
+          });
+        }
 
         // Группируем выплаты по месяцам
         const paymentsByMonth = new Map<string, any[]>();
@@ -586,8 +683,12 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
         payload.employee_status = formData.status === 'Работает' ? 'active' : 'dismissed';
         // Если статус "Уволен", устанавливаем is_dismissed и dismissal_date
         if (formData.status === 'Уволен') {
+          const dismissalDate = new Date().toISOString().split('T')[0];
           payload.is_dismissed = true;
-          payload.dismissal_date = new Date().toISOString().split('T')[0];
+          payload.dismissal_date = dismissalDate;
+          
+          // Устанавливаем end_working_date во всех проектах
+          await updateEmployeeEndDateInAllProjects(employee.id, dismissalDate);
         }
         // Если статус "Работает", всегда сбрасываем эти поля (независимо от текущего состояния)
         else if (formData.status === 'Работает') {
@@ -739,6 +840,9 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
                               dismissal_date: dismissalDate,
                               employee_status: 'dismissed',
                             };
+
+                            // Устанавливаем end_working_date во всех проектах
+                            await updateEmployeeEndDateInAllProjects(employee.id, dismissalDate);
 
                             const response = await apiService.updateUser(employee.id, payload);
                             const updatedEmployee = response?.data ?? response ?? { ...employee, ...payload };
@@ -989,9 +1093,18 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
                     type="date"
                     className="employee-detail__date-input"
                     value={formData.dateFrom || ''}
-                    onChange={(e) => setFormData({ ...formData, dateFrom: e.target.value })}
+                    onChange={(e) => {
+                      setFormData({ ...formData, dateFrom: e.target.value });
+                      setCurrentPage(1); // Сбрасываем страницу при изменении фильтра
+                    }}
                   />
-                  {!formData.dateFrom && <span className="employee-detail__date-placeholder">С ...</span>}
+                  {formData.dateFrom ? (
+                    <span className="employee-detail__date-display">
+                      {formatDate(formData.dateFrom) || formData.dateFrom.split('T')[0]}
+                    </span>
+                  ) : (
+                    <span className="employee-detail__date-placeholder">С ...</span>
+                  )}
                 </div>
               </div>
               <div className="employee-detail__date-range-divider"></div>
@@ -1010,9 +1123,18 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
                     type="date"
                     className="employee-detail__date-input"
                     value={formData.dateTo || ''}
-                    onChange={(e) => setFormData({ ...formData, dateTo: e.target.value })}
+                    onChange={(e) => {
+                      setFormData({ ...formData, dateTo: e.target.value });
+                      setCurrentPage(1); // Сбрасываем страницу при изменении фильтра
+                    }}
                   />
-                  {!formData.dateTo && <span className="employee-detail__date-placeholder">По ...</span>}
+                  {formData.dateTo ? (
+                    <span className="employee-detail__date-display">
+                      {formatDate(formData.dateTo) || formData.dateTo.split('T')[0]}
+                    </span>
+                  ) : (
+                    <span className="employee-detail__date-placeholder">По ...</span>
+                  )}
                 </div>
               </div>
             </div>

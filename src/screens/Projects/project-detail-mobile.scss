@@ -859,9 +859,9 @@
       flex: 0 0 211px;
       min-width: 211px;
       padding: 0 8px;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 4px;
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
     }
 
     &:nth-child(3) {
@@ -876,6 +876,108 @@
       padding: 0 8px;
       justify-content: center;
       font-weight: 600;
+    }
+
+    &:nth-child(5) {
+      flex: 0 0 98px;
+      min-width: 98px;
+      justify-content: center;
+      padding: 0 8px;
+    }
+
+    &:nth-child(6) {
+      flex: 0 0 73px;
+      min-width: 73px;
+      justify-content: center;
+      padding: 0 8px;
+      font-weight: 600;
+    }
+
+    &:nth-child(7) {
+      flex: 1;
+      min-width: 110px;
+      justify-content: center;
+      padding: 0 8px;
+    }
+  }
+
+  &__tracking-employee {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+
+  &__tracking-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #d9d9d9;
+    flex-shrink: 0;
+    object-fit: cover;
+
+    &--initials {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-size: 10px;
+      font-weight: 500;
+      line-height: 1;
+      text-transform: uppercase;
+    }
+  }
+
+  &__tracking-employee-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__tracking-employee-name {
+    font-size: 14px;
+    color: #2c2d2e;
+    line-height: 1.2;
+  }
+
+  &__tracking-warning {
+    font-size: 11px;
+    color: #ed0a34;
+    font-weight: 400;
+    line-height: 1.3;
+  }
+
+  &__tracking-hours-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: center;
+  }
+
+  &__tracking-comment-btn {
+    background: transparent;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.2s;
+    
+    img {
+      width: 16px;
+      height: 16px;
+    }
+    
+    &:hover {
+      opacity: 0.7;
+    }
+    
+    &:active {
+      opacity: 0.5;
     }
 
     &:nth-child(5) {

@@ -115,7 +115,7 @@ const DeleteTrackingModal: React.FC<DeleteTrackingModalProps> = ({
             <div className="delete-tracking-modal__field delete-tracking-modal__field--large">
               <label className="delete-tracking-modal__label">Статус сотрудника</label>
               <div className="delete-tracking-modal__status-badge">
-                Уволен
+                Удалён
               </div>
             </div>
           </div>

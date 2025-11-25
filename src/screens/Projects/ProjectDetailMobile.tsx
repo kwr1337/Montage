@@ -3,11 +3,14 @@ import paginationIconActiveLeft from '../../shared/icons/paginationIconActiveLef
 import calendarIconGrey from '../../shared/icons/calendarIconGrey.svg';
 import userDropdownIcon from '../../shared/icons/user-dropdown-icon.svg';
 import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
+import commentMobIcon from '../../shared/icons/commentMob.svg';
 import { apiService } from '../../services/api';
 import { AddFactModal } from '../../shared/ui/AddFactModal/AddFactModal';
 import { AddHoursModal } from '../../shared/ui/AddHoursModal/AddHoursModal';
+import { CommentModal } from '../../shared/ui/CommentModal/CommentModal';
 import '../../shared/ui/AddFactModal/add-fact-modal.scss';
 import '../../shared/ui/AddHoursModal/add-hours-modal.scss';
+import '../../shared/ui/CommentModal/comment-modal.scss';
 import './project-detail-mobile.scss';
 
 type ProjectDetailMobileProps = {
@@ -48,7 +51,15 @@ const formatDate = (value?: string | null) => {
     return '—';
   }
 
-  const date = new Date(value);
+  // Если дата в формате YYYY-MM-DD, парсим её правильно
+  let date: Date;
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    // Формат YYYY-MM-DD без времени
+    date = new Date(value + 'T00:00:00');
+  } else {
+    date = new Date(value);
+  }
+  
   if (Number.isNaN(date.getTime())) {
     return '—';
   }
@@ -57,7 +68,25 @@ const formatDate = (value?: string | null) => {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const year = date.getFullYear();
 
-  return `${day} / ${month} / ${year}`;
+  return `${day}.${month}.${year}`;
+};
+
+const getAvatarColor = (text: string) => {
+  const colors = [
+    '#2787f5', '#26ab69', '#ff9e00', '#f5222d', 
+    '#722ed1', '#13c2c2', '#eb2f96', '#fa8c16'
+  ];
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    hash = text.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
+
+const getInitials = (emp: any) => {
+  const firstInitial = emp.first_name ? emp.first_name.charAt(0).toUpperCase() : '';
+  const lastInitial = emp.last_name ? emp.last_name.charAt(0).toUpperCase() : '';
+  return (lastInitial + firstInitial) || 'Н';
 };
 
 const getForemanFullName = (project?: any) => {
@@ -83,6 +112,37 @@ const formatForemanName = (employee: any) => {
 
   const { last_name, first_name, second_name } = employee;
   return [last_name, first_name, second_name].filter(Boolean).join(' ') || 'Не назначен';
+};
+
+// Функция для форматирования единиц измерения
+const formatUnit = (unit: string | null | undefined): string => {
+  if (!unit) return '';
+  
+  const unitTrimmed = unit.trim();
+  const unitLower = unitTrimmed.toLowerCase();
+  
+  // Шт/шт/ШТ -> Шт.
+  if (unitLower === 'шт') {
+    return 'Шт.';
+  }
+  
+  // Литр/литр/ЛИТР/л/Л -> Л
+  if (unitLower === 'литр' || unitLower === 'л') {
+    return 'Л';
+  }
+  
+  // Метр/метр/МЕТР/м/М -> М
+  if (unitLower === 'метр' || unitLower === 'м') {
+    return 'М';
+  }
+  
+  // Если единица уже в правильном формате (Шт., Л, М), возвращаем как есть
+  if (unitTrimmed === 'Шт.' || unitTrimmed === 'Л' || unitTrimmed === 'М') {
+    return unitTrimmed;
+  }
+  
+  // Для всех остальных случаев возвращаем как есть
+  return unitTrimmed;
 };
 
 const getSpecificationStatusMeta = (item: any) => {
@@ -131,6 +191,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   const [selectedEmployee, setSelectedEmployee] = useState<any | null>(null);
   const [trackedDates, setTrackedDates] = useState<string[]>([]);
   const [calculatedSpent, setCalculatedSpent] = useState<number | null>(null);
+  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
+  const [selectedComment, setSelectedComment] = useState<{ comment: string; employeeName: string; date: string } | null>(null);
 
   const summary = useMemo(() => {
     const allocated = Number(project?.budget) || 0;
@@ -272,7 +334,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
             return {
               id: item.id,
               name: item.name || '—',
-              unit: item.unit || '—',
+              unit: formatUnit(item.unit) || '—',
               plan: Number.isFinite(planValue) ? planValue : 0,
               changes: lastChange,
               fact: Number.isFinite(factValue) ? factValue : 0,
@@ -367,104 +429,158 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     };
   }, [project?.id, project?.employees]);
 
+  // Функция для загрузки trackingItems (вынесена отдельно для переиспользования)
+  const loadTrackingItems = React.useCallback(async () => {
+    if (!project?.id) return;
+    
+    try {
+      const employees = project?.employees || [];
+      const activeEmployees = employees.filter((emp: any) => !emp.pivot?.end_working_date);
+
+      // Получаем текущую дату для проверки невыставленных часов
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Загружаем work_reports для всех активных сотрудников
+      const trackingData = await Promise.all(
+        activeEmployees.map(async (emp: any) => {
+          try {
+            const response = await apiService.getWorkReports(project.id, emp.id, {
+              per_page: 1000,
+            });
+            
+            let reports: any[] = [];
+            if (response?.data?.data && Array.isArray(response.data.data)) {
+              reports = response.data.data;
+            } else if (response?.data && Array.isArray(response.data)) {
+              reports = response.data;
+            } else if (Array.isArray(response)) {
+              reports = response;
+            }
+            
+            // Сортируем отчеты по дате (от новых к старым)
+            reports.sort((a, b) => {
+              // Парсим дату в формате YYYY-MM-DD
+              const dateA = new Date(a.report_date + 'T00:00:00').getTime();
+              const dateB = new Date(b.report_date + 'T00:00:00').getTime();
+              return dateB - dateA; // От новых к старым
+            });
+            
+            // Берем последний отчет по дате (самый новый)
+            const lastReport = reports.length > 0 ? reports[0] : null;
+            
+            const hourlyRate = emp.pivot?.rate_per_hour || emp.rate_per_hour || emp.pivot?.hourly_rate || 0;
+            const employeeName = `${emp.last_name || ''} ${emp.first_name ? `${emp.first_name.charAt(0)}.` : ''}${emp.second_name ? `${emp.second_name.charAt(0)}.` : ''}`.trim();
+            
+            // Данные за последний отчет (последняя дата)
+            let lastDate = null;
+            let lastHours = 0;
+            let lastSum = 0;
+            
+            if (lastReport) {
+              lastDate = lastReport.report_date;
+              const hoursWorked = Number(lastReport.hours_worked) || 0;
+              const isAbsent = lastReport.absent === true || lastReport.absent === 1 || lastReport.absent === '1';
+              lastHours = isAbsent ? 0 : hoursWorked;
+              lastSum = lastHours * hourlyRate;
+            }
+            
+            // Проверяем, есть ли данные за сегодня или вчера
+            let missingDaysWarning = null;
+            if (reports.length > 0 && lastReport) {
+              const lastReportDate = new Date(lastReport.report_date + 'T00:00:00');
+              lastReportDate.setHours(0, 0, 0, 0);
+              
+              const yesterday = new Date(today);
+              yesterday.setDate(yesterday.getDate() - 1);
+              yesterday.setHours(0, 0, 0, 0);
+              
+              // Если последний отчет был не сегодня и не вчера
+              if (lastReportDate.getTime() < yesterday.getTime()) {
+                const daysDiff = Math.floor((today.getTime() - lastReportDate.getTime()) / (1000 * 60 * 60 * 24));
+                
+                if (daysDiff === 1) {
+                  // Один день пропущен - показываем дату последнего дня
+                  const day = String(lastReportDate.getDate()).padStart(2, '0');
+                  const month = String(lastReportDate.getMonth() + 1).padStart(2, '0');
+                  const year = lastReportDate.getFullYear();
+                  missingDaysWarning = `Не выставлены часы: ${day}.${month}.${year}`;
+                } else if (daysDiff > 1) {
+                  // Несколько дней пропущено - показываем количество дней
+                  missingDaysWarning = `Не выставлены часы: ${daysDiff} дня`;
+                }
+              } else if (lastReportDate.getTime() === yesterday.getTime()) {
+                // Данные только за вчера - проверяем, есть ли данные за сегодня
+                const hasTodayReport = reports.some((report: any) => {
+                  const reportDate = new Date(report.report_date + 'T00:00:00');
+                  reportDate.setHours(0, 0, 0, 0);
+                  return reportDate.getTime() === today.getTime();
+                });
+                
+                if (!hasTodayReport) {
+                  // Нет данных за сегодня
+                  missingDaysWarning = 'Не выставлены часы';
+                }
+              }
+            } else if (reports.length === 0) {
+              // Нет отчетов вообще
+              missingDaysWarning = 'Не выставлены часы';
+            }
+            
+            return {
+              id: emp.id,
+              employeeId: emp.id,
+              employeeName: employeeName,
+              fullName: `${emp.last_name || ''} ${emp.first_name || ''} ${emp.second_name || ''}`.trim(),
+              employee: emp, // Сохраняем полный объект сотрудника для аватара
+              date: lastDate, // Дата последнего отчета в формате YYYY-MM-DD
+              hours: lastHours, // Часы за последний отчет
+              hourlyRate: hourlyRate,
+              totalSum: lastSum, // Сумма за последний отчет
+              reports: reports, // Все отчеты (отсортированные от новых к старым)
+              lastReport: lastReport, // Сохраняем последний отчет для проверки комментария
+              missingDaysWarning: missingDaysWarning,
+            };
+          } catch (error) {
+            console.error(`Error loading work reports for employee ${emp.id}:`, error);
+            const hourlyRate = emp.pivot?.rate_per_hour || emp.rate_per_hour || emp.pivot?.hourly_rate || 0;
+            const employeeName = `${emp.last_name || ''} ${emp.first_name ? `${emp.first_name.charAt(0)}.` : ''}${emp.second_name ? `${emp.second_name.charAt(0)}.` : ''}`.trim();
+            return {
+              id: emp.id,
+              employeeId: emp.id,
+              employeeName: employeeName,
+              fullName: `${emp.last_name || ''} ${emp.first_name || ''} ${emp.second_name || ''}`.trim(),
+              employee: emp,
+              date: null,
+              hours: 0,
+              hourlyRate: hourlyRate,
+              totalSum: 0,
+              reports: [],
+              lastReport: null,
+              missingDaysWarning: 'Не выставлены часы',
+            };
+          }
+        })
+      );
+
+      setTrackingItems(trackingData);
+    } catch (error) {
+      console.error('Error loading tracking items:', error);
+    }
+  }, [project?.id, project?.employees]);
+
   useEffect(() => {
-    if (activeTab !== 'tracking' || !project?.id) return;
+    if (activeTab !== 'tracking' || !project?.id) {
+      setIsTrackingLoading(false);
+      return;
+    }
 
     let isCancelled = false;
     setIsTrackingLoading(true);
 
     const loadTracking = async () => {
       try {
-        // Получаем данные о сотрудниках проекта напрямую из project.employees
-        // (как в ПК версии, без дополнительных API запросов)
-        const employees = project?.employees || [];
-        
-        // Фильтруем только активных сотрудников (без end_working_date)
-        const activeEmployees = employees.filter((emp: any) => !emp.pivot?.end_working_date);
-
-        // Загружаем work_reports для всех активных сотрудников и суммируем часы
-        const trackingData = await Promise.all(
-          activeEmployees.map(async (emp: any) => {
-            try {
-              // Загружаем work_reports для сотрудника
-              const response = await apiService.getWorkReports(project.id, emp.id, {
-                per_page: 1000,
-              });
-              
-              console.log(`Work reports response for employee ${emp.id} (${emp.last_name}):`, response);
-              
-              let reports: any[] = [];
-              // Проверяем разные варианты структуры ответа
-              if (response?.data?.data && Array.isArray(response.data.data)) {
-                reports = response.data.data;
-              } else if (response?.data && Array.isArray(response.data)) {
-                reports = response.data;
-              } else if (Array.isArray(response)) {
-                reports = response;
-              }
-              
-              console.log(`Parsed reports for employee ${emp.id}:`, reports.length, reports);
-              
-              // Суммируем часы из всех work_reports за проект
-              // Если absent = true, то hours_worked должен быть 0
-              const totalHours = reports.reduce((sum, report) => {
-                // Учитываем только часы, если сотрудник не отсутствовал
-                // Преобразуем hours_worked в число на случай, если это строка
-                const hoursWorked = Number(report.hours_worked) || 0;
-                const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
-                const hours = isAbsent ? 0 : hoursWorked;
-                console.log(`Report date: ${report.report_date}, hours_worked: ${report.hours_worked} (${typeof report.hours_worked}), absent: ${report.absent}, calculated: ${hours}`);
-                return sum + hours;
-              }, 0);
-              
-              console.log(`Total hours for employee ${emp.id}:`, totalHours);
-              
-              // Получаем дату начала работы в проекте
-              const startDate = emp.pivot?.start_working_date || null;
-              
-              // Получаем ставку в час
-              const hourlyRate = emp.pivot?.rate_per_hour || emp.rate_per_hour || emp.pivot?.hourly_rate || 0;
-              
-              // Рассчитываем общую сумму
-              const totalSum = totalHours * hourlyRate;
-              
-              // Форматируем имя сотрудника
-              const employeeName = `${emp.last_name || ''} ${emp.first_name ? `${emp.first_name.charAt(0)}.` : ''}${emp.second_name ? `${emp.second_name.charAt(0)}.` : ''}`.trim();
-              
-              return {
-                id: emp.id, // ID сотрудника
-                employeeId: emp.id,
-                employeeName: employeeName,
-                fullName: `${emp.last_name || ''} ${emp.first_name || ''} ${emp.second_name || ''}`.trim(),
-                date: startDate, // Дата начала работы в проекте
-                hours: totalHours, // Сумма всех часов
-                hourlyRate: hourlyRate,
-                totalSum: totalSum,
-                reports: reports, // Сохраняем все reports для использования в модальном окне
-              };
-            } catch (error) {
-              console.error(`Error loading work reports for employee ${emp.id}:`, error);
-              // Возвращаем сотрудника с нулевыми значениями, если не удалось загрузить reports
-              const hourlyRate = emp.pivot?.rate_per_hour || emp.rate_per_hour || emp.pivot?.hourly_rate || 0;
-              const employeeName = `${emp.last_name || ''} ${emp.first_name ? `${emp.first_name.charAt(0)}.` : ''}${emp.second_name ? `${emp.second_name.charAt(0)}.` : ''}`.trim();
-              return {
-                id: emp.id,
-                employeeId: emp.id,
-                employeeName: employeeName,
-                fullName: `${emp.last_name || ''} ${emp.first_name || ''} ${emp.second_name || ''}`.trim(),
-                date: emp.pivot?.start_working_date || null,
-                hours: 0,
-                hourlyRate: hourlyRate,
-                totalSum: 0,
-                reports: [],
-              };
-            }
-          })
-        );
-
-        if (!isCancelled) {
-          setTrackingItems(trackingData);
-        }
+        await loadTrackingItems();
       } catch (error) {
         console.error('Error loading tracking:', error);
       } finally {
@@ -479,7 +595,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     return () => {
       isCancelled = true;
     };
-  }, [activeTab, project?.id, project?.employees]);
+  }, [activeTab, project?.id, project?.employees, loadTrackingItems]);
 
   const handleOpenFactModal = (item: SpecificationItem) => {
     setSelectedNomenclature(item);
@@ -531,6 +647,41 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   const handleCloseHoursModal = () => {
     setIsHoursModalOpen(false);
     setSelectedEmployee(null);
+  };
+
+  // Функция для получения комментария из последнего отчета (последняя дата)
+  const getLastComment = (item: any): { comment: string; date: string } | null => {
+    // Используем lastReport из item, если он есть, иначе берем первый из отсортированных reports
+    const lastReport = item.lastReport || (item.reports && item.reports.length > 0 ? item.reports[0] : null);
+    
+    if (!lastReport) return null;
+    
+    // Проверяем, есть ли комментарий в последнем отчете
+    if (lastReport.notes && lastReport.notes.trim() !== '') {
+      return {
+        comment: lastReport.notes,
+        date: lastReport.report_date,
+      };
+    }
+    
+    return null;
+  };
+
+  const handleOpenCommentModal = (item: any) => {
+    const lastComment = getLastComment(item);
+    if (lastComment) {
+      setSelectedComment({
+        comment: lastComment.comment,
+        employeeName: item.employeeName,
+        date: lastComment.date,
+      });
+      setIsCommentModalOpen(true);
+    }
+  };
+
+  const handleCloseCommentModal = () => {
+    setIsCommentModalOpen(false);
+    setSelectedComment(null);
   };
 
   const handleSaveHours = async (_hours: number, _date: string, _isAbsent: boolean, _reason?: string) => {
@@ -607,76 +758,9 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       }
     }
     
-    // Перезагружаем trackingItems, если вкладка активна
-    if (activeTab === 'tracking' && project?.id) {
-      try {
-        const employees = project?.employees || [];
-        const activeEmployees = employees.filter((emp: any) => !emp.pivot?.end_working_date);
-
-        // Загружаем work_reports для всех активных сотрудников и суммируем часы
-        const trackingData = await Promise.all(
-          activeEmployees.map(async (emp: any) => {
-            try {
-              const response = await apiService.getWorkReports(project.id, emp.id, {
-                per_page: 1000,
-              });
-              
-              let reports: any[] = [];
-              if (response?.data?.data && Array.isArray(response.data.data)) {
-                reports = response.data.data;
-              } else if (response?.data && Array.isArray(response.data)) {
-                reports = response.data;
-              } else if (Array.isArray(response)) {
-                reports = response;
-              }
-              
-              const totalHours = reports.reduce((sum, report) => {
-                // Преобразуем hours_worked в число на случай, если это строка
-                const hoursWorked = Number(report.hours_worked) || 0;
-                const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
-                const hours = isAbsent ? 0 : hoursWorked;
-                return sum + hours;
-              }, 0);
-              
-              const startDate = emp.pivot?.start_working_date || null;
-              const hourlyRate = emp.pivot?.rate_per_hour || emp.rate_per_hour || emp.pivot?.hourly_rate || 0;
-              const totalSum = totalHours * hourlyRate;
-              const employeeName = `${emp.last_name || ''} ${emp.first_name ? `${emp.first_name.charAt(0)}.` : ''}${emp.second_name ? `${emp.second_name.charAt(0)}.` : ''}`.trim();
-              
-              return {
-                id: emp.id,
-                employeeId: emp.id,
-                employeeName: employeeName,
-                fullName: `${emp.last_name || ''} ${emp.first_name || ''} ${emp.second_name || ''}`.trim(),
-                date: startDate,
-                hours: totalHours,
-                hourlyRate: hourlyRate,
-                totalSum: totalSum,
-                reports: reports,
-              };
-            } catch (error) {
-              console.error(`Error loading work reports for employee ${emp.id}:`, error);
-              const hourlyRate = emp.pivot?.rate_per_hour || emp.rate_per_hour || emp.pivot?.hourly_rate || 0;
-              const employeeName = `${emp.last_name || ''} ${emp.first_name ? `${emp.first_name.charAt(0)}.` : ''}${emp.second_name ? `${emp.second_name.charAt(0)}.` : ''}`.trim();
-              return {
-                id: emp.id,
-                employeeId: emp.id,
-                employeeName: employeeName,
-                fullName: `${emp.last_name || ''} ${emp.first_name || ''} ${emp.second_name || ''}`.trim(),
-                date: emp.pivot?.start_working_date || null,
-                hours: 0,
-                hourlyRate: hourlyRate,
-                totalSum: 0,
-                reports: [],
-              };
-            }
-          })
-        );
-
-        setTrackingItems(trackingData);
-      } catch (error) {
-        console.error('Error refreshing tracking items:', error);
-      }
+    // Перезагружаем trackingItems после сохранения часов
+    if (activeTab === 'tracking') {
+      await loadTrackingItems();
     }
   };
 
@@ -965,13 +1049,55 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                             <span>{item.id}</span>
                           </div>
                           <div className="mobile-project-detail__tracking-col mobile-project-detail__tracking-col--employee">
-                            <span>{item.employeeName}</span>
+                            <div className="mobile-project-detail__tracking-employee">
+                              {item.employee?.avatar_id || item.employee?.avatar_url ? (
+                                <img 
+                                  src={item.employee.avatar_url || `http://92.53.97.20/api/avatars/${item.employee.avatar_id}`} 
+                                  alt={item.employeeName} 
+                                  className="mobile-project-detail__tracking-avatar" 
+                                />
+                              ) : (
+                                <div 
+                                  className="mobile-project-detail__tracking-avatar mobile-project-detail__tracking-avatar--initials"
+                                  style={{ backgroundColor: getAvatarColor(item.fullName || item.employeeName) }}
+                                >
+                                  {getInitials(item.employee || {})}
+                                </div>
+                              )}
+                              <div className="mobile-project-detail__tracking-employee-info">
+                                <span className="mobile-project-detail__tracking-employee-name">{item.employeeName}</span>
+                                {item.missingDaysWarning && (
+                                  <span className="mobile-project-detail__tracking-warning">{item.missingDaysWarning}</span>
+                                )}
+                              </div>
+                            </div>
                           </div>
                           <div className="mobile-project-detail__tracking-col">
-                            <span>{formatDate(item.date)}</span>
+                            <span>{item.date ? formatDate(item.date) : '—'}</span>
                           </div>
                           <div className="mobile-project-detail__tracking-col mobile-project-detail__tracking-col--number">
-                            <span>{Math.round(Number(item.hours) || 0)}</span>
+                            <div className="mobile-project-detail__tracking-hours-wrapper">
+                              <span>{Math.round(Number(item.hours) || 0)}</span>
+                              {(() => {
+                                const lastComment = getLastComment(item);
+                                if (lastComment) {
+                                  return (
+                                    <button
+                                      type="button"
+                                      className="mobile-project-detail__tracking-comment-btn"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenCommentModal(item);
+                                      }}
+                                      aria-label="Показать комментарий"
+                                    >
+                                      <img src={commentMobIcon} alt="Комментарий" />
+                                    </button>
+                                  );
+                                }
+                                return null;
+                              })()}
+                            </div>
                           </div>
                           <div className="mobile-project-detail__tracking-col mobile-project-detail__tracking-col--number">
                             <span>{formatCurrency(item.hourlyRate)}</span>
@@ -1026,6 +1152,23 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           }}
           trackedDates={trackedDates}
           onSuccess={handleHoursSaveSuccess}
+        />
+      )}
+
+      {selectedComment && (
+        <CommentModal
+          isOpen={isCommentModalOpen}
+          onClose={handleCloseCommentModal}
+          comment={selectedComment.comment}
+          employeeName={selectedComment.employeeName}
+          date={selectedComment.date ? (() => {
+            const date = new Date(selectedComment.date);
+            if (Number.isNaN(date.getTime())) return undefined;
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${day}.${month}.${year}`;
+          })() : undefined}
         />
       )}
     </div>

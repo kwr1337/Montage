@@ -32,6 +32,16 @@ const getAvatarColor = (text: string) => {
   return colors[Math.abs(hash) % colors.length];
 };
 
+// Функция для форматирования имени пользователя
+const formatUserName = (user: any) => {
+  if (!user) return '';
+  const { first_name, second_name, last_name } = user;
+  const firstNameInitial = first_name ? first_name.charAt(0).toUpperCase() : '';
+  const secondNameInitial = second_name ? second_name.charAt(0).toUpperCase() : '';
+  const lastName = last_name || '';
+  return `${lastName} ${firstNameInitial}${secondNameInitial ? `.${secondNameInitial}.` : '.'}`.trim();
+};
+
 type ProjectsScreenProps = {
   onLogout?: () => void;
 };
@@ -64,6 +74,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
   const itemsPerPage = 11;
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [projectSpentMap, setProjectSpentMap] = useState<Map<number, number>>(new Map());
+  const [hoveredProjectId, setHoveredProjectId] = useState<number | null>(null);
   
   // Состояние для сортировки
   const [sortField, setSortField] = useState<string | null>(null); // null = сортировка по дате добавления (по умолчанию)
@@ -200,6 +211,10 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
 
   // Фильтрация проектов по статусу и поиску (клиентская, пока сервер не поддерживает)
   const filteredProjects = projects.filter((project) => {
+    // Исключаем удаленные проекты
+    if (project.is_deleted === true || project.is_deleted === 1) {
+      return false;
+    }
     
     // Фильтр по статусу
     let matchesStatus = false;
@@ -509,14 +524,51 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     startProjectCreation();
   };
 
-  const handleProjectUpdate = (updatedProject: any) => {
-    // Обновляем проект в списке
-    setProjects(prevProjects => 
-      prevProjects.map(p => p.id === updatedProject.id ? updatedProject : p)
-    );
-    // Обновляем выбранный проект, если это он
-    if (selectedProject && selectedProject.id === updatedProject.id) {
-      setSelectedProject(updatedProject);
+  const handleProjectUpdate = async (updatedProject: any) => {
+    // Если проект был удален, обновляем список с сервера
+    if (updatedProject.is_deleted === true || updatedProject.is_deleted === 1) {
+      try {
+        const response = await apiService.getProjects(currentPage, itemsPerPage);
+        
+        let projectsList: any[] = [];
+        if (Array.isArray(response)) {
+          projectsList = response;
+          setProjects(response);
+        } else if (response && response.data) {
+          if (Array.isArray(response.data)) {
+            projectsList = response.data;
+            setProjects(response.data);
+            if (response.last_page) {
+              setTotalPages(response.last_page);
+            } else if (response.meta) {
+              const total = response.meta.total || response.data.length;
+              setTotalPages(Math.ceil(total / itemsPerPage));
+            } else if (response.pagination) {
+              setTotalPages(response.pagination.total_pages || 1);
+            }
+          }
+        }
+        
+        // Загружаем израсходованные суммы для всех проектов
+        if (projectsList.length > 0) {
+          loadProjectsSpent(projectsList);
+        }
+      } catch (error) {
+        console.error('Error refreshing projects after delete:', error);
+        // В случае ошибки обновляем локально
+        setProjects(prevProjects => 
+          prevProjects.map(p => p.id === updatedProject.id ? updatedProject : p)
+        );
+      }
+    } else {
+      // Обновляем проект в списке
+      setProjects(prevProjects => 
+        prevProjects.map(p => p.id === updatedProject.id ? updatedProject : p)
+      );
+      // Обновляем выбранный проект, если это он
+      if (selectedProject && selectedProject.id === updatedProject.id) {
+        setSelectedProject(updatedProject);
+      }
     }
   };
 
@@ -985,8 +1037,31 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                             ))}
                           </div>
                           {activeEmployees.length > 3 && (
-                            <div className="projects__employee-count">
+                            <div 
+                              className="projects__employee-count"
+                              onMouseEnter={() => setHoveredProjectId(project.id)}
+                              onMouseLeave={() => setHoveredProjectId(null)}
+                              style={{ position: 'relative' }}
+                            >
                               <span>+{activeEmployees.length - 3} Сотр.</span>
+                              {hoveredProjectId === project.id && (
+                                <div className="projects__employees-tooltip">
+                                  {activeEmployees
+                                    .slice(3)
+                                    .filter((emp: any) => !emp.pivot?.end_working_date)
+                                    .map((emp: any) => {
+                                      // Дополнительная проверка перед отображением
+                                      if (emp.pivot?.end_working_date) {
+                                        return null;
+                                      }
+                                      return (
+                                        <div key={emp.id} className="projects__employees-tooltip-item">
+                                          {formatUserName(emp)}
+                                        </div>
+                                      );
+                                    })}
+                                </div>
+                              )}
                             </div>
                           )}
                         </>

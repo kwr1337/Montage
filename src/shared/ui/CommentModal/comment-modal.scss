@@ -1,0 +1,129 @@
+.comment-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.comment-modal {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.comment-modal__close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  img {
+    width: 20px;
+    height: 20px;
+  }
+  
+  &:hover {
+    opacity: 0.7;
+  }
+}
+
+.comment-modal__title {
+  font-family: 'SF Pro', sans-serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: #2c2d2e;
+  margin: 0 0 24px 0;
+}
+
+.comment-modal__info {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  
+  .comment-modal__label {
+    font-family: 'SF Pro', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: #919399;
+  }
+  
+  .comment-modal__value {
+    font-family: 'SF Pro', sans-serif;
+    font-size: 14px;
+    font-weight: 400;
+    color: #2c2d2e;
+  }
+}
+
+.comment-modal__comment {
+  margin-bottom: 24px;
+  
+  .comment-modal__label {
+    display: block;
+    font-family: 'SF Pro', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: #919399;
+    margin-bottom: 8px;
+  }
+  
+  .comment-modal__text {
+    font-family: 'SF Pro', sans-serif;
+    font-size: 14px;
+    font-weight: 400;
+    color: #2c2d2e;
+    line-height: 1.5;
+    margin: 0;
+    padding: 12px;
+    background: #f5f5f5;
+    border-radius: 8px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+}
+
+.comment-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.comment-modal__btn {
+  padding: 10px 24px;
+  border-radius: 8px;
+  border: none;
+  font-family: 'SF Pro', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  &--close {
+    background: #2787f5;
+    color: #ffffff;
+    
+    &:hover {
+      background: #1e6dd4;
+    }
+  }
+}
+
