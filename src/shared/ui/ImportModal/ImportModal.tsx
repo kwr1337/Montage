@@ -1,27 +1,246 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import closeIcon from '../../icons/closeIcon.svg';
 import importIcon from '../../icons/importIcon.svg';
 import trashIcon from '../../icons/trashIcon.svg';
 import importTableIcon from '../../icons/imporTableIcon.svg';
+import templateFile from '../../files/Файл шаблон для импорта.xlsx?url';
+import { apiService } from '../../../services/api';
 import './import-modal.scss';
 
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onImport: (file: File) => void;
+  onImport: (file: File, parsedData?: ParsedRow[], matches?: string[]) => void;
+  projectId: number;
+}
+
+interface ParsedRow {
+  nomenclature: string;
+  unit: string;
+  quantity: number;
 }
 
 const ImportModal: React.FC<ImportModalProps> = ({
   isOpen,
   onClose,
   onImport,
+  projectId,
 }) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [matches, setMatches] = useState<string[]>([]);
+  const [parsedData, setParsedData] = useState<ParsedRow[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [totalItems, setTotalItems] = useState(0);
+  const [allNomenclature, setAllNomenclature] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = (file: File) => {
-    setUploadedFile(file);
+  // Загружаем всю номенклатуру при открытии модального окна
+  useEffect(() => {
+    if (isOpen) {
+      const loadNomenclature = async () => {
+        try {
+          const response = await apiService.getNomenclature();
+          const nomenclatureData = Array.isArray(response?.data) 
+            ? response.data 
+            : response?.data 
+            ? [response.data] 
+            : [];
+          setAllNomenclature(nomenclatureData);
+        } catch (error) {
+          console.error('Error loading nomenclature:', error);
+          setAllNomenclature([]);
+        }
+      };
+      loadNomenclature();
+    }
+  }, [isOpen]);
+
+  // Сброс состояния при закрытии модального окна
+  useEffect(() => {
+    if (!isOpen) {
+      setUploadedFile(null);
+      setMatches([]);
+      setParsedData([]);
+      setTotalItems(0);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  }, [isOpen]);
+
+  // Функция для парсинга файла
+  const parseFile = async (file: File): Promise<ParsedRow[]> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = (e) => {
+        try {
+          const data = e.target?.result;
+          if (!data) {
+            reject(new Error('Не удалось прочитать файл'));
+            return;
+          }
+
+          let workbook: XLSX.WorkBook;
+          
+          // Определяем тип файла и парсим
+          if (file.name.toLowerCase().endsWith('.csv')) {
+            // Для CSV используем текстовый режим
+            const text = typeof data === 'string' ? data : new TextDecoder('utf-8').decode(data as ArrayBuffer);
+            workbook = XLSX.read(text, { type: 'string', codepage: 65001 });
+          } else {
+            // Для XLS/XLSX используем бинарный режим
+            workbook = XLSX.read(data, { type: 'binary' });
+          }
+
+          // Берем первый лист
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          
+          // Конвертируем в JSON
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' }) as any[][];
+          
+          if (jsonData.length === 0) {
+            reject(new Error('Файл пуст'));
+            return;
+          }
+
+          // Ищем заголовки (первая строка)
+          const headers = jsonData[0].map((h: any) => String(h).toLowerCase().trim());
+          
+          // Ищем индексы колонок
+          const nomenclatureIndex = headers.findIndex(h => 
+            h.includes('номенклатура') || h.includes('nomenclature')
+          );
+          const unitIndex = headers.findIndex(h => 
+            h.includes('ед') || h.includes('измерения') || h.includes('unit')
+          );
+          const quantityIndex = headers.findIndex(h => 
+            h.includes('кол') || h.includes('количество') || h.includes('quantity') || h.includes('кол-во')
+          );
+
+          if (nomenclatureIndex === -1 || unitIndex === -1 || quantityIndex === -1) {
+            reject(new Error('Не найдены обязательные колонки: Номенклатура, Ед. измерения, Кол-во'));
+            return;
+          }
+
+          // Парсим данные (начиная со второй строки)
+          const parsed: ParsedRow[] = [];
+          for (let i = 1; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            const nomenclature = String(row[nomenclatureIndex] || '').trim();
+            const unit = String(row[unitIndex] || '').trim();
+            const quantityStr = String(row[quantityIndex] || '').trim();
+            
+            // Пропускаем пустые строки
+            if (!nomenclature && !unit && !quantityStr) {
+              continue;
+            }
+
+            // Проверяем обязательные поля
+            if (!nomenclature || !unit) {
+              continue; // Пропускаем строки без обязательных полей
+            }
+
+            const quantity = parseFloat(quantityStr.replace(',', '.'));
+            if (isNaN(quantity) || quantity < 0) {
+              continue; // Пропускаем невалидные значения количества
+            }
+
+            parsed.push({
+              nomenclature,
+              unit,
+              quantity,
+            });
+          }
+
+          resolve(parsed);
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      reader.onerror = () => {
+        reject(new Error('Ошибка чтения файла'));
+      };
+
+      // Читаем файл в зависимости от типа
+      if (file.name.toLowerCase().endsWith('.csv')) {
+        reader.readAsText(file, 'UTF-8');
+      } else {
+        reader.readAsArrayBuffer(file);
+      }
+    });
+  };
+
+  // Функция для поиска совпадений по всей номенклатуре
+  const findMatches = (parsedRows: ParsedRow[]): string[] => {
+    const matchNames: string[] = [];
+    
+    parsedRows.forEach((row) => {
+      // Ищем совпадение по названию номенклатуры во всей номенклатуре (без учета регистра)
+      const found = allNomenclature.find((item: any) => {
+        const itemName = String(item.name || '').toLowerCase().trim();
+        const rowName = row.nomenclature.toLowerCase().trim();
+        return itemName === rowName;
+      });
+      
+      if (found) {
+        matchNames.push(row.nomenclature);
+      }
+    });
+
+    return matchNames;
+  };
+
+  const isValidFileType = (file: File): boolean => {
+    const validExtensions = ['.csv', '.xls', '.xlsx'];
+    const validMimeTypes = [
+      'text/csv',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
+    
+    const fileName = file.name.toLowerCase();
+    const hasValidExtension = validExtensions.some(ext => fileName.endsWith(ext));
+    const hasValidMimeType = validMimeTypes.includes(file.type);
+    
+    return hasValidExtension || hasValidMimeType;
+  };
+
+  const handleFileSelect = async (file: File) => {
+    if (isValidFileType(file)) {
+      setUploadedFile(file);
+      setMatches([]);
+      setParsedData([]);
+      setTotalItems(0);
+      
+      // Парсим файл и ищем совпадения (без импорта)
+      try {
+        setIsLoading(true);
+        
+        // Парсим файл
+        const parsed = await parseFile(file);
+        setParsedData(parsed);
+        setTotalItems(parsed.length);
+        
+        // Ищем совпадения по названию номенклатуры во всей номенклатуре
+        const foundMatches = findMatches(parsed);
+        setMatches(foundMatches);
+      } catch (error: any) {
+        console.error('Error parsing file:', error);
+        alert(error.message || 'Ошибка при чтении файла');
+        setUploadedFile(null);
+        setMatches([]);
+        setParsedData([]);
+        setTotalItems(0);
+      } finally {
+        setIsLoading(false);
+      }
+    }
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -29,8 +248,32 @@ const ImportModal: React.FC<ImportModalProps> = ({
     setIsDragging(false);
     
     const file = e.dataTransfer.files[0];
-    if (file && (file.type === 'application/vnd.ms-excel' || file.type === 'text/csv' || file.name.endsWith('.xls') || file.name.endsWith('.csv'))) {
+    if (file && isValidFileType(file)) {
       handleFileSelect(file);
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const response = await fetch(templateFile);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'Файл шаблон для импорта.xlsx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading template:', error);
+      // Fallback: попробуем прямой способ
+      const link = document.createElement('a');
+      link.href = templateFile;
+      link.download = 'Файл шаблон для импорта.xlsx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
   };
 
@@ -56,16 +299,27 @@ const ImportModal: React.FC<ImportModalProps> = ({
 
   const handleRemoveFile = () => {
     setUploadedFile(null);
+    setMatches([]);
+    setParsedData([]);
+    setTotalItems(0);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
 
-  const handleSubmit = () => {
-    if (uploadedFile) {
-      onImport(uploadedFile);
-      onClose();
-      setUploadedFile(null);
+  const handleSubmit = async () => {
+    if (uploadedFile && parsedData.length > 0) {
+      try {
+        setIsImporting(true);
+        // Вызываем импорт с передачей распарсенных данных и совпадений
+        // Импорт происходит только здесь, при нажатии кнопки
+        await onImport(uploadedFile, parsedData, matches);
+        onClose();
+      } catch (error) {
+        console.error('Error importing file:', error);
+      } finally {
+        setIsImporting(false);
+      }
     }
   };
 
@@ -95,14 +349,13 @@ const ImportModal: React.FC<ImportModalProps> = ({
           {/* Ссылка на шаблон */}
           <div className="import-modal__template-link">
             Шаблон:{' '}
-            <a 
-              href="https://docs.google.com/spreadsheets/d/1XI19fKKhvKeNL30NRor6hWltLZzNbHGSyiQt1IPU5VM/edit?gid=1262826783#gid=1262826783" 
-              target="_blank" 
-              rel="noopener noreferrer"
+            <button 
+              onClick={handleDownloadTemplate}
               className="import-modal__template-link-url"
+              type="button"
             >
-              https://docs.google.com/spreadsheets/d/1XI19fKKhvKeNL30NRor6hWltLZzNbHGSyiQt1IPU5VM/edit?gid=1262826783#gid=1262826783
-            </a>
+              Скачать шаблон
+            </button>
           </div>
 
           {/* Область загрузки */}
@@ -116,7 +369,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".xls,.csv"
+              accept=".csv,.xls,.xlsx"
               onChange={handleFileInputChange}
               style={{ display: 'none' }}
             />
@@ -134,7 +387,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
 
           {/* Информация о форматах */}
           <div className="import-modal__info">
-            <span>Формат: XLS, CSV</span>
+            <span>Формат: CSV, XLS, XLSX</span>
             <span>Макс. размер: 150 Mb</span>
           </div>
 
@@ -157,17 +410,31 @@ const ImportModal: React.FC<ImportModalProps> = ({
               </div>
 
               {/* Совпадения */}
-              <div className="import-modal__matches">
-                <div className="import-modal__matches-header">
-                  Найдено совпадений: 4 из 45
+              {isLoading ? (
+                <div className="import-modal__matches">
+                  <div className="import-modal__matches-header">
+                    Проверка файла...
+                  </div>
                 </div>
-                <div className="import-modal__matches-list">
-                  <div className="import-modal__match-item">Провод ПВСбм Мастер Тока 3х1.5 белый 10м МТ1206</div>
-                  <div className="import-modal__match-item">Кабель МКЭШ Торкабель 2х0,75 30м в коробке 0670087116637</div>
-                  <div className="import-modal__match-item">Провод ПВСбм Мастер Тока 3х1.5 белый 10м МТ1206</div>
-                  <div className="import-modal__match-item">Кабель МКЭШ Торкабель 2х0,75 30м в коробке 0670087116637</div>
+              ) : matches.length > 0 ? (
+                <div className="import-modal__matches">
+                  <div className="import-modal__matches-header">
+                    Найдено совпадений: {matches.length} из {totalItems}
+                  </div>
+                  <div className="import-modal__matches-list">
+                    {matches.slice(0, 10).map((match, index) => (
+                      <div key={index} className="import-modal__match-item">
+                        {typeof match === 'string' ? match : (match.name || match.nomenclature || match.nomenclature_name || JSON.stringify(match))}
+                      </div>
+                    ))}
+                    {matches.length > 10 && (
+                      <div className="import-modal__match-item" style={{ fontStyle: 'italic', color: '#919399' }}>
+                        ... и еще {matches.length - 10} совпадений
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : null}
             </div>
           )}
         </div>
@@ -177,9 +444,9 @@ const ImportModal: React.FC<ImportModalProps> = ({
           <button 
             className="import-modal__btn import-modal__btn--import"
             onClick={handleSubmit}
-            disabled={!uploadedFile}
+            disabled={!uploadedFile || isLoading || isImporting}
           >
-            Импортировать
+            {isImporting ? 'Импорт...' : isLoading ? 'Обработка...' : 'Импортировать'}
           </button>
         </div>
       </div>

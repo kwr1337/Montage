@@ -82,11 +82,21 @@
   &__template-link-url {
     color: #2787f5;
     text-decoration: none;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: inherit;
+    letter-spacing: inherit;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     flex: 1;
     min-width: 0;
+    text-align: left;
 
     &:hover {
       text-decoration: underline;

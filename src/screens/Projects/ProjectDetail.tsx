@@ -531,11 +531,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         } catch (error) {
           // Ошибка загрузки изменений обработана
         }
+      } else {
+        // Если номенклатуры нет, очищаем список
+        setSpecificationItems([]);
       }
     };
 
     loadNomenclatureWithChanges();
-  }, [localProject.id]);
+  }, [localProject.id, localProject.nomenclature]);
 
   const handleInputChange = (field: string, value: string) => {
     // Для поля budget проверяем, что значение не отрицательное
@@ -897,9 +900,71 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     setNomenclatureHistory([]);
   };
 
-  const handleImport = (_file: File) => {
-    // TODO: Реализовать импорт файла
-    // Здесь можно добавить логику обработки импортированного файла
+  const handleImport = async (file: File, parsedData?: any[], matches?: string[]) => {
+    if (!localProject.id || !parsedData || parsedData.length === 0) return;
+
+    try {
+      // Получаем список всей номенклатуры для поиска по названию
+      const allNomenclatureResponse = await apiService.getNomenclature();
+      const allNomenclature = Array.isArray(allNomenclatureResponse?.data) 
+        ? allNomenclatureResponse.data 
+        : allNomenclatureResponse?.data 
+        ? [allNomenclatureResponse.data] 
+        : [];
+
+      // Обрабатываем каждую строку из файла
+      for (const row of parsedData) {
+        // Ищем номенклатуру по названию в общем списке
+        const nomenclatureItem = allNomenclature.find((item: any) => {
+          const itemName = String(item.name || '').toLowerCase().trim();
+          const rowName = row.nomenclature.toLowerCase().trim();
+          return itemName === rowName;
+        });
+
+        if (!nomenclatureItem) {
+          console.warn(`Номенклатура "${row.nomenclature}" не найдена в системе, пропускаем`);
+          continue;
+        }
+
+        // Проверяем, есть ли эта номенклатура уже в проекте
+        const existingInProject = localProject.nomenclature?.find((item: any) => {
+          return item.id === nomenclatureItem.id;
+        });
+
+        if (existingInProject) {
+          // Если номенклатура уже есть в проекте - обновляем через changes
+          await apiService.addNomenclatureChange(
+            localProject.id,
+            nomenclatureItem.id,
+            row.quantity
+          );
+        } else {
+          // Если номенклатуры нет в проекте - добавляем через add
+          await apiService.addNomenclatureToProject(
+            localProject.id,
+            nomenclatureItem.id,
+            row.quantity
+          );
+        }
+      }
+
+      // Обновляем проект после импорта
+      const updatedProject = await apiService.getProjectById(localProject.id);
+      const projectData = updatedProject?.data || updatedProject;
+      
+      if (projectData) {
+        setLocalProject(projectData);
+        if (onProjectUpdate) {
+          onProjectUpdate(projectData);
+        }
+      }
+      
+      // Закрываем модальное окно
+      setIsImportModalOpen(false);
+    } catch (error: any) {
+      console.error('Error importing nomenclature:', error);
+      alert('Ошибка при импорте номенклатуры: ' + (error.message || 'Неизвестная ошибка'));
+    }
   };
 
   const handleAddTracking = async (data: { employeeId: number; employeeName: string; rate: number; startDate: string }) => {
@@ -2003,7 +2068,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                 </div>
 
                 {/* Заголовок таблицы */}
-                <div className="projects__specification-header">
+                <div className="projects__specification-header" style={{ flexShrink: 0 }}>
                   <div className="projects__specification-header-col">
                     <input
                       type="checkbox"
@@ -2047,6 +2112,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                 </div>
 
                 {/* Строки таблицы */}
+                <div className="projects__specification-table-body">
                 {paginatedItems.map((item) => (
                   <div 
                     key={item.id} 
@@ -2093,10 +2159,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                     </div>
                   </div>
                 ))}
+                </div>
               </div>
 
               {/* Кнопки внизу с пагинацией */}
-              <div className="projects__specification-bottom-actions">
+              <div className="projects__specification-bottom-actions" style={{ flexShrink: 0 }}>
                 {/* Пагинация слева */}
                 <div className="projects__specification-pagination">
                   {specificationItems.length > itemsPerPage && (
@@ -2136,7 +2203,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
               {/* Таблица фиксации работ */}
               <div className="projects__tracking-table">
                 {/* Заголовок таблицы */}
-                <div className="projects__tracking-header">
+                <div className="projects__tracking-header" style={{ flexShrink: 0 }}>
                   <div className="projects__tracking-header-col">
                     <input 
                       type="checkbox" 
@@ -2271,17 +2338,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
               </div>
 
               {/* Итого */}
-              <div className="projects__tracking-total">
-                <div className="projects__tracking-total-label">Итого</div>
-                <div className="projects__tracking-total-value">
-                  {trackingItems.reduce((sum, item) => sum + item.totalSum, 0).toLocaleString('ru-RU')} ₽
+              <div className="projects__tracking-total" style={{ flexShrink: 0 }}>
+                <div className="projects__tracking-total-row">
+                  <div className="projects__tracking-total-label">Итого</div>
+                  <div className="projects__tracking-total-value">
+                    {trackingItems.reduce((sum, item) => sum + item.totalSum, 0).toLocaleString('ru-RU')} ₽
+                  </div>
                 </div>
-              </div>
-
-              {/* Кнопки внизу с пагинацией */}
-              <div className="projects__tracking-bottom-actions">
-                {/* Пагинация слева */}
-                <div className="projects__tracking-pagination">
+                
+                {/* Пагинация снизу справа */}
+                <div className="projects__tracking-total-pagination">
                   {(() => {
                     const trackingTotalPages = Math.ceil(trackingItems.length / trackingItemsPerPage);
                     return trackingTotalPages > 1 && (
@@ -2293,7 +2359,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                     );
                   })()}
                 </div>
-                
               </div>
             </div>
           )}
@@ -2328,6 +2393,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         onImport={handleImport}
+        projectId={localProject.id || 0}
       />
 
       <AddTrackingModal

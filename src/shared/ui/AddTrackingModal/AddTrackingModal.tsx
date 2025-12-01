@@ -41,10 +41,24 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
     return `${last_name} ${firstNameInitial}.${secondNameInitial ? ` ${secondNameInitial}.` : ''}`;
   };
 
-  // Фильтруем сотрудников - показываем только тех, кто еще не в проекте
-  const availableEmployees = employees.filter((employee: any) => 
-    !projectEmployees.some((projectEmployee: any) => projectEmployee.id === employee.id)
-  );
+  // Фильтруем сотрудников - показываем только тех, кто еще не в проекте ИЛИ удален из проекта
+  // Удаленные сотрудники (с end_working_date) должны снова появляться в списке
+  const availableEmployees = employees.filter((employee: any) => {
+    const projectEmployee = projectEmployees.find((pe: any) => pe.id === employee.id);
+    
+    // Если сотрудника нет в проекте - показываем
+    if (!projectEmployee) {
+      return true;
+    }
+    
+    // Если сотрудник есть в проекте, но удален (есть end_working_date) - показываем
+    if (projectEmployee.pivot?.end_working_date) {
+      return true;
+    }
+    
+    // Если сотрудник активен в проекте (нет end_working_date) - скрываем
+    return false;
+  });
 
   const handleInputChange = (field: string, value: string | number) => {
     setFormData(prev => ({

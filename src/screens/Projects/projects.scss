@@ -504,7 +504,7 @@
     align-items: center;
     justify-content: flex-end;
     // gap: 8px;
-    padding: 16px 24px;
+    padding: 0px 0px;
     background: #ffffff;
     // border-top: 1px solid #f3f3f5;
     flex-shrink: 0;
@@ -1530,6 +1530,9 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
   }
 
   &__specification-actions {
@@ -1608,6 +1611,19 @@
     flex-direction: column;
     overflow: hidden;
     position: relative;
+    min-height: 0;
+    max-height: calc(100vh - 400px); // Ограничиваем высоту для адаптивности
+    
+    @media (max-height: 900px) {
+      max-height: calc(100vh - 350px);
+    }
+  }
+  
+  &__specification-table-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
   }
 
   &__specification-header-groups {
@@ -2017,13 +2033,21 @@
     flex-direction: column;
     // gap: 16px;
     height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    max-height: calc(100vh - 300px);
+    
+    @media (max-height: 900px) {
+      max-height: calc(100vh - 250px);
+    }
   }
-
+  
   &__tracking-actions {
     display: flex;
     gap: 12px;
     justify-content: flex-start;
     margin-bottom: 20px;
+    flex-shrink: 0;
   }
 
   &__tracking-btn {
@@ -2073,8 +2097,20 @@
     flex: 1;
     min-height: 0;
     overflow: hidden;
+    max-height: calc(100vh - 520px);
+    
+    @media (max-height: 900px) {
+      max-height: calc(100vh - 470px);
+    }
   }
-
+  
+  &__tracking-rows-wrapper {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+  }
+  
   &__tracking-header {
     display: flex;
     height: 21px;
@@ -2102,11 +2138,6 @@
     }
   }
 
-  &__tracking-rows-wrapper {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0 12px;
-  }
 
   &__tracking-row {
     display: flex;
@@ -2208,12 +2239,17 @@
 
   &__tracking-total {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    // padding: 12px 24px;
-    // border-top: 1px solid #f3f3f5;
+    flex-direction: column;
+    gap: 4px;
     margin-top: 12px;
     margin-bottom: 20px;
+    flex-shrink: 0;
+  }
+  
+  &__tracking-total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
 
   &__tracking-total-label {
@@ -2227,6 +2263,16 @@
     font-weight: 700;
     color: #ed0a34;
   }
+  
+  &__tracking-total-pagination {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    
+    .pagination {
+      padding: 0;
+    }
+  }
 
   &__tracking-bottom-actions {
     display: flex;
@@ -2234,6 +2280,7 @@
     align-items: center;
     gap: 12px;
     margin-top: 8px;
+    flex-shrink: 0;
   }
 
   &__tracking-pagination {

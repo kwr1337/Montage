@@ -177,8 +177,23 @@ export const EmployeesScreen: React.FC = () => {
     let matchesPosition = true;
     if (positionFilter !== 'all') {
       const position = employee.role || '';
-      // Точное совпадение или частичное для совместимости
-      matchesPosition = position === positionFilter || position.toLowerCase().includes(positionFilter.toLowerCase());
+      const filterLower = positionFilter.toLowerCase().trim();
+      const positionLower = position.toLowerCase().trim();
+      
+      // Точное совпадение
+      if (positionLower === filterLower) {
+        matchesPosition = true;
+      }
+      // Для "Главный инженер проекта" проверяем различные варианты написания
+      else if (filterLower === 'главный инженер проекта') {
+        matchesPosition = positionLower.includes('главный') && 
+                         positionLower.includes('инженер') && 
+                         (positionLower.includes('проекта') || positionLower.includes('гип'));
+      }
+      // Для остальных должностей - частичное совпадение
+      else {
+        matchesPosition = positionLower.includes(filterLower);
+      }
     }
 
     // Фильтр по поиску
@@ -435,14 +450,10 @@ export const EmployeesScreen: React.FC = () => {
 
   // Список всех должностей для фильтра
   const allPositions = [
-    'Управляющий',
-    'Менеджер',
-    'Монтажник',
-    'Инженер',
+    'Главный инженер проекта',
     'Бухгалтер',
-    'Сметчик',
     'Бригадир',
-    'Главный Инженер Проекта(ГИП)'
+    'Сметчик'
   ];
 
   // Обработчик фильтра по должности

@@ -118,7 +118,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
     second_name: employee.second_name || '',
     phone: employee.phone || '',
     email: employee.email || '',
-    position: employee.role || 'Управляющий',
+    position: employee.role || '',
     work_schedule: mapWorkSchedule(employee.work_schedule),
     status: employee.is_dismissed ? 'Уволен' : 'Работает',
     rate_per_hour: employee.rate_per_hour ? String(employee.rate_per_hour) : '',
@@ -148,7 +148,13 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
   const itemsPerPage = 4;
 
   // Опции для выпадающих списков
-  const positionOptions = ['Управляющий', 'Менеджер', 'Монтажник', 'Инженер', 'Бухгалтер', 'Сметчик', 'Бригадир'];
+  const positionOptions = [
+    'Не выбрано',
+    'Главный инженер проекта',
+    'Бухгалтер',
+    'Бригадир',
+    'Сметчик'
+  ];
   const scheduleOptions = ['5/2', '2/2'];
   const statusOptions = ['Работает', 'Уволен'];
   const genderOptions = [
@@ -199,7 +205,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
           second_name: fullEmployeeData.second_name || employee.second_name || '',
           phone: fullEmployeeData.phone || employee.phone || '',
           email: fullEmployeeData.email || employee.email || '',
-          position: fullEmployeeData.role || employee.role || 'Управляющий',
+          position: fullEmployeeData.role || employee.role || '',
           work_schedule: mapWorkSchedule(fullEmployeeData.work_schedule || employee.work_schedule),
           status: fullEmployeeData.is_dismissed ? 'Уволен' : 'Работает',
           rate_per_hour: fullEmployeeData.rate_per_hour ? String(fullEmployeeData.rate_per_hour) : (employee.rate_per_hour ? String(employee.rate_per_hour) : ''),
@@ -219,7 +225,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
           second_name: employee.second_name || '',
           phone: employee.phone || '',
           email: employee.email || '',
-          position: employee.role || 'Управляющий',
+          position: employee.role || '',
           work_schedule: mapWorkSchedule(employee.work_schedule),
           status: employee.is_dismissed ? 'Уволен' : 'Работает',
           rate_per_hour: employee.rate_per_hour ? String(employee.rate_per_hour) : '',
@@ -495,25 +501,31 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
 
             // Берем данные из первой выплаты месяца (или объединяем все выплаты)
             const payment = firstPayment;
+            
+            const total = hours * rate;
+            const firstAmount = payment.first_payment_amount || 0;
+            const secondAmount = payment.second_payment_amount || 0;
+            // Остаток рассчитывается автоматически: total - первая выплата - вторая выплата
+            const balanceAmount = Math.max(0, total - firstAmount - secondAmount);
 
             return {
               month: getMonthName(paymentMonthDate),
               year: String(paymentMonthDate.getFullYear()),
               hours: hours,
               rate: rate,
-              total: hours * rate,
+              total: total,
               firstPayout: {
-                amount: payment.first_payment_amount || 0,
+                amount: firstAmount,
                 date: payment.first_payment_date ? formatDateForPayment(payment.first_payment_date) : '',
                 method: payment.first_payment_type || 'Ожидание',
               },
               secondPayout: {
-                amount: payment.second_payment_amount || 0,
+                amount: secondAmount,
                 date: payment.second_payment_date ? formatDateForPayment(payment.second_payment_date) : '',
                 method: payment.second_payment_type || 'Ожидание',
               },
               balance: {
-                amount: payment.third_payment_amount || 0,
+                amount: balanceAmount,
                 date: payment.third_payment_date ? formatDateForPayment(payment.third_payment_date) : '',
                 method: payment.third_payment_type || 'Ожидание',
               },
@@ -569,24 +581,48 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
 
     // Валидация только для создания нового сотрудника
     if (isNew) {
-    if (!trimmedLastName || !trimmedFirstName) {
-      return;
-    }
+      // Обязательные поля (кроме должности)
+      if (!trimmedLastName || !trimmedFirstName) {
+        alert('Пожалуйста, заполните ФИО сотрудника');
+        return;
+      }
 
-    if (!trimmedEmail) {
-      return;
-    }
+      if (!trimmedEmail) {
+        alert('Пожалуйста, заполните email сотрудника');
+        return;
+      }
 
-    if (!trimmedPhone) {
-      return;
-    }
+      if (!trimmedPhone) {
+        alert('Пожалуйста, заполните телефон сотрудника');
+        return;
+      }
+
       if (!formData.password.trim()) {
+        alert('Пожалуйста, заполните пароль сотрудника');
         return;
       }
 
       if (!formData.birth_date) {
+        alert('Пожалуйста, заполните дату рождения сотрудника');
         return;
       }
+
+      if (!formData.employment_date) {
+        alert('Пожалуйста, заполните дату трудоустройства сотрудника');
+        return;
+      }
+
+      if (!formData.work_schedule) {
+        alert('Пожалуйста, выберите график работы сотрудника');
+        return;
+      }
+
+      if (!formData.rate_per_hour || formData.rate_per_hour.trim() === '') {
+        alert('Пожалуйста, заполните ставку в час сотрудника');
+        return;
+      }
+
+      // Должность (position) - не обязательное поле, пропускаем проверку
 
       const employmentDateValue = formData.employment_date || new Date().toISOString().split('T')[0];
       const rateValue = formData.rate_per_hour ? Number(formData.rate_per_hour) : 0;
@@ -602,11 +638,11 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
           email: trimmedEmail,
           phone: trimmedPhone,
           password: formData.password,
-          role: formData.position,
+          role: formData.position && formData.position !== 'Не выбрано' ? formData.position : '',
           is_employee: true,
           is_system_admin: false,
           employment_date: employmentDateValue,
-          position: formData.position,
+          position: formData.position && formData.position !== 'Не выбрано' ? formData.position : '',
           employee_status: formData.status === 'Работает' ? 'active' : 'dismissed',
           rate_per_hour: Number.isFinite(rateValue) ? rateValue : 0,
           work_schedule: formData.work_schedule === '5/2' ? '5/2' : formData.work_schedule,
@@ -672,7 +708,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
       if (trimmedSecondName) payload.second_name = trimmedSecondName;
       if (trimmedEmail) payload.email = trimmedEmail;
       if (trimmedPhone) payload.phone = trimmedPhone;
-      if (formData.position) {
+      if (formData.position && formData.position !== 'Не выбрано') {
         payload.role = formData.position;
         payload.position = formData.position;
       }
@@ -916,7 +952,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
                   className="employee-detail__dropdown"
                   onClick={() => setIsPositionDropdownOpen(!isPositionDropdownOpen)}
                 >
-                  <span>{formData.position || 'Управляющий'}</span>
+                  <span>{formData.position || 'Не выбрано'}</span>
                   <img src={userDropdownIcon} alt="▼" />
                 </div>
                 {isPositionDropdownOpen && (
@@ -924,9 +960,9 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
                     {positionOptions.map((option) => (
                       <div
                         key={option}
-                        className={`employee-detail__dropdown-option ${formData.position === option ? 'employee-detail__dropdown-option--selected' : ''}`}
+                        className={`employee-detail__dropdown-option ${(formData.position === option) || (!formData.position && option === 'Не выбрано') ? 'employee-detail__dropdown-option--selected' : ''}`}
                         onClick={() => {
-                          setFormData({ ...formData, position: option });
+                          setFormData({ ...formData, position: option === 'Не выбрано' ? '' : option });
                           setIsPositionDropdownOpen(false);
                         }}
                       >
