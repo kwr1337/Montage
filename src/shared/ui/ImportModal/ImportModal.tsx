@@ -12,7 +12,7 @@ interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onImport: (file: File, parsedData?: ParsedRow[], matches?: string[]) => void;
-  projectId: number;
+  projectId?: number;
 }
 
 interface ParsedRow {
@@ -25,7 +25,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
   isOpen,
   onClose,
   onImport,
-  projectId,
+  projectId: _projectId,
 }) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -424,7 +424,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
                   <div className="import-modal__matches-list">
                     {matches.slice(0, 10).map((match, index) => (
                       <div key={index} className="import-modal__match-item">
-                        {typeof match === 'string' ? match : (match.name || match.nomenclature || match.nomenclature_name || JSON.stringify(match))}
+                        {match}
                       </div>
                     ))}
                     {matches.length > 10 && (

@@ -900,7 +900,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     setNomenclatureHistory([]);
   };
 
-  const handleImport = async (file: File, parsedData?: any[], matches?: string[]) => {
+  const handleImport = async (_file: File, parsedData?: any[], _matches?: string[]) => {
     if (!localProject.id || !parsedData || parsedData.length === 0) return;
 
     try {
