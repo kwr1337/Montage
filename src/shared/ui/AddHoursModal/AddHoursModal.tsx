@@ -159,6 +159,18 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
       return;
     }
     
+    // Проверяем, что если часы не равны 8, то должна быть указана причина
+    if (!isAbsent && hours !== 8 && !reason.trim()) {
+      setError('Необходимо указать причину, если количество часов отличается от 8');
+      return;
+    }
+    
+    // Проверяем, что если сотрудник отсутствовал, то должна быть указана причина
+    if (isAbsent && !reason.trim()) {
+      setError('Необходимо указать причину отсутствия');
+      return;
+    }
+    
     const dateString = formatDateString(selectedDate);
     setIsSaving(true);
     setError(null);
