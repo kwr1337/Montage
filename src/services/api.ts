@@ -265,7 +265,7 @@ class ApiService {
 
   // Получить историю изменений номенклатуры в проекте
   async getNomenclatureChanges(projectId: number, nomenclatureId: number, page: number = 1, perPage: number = 100): Promise<any> {
-    const response = await this.request<any>(`/projects/${projectId}/nomenclature/${nomenclatureId}/changes?page=${page}&per_page=${perPage}`, {
+    const response = await this.request<any>(`/projects/${projectId}/nomenclature/${nomenclatureId}/changes?page=${page}&per_page=${perPage}&with[]=logs&with[]=logs.user`, {
       method: 'GET',
     });
     return response;
@@ -314,6 +314,67 @@ class ApiService {
         'Accept': 'application/json',
       },
       body: JSON.stringify({ start_amount: startAmount }),
+    });
+    return response;
+  }
+
+  // Получить список фактических расходов номенклатуры в проекте
+  async getNomenclatureFacts(projectId: number, nomenclatureId: number, options?: { page?: number; per_page?: number; with?: string[] }): Promise<any> {
+    let url = `/projects/${projectId}/nomenclature/${nomenclatureId}/facts`;
+    const params = new URLSearchParams();
+    if (options?.page) params.append('page', options.page.toString());
+    if (options?.per_page) params.append('per_page', options.per_page.toString());
+    if (options?.with && Array.isArray(options.with)) {
+      options.with.forEach((item) => params.append('with[]', item));
+    }
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+    const response = await this.request<any>(url, {
+      method: 'GET',
+    });
+    return response;
+  }
+
+  // Создать фактический расход номенклатуры в проекте
+  async createNomenclatureFact(projectId: number, nomenclatureId: number, amount: number, factDate: string): Promise<any> {
+    const response = await this.request<any>(`/projects/${projectId}/nomenclature/${nomenclatureId}/facts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        amount: amount,
+        fact_date: factDate,
+      }),
+    });
+    return response;
+  }
+
+  // Редактировать фактический расход номенклатуры в проекте
+  async updateNomenclatureFact(projectId: number, nomenclatureId: number, factId: number, amount: number, factDate: string): Promise<any> {
+    const response = await this.request<any>(`/projects/${projectId}/nomenclature/${nomenclatureId}/facts/${factId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        amount: amount,
+        fact_date: factDate,
+      }),
+    });
+    return response;
+  }
+
+  // Удалить фактический расход номенклатуры в проекте
+  async deleteNomenclatureFact(projectId: number, nomenclatureId: number, factId: number): Promise<any> {
+    const response = await this.request<any>(`/projects/${projectId}/nomenclature/${nomenclatureId}/facts/${factId}`, {
+      method: 'DELETE',
+      headers: {
+        'Accept': 'application/json',
+      },
     });
     return response;
   }

@@ -45,6 +45,9 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
 
   // Устанавливаем последнюю дату из trackedDates при открытии модального окна
   useEffect(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Сбрасываем время для корректного сравнения
+    
     if (isOpen && trackedDates.length > 0) {
       // Находим последнюю (самую позднюю) дату
       const sortedDates = [...trackedDates].sort((a, b) => {
@@ -54,13 +57,18 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
       });
       
       const lastDate = new Date(sortedDates[0]);
-      if (!isNaN(lastDate.getTime())) {
+      lastDate.setHours(0, 0, 0, 0);
+      
+      // Если последняя дата в будущем, используем сегодняшнюю дату
+      if (!isNaN(lastDate.getTime()) && lastDate <= today) {
         setSelectedDate(lastDate);
         setCurrentMonth(lastDate);
+      } else {
+        setSelectedDate(today);
+        setCurrentMonth(today);
       }
     } else if (isOpen && trackedDates.length === 0) {
       // Если нет записей, устанавливаем текущую дату
-      const today = new Date();
       setSelectedDate(today);
       setCurrentMonth(today);
     }
@@ -140,6 +148,17 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
   };
 
   const handleSave = async () => {
+    // Проверяем, что выбранная дата не в будущем
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selectedDateNormalized = new Date(selectedDate);
+    selectedDateNormalized.setHours(0, 0, 0, 0);
+    
+    if (selectedDateNormalized > today) {
+      setError('Нельзя фиксировать часы за будущие даты');
+      return;
+    }
+    
     const dateString = formatDateString(selectedDate);
     setIsSaving(true);
     setError(null);
@@ -217,11 +236,40 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
   };
 
   const handleNextMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1));
+    const nextMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Не позволяем переходить к месяцам в будущем
+    const nextMonthStart = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1);
+    nextMonthStart.setHours(0, 0, 0, 0);
+    
+    if (nextMonthStart <= today) {
+      setCurrentMonth(nextMonth);
+    }
+  };
+
+  // Проверка, можно ли перейти к следующему месяцу
+  const canGoToNextMonth = (): boolean => {
+    const nextMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const nextMonthStart = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1);
+    nextMonthStart.setHours(0, 0, 0, 0);
+    return nextMonthStart <= today;
   };
 
   const handleDateClick = (day: number) => {
     const newDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+    newDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Не позволяем выбирать будущие даты
+    if (newDate > today) {
+      return;
+    }
+    
     setSelectedDate(newDate);
     setCurrentMonth(newDate);
     setIsCalendarOpen(false);
@@ -252,10 +300,22 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
   const isMissingTracking = (day: number | null): boolean => {
     if (!day) return false;
     const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+    date.setHours(0, 0, 0, 0);
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     // Показываем красным только прошедшие дни без фиксации
     if (date > today) return false;
     return !hasTracking(date);
+  };
+
+  // Проверка, является ли день будущим (недоступным для выбора)
+  const isFutureDate = (day: number | null): boolean => {
+    if (!day) return false;
+    const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+    date.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return date > today;
   };
 
   if (!isOpen) return null;
@@ -338,6 +398,7 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
                     type="button"
                     className="add-hours-modal__calendar-nav"
                     onClick={handleNextMonth}
+                    disabled={!canGoToNextMonth()}
                     aria-label="Следующий месяц"
                   >
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -355,25 +416,30 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
                 </div>
 
                 <div className="add-hours-modal__calendar-days">
-                  {days.map((day, index) => (
-                    <button
-                      key={index}
-                      type="button"
-                      className={`add-hours-modal__calendar-day ${
-                        !day ? 'add-hours-modal__calendar-day--empty' : ''
-                      } ${
-                        isDateSelected(day) ? 'add-hours-modal__calendar-day--selected' : ''
-                      } ${
-                        isToday(day) ? 'add-hours-modal__calendar-day--today' : ''
-                      } ${
-                        isMissingTracking(day) ? 'add-hours-modal__calendar-day--missing' : ''
-                      }`}
-                      onClick={() => day && handleDateClick(day)}
-                      disabled={!day}
-                    >
-                      {day || ''}
-                    </button>
-                  ))}
+                  {days.map((day, index) => {
+                    const isFuture = isFutureDate(day);
+                    return (
+                      <button
+                        key={index}
+                        type="button"
+                        className={`add-hours-modal__calendar-day ${
+                          !day ? 'add-hours-modal__calendar-day--empty' : ''
+                        } ${
+                          isDateSelected(day) ? 'add-hours-modal__calendar-day--selected' : ''
+                        } ${
+                          isToday(day) ? 'add-hours-modal__calendar-day--today' : ''
+                        } ${
+                          isMissingTracking(day) ? 'add-hours-modal__calendar-day--missing' : ''
+                        } ${
+                          isFuture ? 'add-hours-modal__calendar-day--disabled' : ''
+                        }`}
+                        onClick={() => day && !isFuture && handleDateClick(day)}
+                        disabled={!day || isFuture}
+                      >
+                        {day || ''}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -490,7 +556,7 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
             onClick={handleSave}
             disabled={isSaving}
           >
-            {isSaving ? 'Сохранение...' : 'сохранить'}
+            {isSaving ? 'Сохранение...' : 'Сохранить'}
           </button>
         </div>
       </div>

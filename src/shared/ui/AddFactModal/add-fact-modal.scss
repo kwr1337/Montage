@@ -223,6 +223,33 @@
     }
   }
 
+  &__counter-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-family: 'SF Pro', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 32px;
+    font-weight: 400;
+    color: #2c2d2e;
+    letter-spacing: 0.06px;
+    line-height: 1;
+    text-align: center;
+    outline: none;
+    padding: 0;
+    width: 100%;
+    -moz-appearance: textfield;
+
+    &::-webkit-outer-spin-button,
+    &::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    &:focus {
+      outline: none;
+    }
+  }
+
   &__actions {
     display: flex;
     align-items: center;

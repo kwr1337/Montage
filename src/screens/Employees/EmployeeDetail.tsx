@@ -112,23 +112,28 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
     return value === '5/2' ? '5/2 ' : value;
   };
 
-  const [formData, setFormData] = useState(() => ({
-    first_name: employee.first_name || '',
-    last_name: employee.last_name || '',
-    second_name: employee.second_name || '',
-    phone: employee.phone || '',
-    email: employee.email || '',
-    position: employee.role || '',
-    work_schedule: mapWorkSchedule(employee.work_schedule),
-    status: employee.is_dismissed ? 'Уволен' : 'Работает',
-    rate_per_hour: employee.rate_per_hour ? String(employee.rate_per_hour) : '',
-    password: isNew ? '' : (employee.password || ''),
-    birth_date: employee.birth_date || '',
-    gender: employee.gender || 'male',
-    employment_date: employee.employment_date || '',
-    dateFrom: '',
-    dateTo: '',
-  }));
+  const [formData, setFormData] = useState(() => {
+    // Если role === "user", отображаем "Не выбрано" (пустую строку)
+    const positionValue = (employee.role === 'user' || !employee.role) ? '' : (employee.role || '');
+    
+    return {
+      first_name: employee.first_name || '',
+      last_name: employee.last_name || '',
+      second_name: employee.second_name || '',
+      phone: employee.phone || '',
+      email: employee.email || '',
+      position: positionValue,
+      work_schedule: mapWorkSchedule(employee.work_schedule),
+      status: employee.is_dismissed ? 'Уволен' : 'Работает',
+      rate_per_hour: employee.rate_per_hour ? String(employee.rate_per_hour) : '',
+      password: isNew ? '' : (employee.password || ''),
+      birth_date: employee.birth_date || '',
+      gender: employee.gender || 'male',
+      employment_date: employee.employment_date || '',
+      dateFrom: '',
+      dateTo: '',
+    };
+  });
 
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isDotsMenuOpen, setIsDotsMenuOpen] = useState(false);
@@ -199,13 +204,18 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
         const response = await apiService.getUserById(employee.id);
         const fullEmployeeData = response?.data ?? response ?? employee;
         
+        // Если role === "user", отображаем "Не выбрано" (пустую строку)
+        const positionValue = (fullEmployeeData.role === 'user' || !fullEmployeeData.role) 
+          ? '' 
+          : (fullEmployeeData.role || employee.role || '');
+        
         setFormData({
           first_name: fullEmployeeData.first_name || employee.first_name || '',
           last_name: fullEmployeeData.last_name || employee.last_name || '',
           second_name: fullEmployeeData.second_name || employee.second_name || '',
           phone: fullEmployeeData.phone || employee.phone || '',
           email: fullEmployeeData.email || employee.email || '',
-          position: fullEmployeeData.role || employee.role || '',
+          position: positionValue,
           work_schedule: mapWorkSchedule(fullEmployeeData.work_schedule || employee.work_schedule),
           status: fullEmployeeData.is_dismissed ? 'Уволен' : 'Работает',
           rate_per_hour: fullEmployeeData.rate_per_hour ? String(fullEmployeeData.rate_per_hour) : (employee.rate_per_hour ? String(employee.rate_per_hour) : ''),
@@ -219,13 +229,16 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
       } catch (error) {
         console.error('Error loading employee data:', error);
         // Если не удалось загрузить, используем данные из employee
+        // Если role === "user", отображаем "Не выбрано" (пустую строку)
+        const positionValue = (employee.role === 'user' || !employee.role) ? '' : (employee.role || '');
+        
         setFormData({
           first_name: employee.first_name || '',
           last_name: employee.last_name || '',
           second_name: employee.second_name || '',
           phone: employee.phone || '',
           email: employee.email || '',
-          position: employee.role || '',
+          position: positionValue,
           work_schedule: mapWorkSchedule(employee.work_schedule),
           status: employee.is_dismissed ? 'Уволен' : 'Работает',
           rate_per_hour: employee.rate_per_hour ? String(employee.rate_per_hour) : '',
@@ -638,7 +651,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
           email: trimmedEmail,
           phone: trimmedPhone,
           password: formData.password,
-          role: formData.position && formData.position !== 'Не выбрано' ? formData.position : '',
+          role: formData.position && formData.position !== 'Не выбрано' ? formData.position : 'user',
           is_employee: true,
           is_system_admin: false,
           employment_date: employmentDateValue,
@@ -655,13 +668,18 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
           throw new Error('Пустой ответ сервера');
         }
 
+        // Если role === "user", отображаем "Не выбрано" (пустую строку)
+        const createdPositionValue = (createdEmployee.role === 'user' || !createdEmployee.role) 
+          ? '' 
+          : (createdEmployee.role || createdEmployee.position || formData.position);
+        
         setFormData({
           first_name: createdEmployee.first_name || '',
           last_name: createdEmployee.last_name || '',
           second_name: createdEmployee.second_name || '',
           phone: createdEmployee.phone || '',
           email: createdEmployee.email || '',
-          position: createdEmployee.role || createdEmployee.position || formData.position,
+          position: createdPositionValue,
           work_schedule: mapWorkSchedule(createdEmployee.work_schedule),
           status: createdEmployee.is_dismissed ? 'Уволен' : 'Работает',
           rate_per_hour: createdEmployee.rate_per_hour ? String(createdEmployee.rate_per_hour) : '',
@@ -711,6 +729,10 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
       if (formData.position && formData.position !== 'Не выбрано') {
         payload.role = formData.position;
         payload.position = formData.position;
+      } else {
+        // Если должность не выбрана, отправляем role: "user"
+        payload.role = 'user';
+        payload.position = '';
       }
       if (formData.work_schedule) {
         payload.work_schedule = formData.work_schedule === '5/2 ' ? '5/2' : formData.work_schedule;

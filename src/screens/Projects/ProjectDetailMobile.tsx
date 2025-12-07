@@ -177,6 +177,19 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   const foremanDropdownRef = useRef<HTMLDivElement | null>(null);
   const [specificationItems, setSpecificationItems] = useState<SpecificationItem[]>([]);
   const [isSpecificationLoading, setIsSpecificationLoading] = useState(false);
+
+  // Отладочная информация (можно удалить после проверки)
+  useEffect(() => {
+    if (project) {
+      console.log('ProjectDetailMobile: project loaded', {
+        id: project.id,
+        name: project.name,
+        hasNomenclature: Array.isArray(project.nomenclature),
+        nomenclatureLength: project.nomenclature?.length || 0,
+        isLoading,
+      });
+    }
+  }, [project, isLoading]);
   const [isPortrait, setIsPortrait] = useState(() => {
     if (typeof window !== 'undefined') {
       return window.innerHeight > window.innerWidth;
@@ -185,6 +198,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   });
   const [isFactModalOpen, setIsFactModalOpen] = useState(false);
   const [selectedNomenclature, setSelectedNomenclature] = useState<SpecificationItem | null>(null);
+  const [existingFact, setExistingFact] = useState<{ id: number; amount: number; fact_date: string } | null>(null);
   const [trackingItems, setTrackingItems] = useState<any[]>([]);
   const [isTrackingLoading, setIsTrackingLoading] = useState(false);
   const [isHoursModalOpen, setIsHoursModalOpen] = useState(false);
@@ -292,8 +306,9 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   useEffect(() => {
     let isCancelled = false;
 
-    const loadSpecification = async () => {
-      if (!project?.id || !Array.isArray(project?.nomenclature) || project.nomenclature.length === 0) {
+    const loadSpec = async () => {
+      // Проверяем, что проект загружен и имеет номенклатуру
+      if (!project?.id) {
         if (!isCancelled) {
           setSpecificationItems([]);
           setIsSpecificationLoading(false);
@@ -301,14 +316,29 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
         return;
       }
 
-      setIsSpecificationLoading(true);
+      // Если номенклатуры нет или она пустая, просто очищаем список
+      if (!Array.isArray(project?.nomenclature) || project.nomenclature.length === 0) {
+        if (!isCancelled) {
+          setSpecificationItems([]);
+          setIsSpecificationLoading(false);
+        }
+        return;
+      }
+
+      if (!isCancelled) {
+        setIsSpecificationLoading(true);
+      }
 
       try {
         const itemsWithMeta = await Promise.all(
           project.nomenclature.map(async (item: any) => {
+            if (!item?.id) return null;
+
             let lastChange: number | null = null;
+            let factValue: number = 0;
 
             try {
+              // Загружаем изменения
               const response = await apiService.getNomenclatureChanges(project.id, item.id);
               const changesData = Array.isArray(response?.data)
                 ? response.data
@@ -324,12 +354,38 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                 }
               }
             } catch {
-              // Игнорируем ошибки загрузки изменений для конкретной позиции
+              // Игнорируем ошибки загрузки изменений
+            }
+
+            try {
+              // Загружаем факты и суммируем их
+              const factsResponse = await apiService.getNomenclatureFacts(project.id, item.id, {
+                per_page: 1000,
+              });
+              
+              let factsData: any[] = [];
+              if (factsResponse?.data?.data && Array.isArray(factsResponse.data.data)) {
+                factsData = factsResponse.data.data;
+              } else if (factsResponse?.data && Array.isArray(factsResponse.data)) {
+                factsData = factsResponse.data;
+              } else if (Array.isArray(factsResponse)) {
+                factsData = factsResponse;
+              }
+
+              // Суммируем все факты (исключая удаленные)
+              factValue = factsData
+                .filter((fact: any) => !fact.is_deleted)
+                .reduce((sum: number, fact: any) => {
+                  const amount = Number(fact.amount) || 0;
+                  return sum + amount;
+                }, 0);
+            } catch {
+              // Игнорируем ошибки загрузки фактов, используем значение из pivot
+              factValue = Number(item?.pivot?.current_amount ?? item?.fact ?? 0);
             }
 
             const statusMeta = getSpecificationStatusMeta(item);
             const planValue = Number(item?.pivot?.start_amount ?? item?.plan ?? 0);
-            const factValue = Number(item?.pivot?.current_amount ?? item?.fact ?? 0);
 
             return {
               id: item.id,
@@ -344,8 +400,16 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           })
         );
 
+        // Фильтруем null значения
+        const validItems = itemsWithMeta.filter((item): item is SpecificationItem => item !== null);
+
         if (!isCancelled) {
-          setSpecificationItems(itemsWithMeta);
+          setSpecificationItems(validItems);
+        }
+      } catch (error) {
+        console.error('Error loading specification:', error);
+        if (!isCancelled) {
+          setSpecificationItems([]);
         }
       } finally {
         if (!isCancelled) {
@@ -354,7 +418,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       }
     };
 
-    loadSpecification();
+    loadSpec();
 
     return () => {
       isCancelled = true;
@@ -597,34 +661,220 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     };
   }, [activeTab, project?.id, project?.employees, loadTrackingItems]);
 
-  const handleOpenFactModal = (item: SpecificationItem) => {
+  const handleOpenFactModal = async (item: SpecificationItem) => {
     setSelectedNomenclature(item);
     setIsFactModalOpen(true);
+    setExistingFact(null);
+
+    // Загружаем существующие факты для этой номенклатуры
+    if (project?.id && item.id) {
+      try {
+        const factsResponse = await apiService.getNomenclatureFacts(project.id, item.id, {
+          per_page: 1000,
+        });
+        
+        let factsData: any[] = [];
+        if (factsResponse?.data?.data && Array.isArray(factsResponse.data.data)) {
+          factsData = factsResponse.data.data;
+        } else if (factsResponse?.data && Array.isArray(factsResponse.data)) {
+          factsData = factsResponse.data;
+        } else if (Array.isArray(factsResponse)) {
+          factsData = factsResponse;
+        }
+
+        // Фильтруем удаленные факты
+        const activeFacts = factsData.filter((fact: any) => !fact.is_deleted);
+        
+        // Если есть факты, берем последний (самый новый по дате)
+        if (activeFacts.length > 0) {
+          // Сортируем по дате (от новых к старым)
+          activeFacts.sort((a: any, b: any) => {
+            const dateA = new Date(a.fact_date).getTime();
+            const dateB = new Date(b.fact_date).getTime();
+            return dateB - dateA;
+          });
+          
+          const latestFact = activeFacts[0];
+          setExistingFact({
+            id: latestFact.id,
+            amount: Number(latestFact.amount) || 0,
+            fact_date: latestFact.fact_date,
+          });
+        }
+      } catch (error) {
+        console.error('Error loading existing facts:', error);
+        // Продолжаем работу, даже если не удалось загрузить факты
+      }
+    }
   };
 
   const handleCloseFactModal = () => {
     setIsFactModalOpen(false);
     setSelectedNomenclature(null);
+    setExistingFact(null);
   };
 
   const handleSaveFact = async (quantity: number, date: string) => {
-    if (!selectedNomenclature) return;
+    if (!selectedNomenclature || !project?.id) return;
 
     try {
-      // TODO: Implement API call to save fact
-      console.log('Saving fact:', {
-        projectId: project.id,
-        nomenclatureId: selectedNomenclature.id,
-        quantity,
-        date,
-      });
+      // Если есть существующий факт для этой даты, обновляем его
+      if (existingFact && existingFact.fact_date === date) {
+        await apiService.updateNomenclatureFact(
+          project.id,
+          selectedNomenclature.id,
+          existingFact.id,
+          quantity,
+          date
+        );
+      } else {
+        // Проверяем, есть ли факт для выбранной даты
+        try {
+          const factsResponse = await apiService.getNomenclatureFacts(project.id, selectedNomenclature.id, {
+            per_page: 1000,
+          });
+          
+          let factsData: any[] = [];
+          if (factsResponse?.data?.data && Array.isArray(factsResponse.data.data)) {
+            factsData = factsResponse.data.data;
+          } else if (factsResponse?.data && Array.isArray(factsResponse.data)) {
+            factsData = factsResponse.data;
+          } else if (Array.isArray(factsResponse)) {
+            factsData = factsResponse;
+          }
+
+          // Ищем факт для выбранной даты
+          const factForDate = factsData.find((fact: any) => 
+            !fact.is_deleted && fact.fact_date === date
+          );
+
+          if (factForDate) {
+            // Обновляем существующий факт
+            await apiService.updateNomenclatureFact(
+              project.id,
+              selectedNomenclature.id,
+              factForDate.id,
+              quantity,
+              date
+            );
+          } else {
+            // Создаем новый факт
+            await apiService.createNomenclatureFact(
+              project.id,
+              selectedNomenclature.id,
+              quantity,
+              date
+            );
+          }
+        } catch (error) {
+          // Если не удалось проверить, создаем новый факт
+          await apiService.createNomenclatureFact(
+            project.id,
+            selectedNomenclature.id,
+            quantity,
+            date
+          );
+        }
+      }
       
-      // Refresh specification items after saving
-      // You can add API call here to update the fact
+      // Обновляем список спецификации после сохранения
+      await loadSpecification();
+      
+      // Закрываем модальное окно
+      handleCloseFactModal();
     } catch (error) {
       console.error('Error saving fact:', error);
+      // Можно добавить уведомление об ошибке
     }
   };
+
+  // Функция для загрузки спецификации (вынесена отдельно для переиспользования)
+  const loadSpecification = React.useCallback(async () => {
+    if (!project?.id || !Array.isArray(project?.nomenclature) || project.nomenclature.length === 0) {
+      setSpecificationItems([]);
+      setIsSpecificationLoading(false);
+      return;
+    }
+
+    setIsSpecificationLoading(true);
+
+    try {
+      const itemsWithMeta = await Promise.all(
+        project.nomenclature.map(async (item: any) => {
+          let lastChange: number | null = null;
+          let factValue: number = 0;
+
+          try {
+            // Загружаем изменения
+            const response = await apiService.getNomenclatureChanges(project.id, item.id);
+            const changesData = Array.isArray(response?.data)
+              ? response.data
+              : Array.isArray(response)
+              ? response
+              : [];
+
+            if (changesData.length > 0) {
+              const latestChange = changesData[changesData.length - 1];
+              const numericChange = Number(latestChange?.amount_change);
+              if (Number.isFinite(numericChange)) {
+                lastChange = numericChange;
+              }
+            }
+          } catch {
+            // Игнорируем ошибки загрузки изменений
+          }
+
+          try {
+            // Загружаем факты и суммируем их
+            const factsResponse = await apiService.getNomenclatureFacts(project.id, item.id, {
+              per_page: 1000,
+            });
+            
+            let factsData: any[] = [];
+            if (factsResponse?.data?.data && Array.isArray(factsResponse.data.data)) {
+              factsData = factsResponse.data.data;
+            } else if (factsResponse?.data && Array.isArray(factsResponse.data)) {
+              factsData = factsResponse.data;
+            } else if (Array.isArray(factsResponse)) {
+              factsData = factsResponse;
+            }
+
+            // Суммируем все факты (исключая удаленные)
+            factValue = factsData
+              .filter((fact: any) => !fact.is_deleted)
+              .reduce((sum: number, fact: any) => {
+                const amount = Number(fact.amount) || 0;
+                return sum + amount;
+              }, 0);
+          } catch {
+            // Игнорируем ошибки загрузки фактов, используем значение из pivot
+            factValue = Number(item?.pivot?.current_amount ?? item?.fact ?? 0);
+          }
+
+          const statusMeta = getSpecificationStatusMeta(item);
+          const planValue = Number(item?.pivot?.start_amount ?? item?.plan ?? 0);
+
+          return {
+            id: item.id,
+            name: item.name || '—',
+            unit: formatUnit(item.unit) || '—',
+            plan: Number.isFinite(planValue) ? planValue : 0,
+            changes: lastChange,
+            fact: Number.isFinite(factValue) ? factValue : 0,
+            statusLabel: statusMeta.label,
+            statusVariant: statusMeta.variant,
+          } as SpecificationItem;
+        })
+      );
+
+      setSpecificationItems(itemsWithMeta);
+    } catch (error) {
+      console.error('Error loading specification:', error);
+      setSpecificationItems([]);
+    } finally {
+      setIsSpecificationLoading(false);
+    }
+  }, [project?.id, project?.nomenclature]);
 
   const handleOpenHoursModal = async (item: any) => {
     // Создаем объект employee для модального окна
@@ -1136,6 +1386,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
             unit: selectedNomenclature.unit,
             previousValue: selectedNomenclature.fact || undefined,
           }}
+          existingFact={existingFact}
         />
       )}
 

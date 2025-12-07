@@ -176,7 +176,8 @@ export const EmployeesScreen: React.FC = () => {
     // Фильтр по должности
     let matchesPosition = true;
     if (positionFilter !== 'all') {
-      const position = employee.role || '';
+      // Если роль "user", считаем что должность "Не выбрано"
+      const position = (employee.role === 'user' || !employee.role) ? '' : (employee.role || '');
       const filterLower = positionFilter.toLowerCase().trim();
       const positionLower = position.toLowerCase().trim();
       
@@ -514,7 +515,7 @@ export const EmployeesScreen: React.FC = () => {
             );
             // Данные selectedEmployeeData обновятся автоматически через employees.find в следующем рендере
           }}
-          onCreate={(createdEmployee) => {
+          onCreate={async (createdEmployee) => {
             if (!createdEmployee || !createdEmployee.id) {
               setIsCreatingEmployee(false);
               setDraftEmployee(null);
@@ -522,6 +523,7 @@ export const EmployeesScreen: React.FC = () => {
               return;
             }
 
+            // Оптимистично добавляем сотрудника в список
             setEmployees((prev) => {
               const filtered = prev.filter((emp) => emp.id !== createdEmployee.id);
               return [createdEmployee, ...filtered];
@@ -544,6 +546,20 @@ export const EmployeesScreen: React.FC = () => {
               return updated;
             });
             localStorage.setItem('selectedEmployeeId', numericId.toString());
+
+            // Перезагружаем список сотрудников с сервера для синхронизации
+            try {
+              const response = await apiService.getUsers();
+              const employeesData = response && response.data 
+                ? (Array.isArray(response.data) ? response.data : [response.data])
+                : (Array.isArray(response) ? response : []);
+              
+              const filteredEmployees = employeesData.filter((user: any) => user.is_employee === true);
+              setEmployees(filteredEmployees);
+            } catch (error) {
+              console.error('Error refreshing employees list:', error);
+              // В случае ошибки оставляем оптимистично добавленного сотрудника
+            }
           }}
           isNew={isCreatingEmployee}
         />
@@ -839,8 +855,11 @@ export const EmployeesScreen: React.FC = () => {
                           <span className="employees__employee-phone">{employee.phone}</span>
                         )}
                         {employee.phone && employee.role && ' · '}
-                        {employee.role && (
+                        {employee.role && employee.role !== 'user' && (
                           <span className="employees__employee-position">{employee.role}</span>
+                        )}
+                        {employee.role === 'user' && (
+                          <span className="employees__employee-position">Не выбрано</span>
                         )}
                       </div>
                       <div className="employees__employee-name">

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import closeIcon from '../../icons/closeIcon.svg';
 import calendarIconGrey from '../../icons/calendarIconGrey.svg';
 import './add-fact-modal.scss';
@@ -13,6 +13,11 @@ type AddFactModalProps = {
     unit: string;
     previousValue?: number;
   };
+  existingFact?: {
+    id: number;
+    amount: number;
+    fact_date: string;
+  } | null;
 };
 
 export const AddFactModal: React.FC<AddFactModalProps> = ({
@@ -20,20 +25,66 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
   onClose,
   onSave,
   nomenclature,
+  existingFact,
 }) => {
-  const [quantity, setQuantity] = useState<number>(0);
-  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [quantity, setQuantity] = useState<number>(existingFact?.amount || 0);
+  const [date, setDate] = useState<string>(existingFact?.fact_date || new Date().toISOString().split('T')[0]);
+  const [quantityInput, setQuantityInput] = useState<string>(String(existingFact?.amount || 0));
+
+  // Обновляем состояние при изменении existingFact
+  useEffect(() => {
+    if (existingFact) {
+      setQuantity(existingFact.amount);
+      setQuantityInput(String(existingFact.amount));
+      setDate(existingFact.fact_date);
+    } else {
+      setQuantity(0);
+      setQuantityInput('0');
+      setDate(new Date().toISOString().split('T')[0]);
+    }
+  }, [existingFact, isOpen]);
 
   const handleIncrement = () => {
-    setQuantity((prev) => prev + 1);
+    const newValue = quantity + 1;
+    setQuantity(newValue);
+    setQuantityInput(String(newValue));
   };
 
   const handleDecrement = () => {
-    setQuantity((prev) => Math.max(0, prev - 1));
+    const newValue = Math.max(0, quantity - 1);
+    setQuantity(newValue);
+    setQuantityInput(String(newValue));
+  };
+
+  const handleQuantityInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setQuantityInput(value);
+    
+    // Парсим значение и обновляем quantity
+    const numericValue = value === '' ? 0 : Number(value);
+    if (!isNaN(numericValue) && numericValue >= 0) {
+      setQuantity(numericValue);
+    }
+  };
+
+  const handleQuantityInputBlur = () => {
+    // При потере фокуса нормализуем значение
+    const numericValue = quantityInput === '' ? 0 : Number(quantityInput);
+    if (isNaN(numericValue) || numericValue < 0) {
+      setQuantity(0);
+      setQuantityInput('0');
+    } else {
+      setQuantity(numericValue);
+      setQuantityInput(String(numericValue));
+    }
   };
 
   const handleSave = () => {
-    onSave(quantity, date);
+    const finalQuantity = quantityInput === '' ? 0 : Number(quantityInput);
+    if (isNaN(finalQuantity) || finalQuantity < 0) {
+      return; // Не сохраняем некорректное значение
+    }
+    onSave(finalQuantity, date);
     onClose();
   };
 
@@ -108,9 +159,16 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
                     <path d="M6 12H18" stroke="white" strokeWidth="2" strokeLinecap="round" />
                   </svg>
                 </button>
-                <div className="add-fact-modal__counter-value">
-                  <span>{quantity}</span>
-                </div>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={quantityInput}
+                  onChange={handleQuantityInputChange}
+                  onBlur={handleQuantityInputBlur}
+                  className="add-fact-modal__counter-input"
+                  aria-label="Количество"
+                />
                 <button
                   type="button"
                   className="add-fact-modal__counter-btn"
@@ -139,7 +197,7 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
             className="add-fact-modal__btn add-fact-modal__btn--save"
             onClick={handleSave}
           >
-            сохранить
+            Сохранить
           </button>
         </div>
       </div>

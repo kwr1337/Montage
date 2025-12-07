@@ -501,6 +501,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
           const itemsWithChanges = await Promise.all(
             localProject.nomenclature.map(async (item: any) => {
               let lastChange = null;
+              let factValue = 0;
               
               try {
                 // Получаем историю изменений для этого материала
@@ -515,6 +516,33 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                 // Тихо игнорируем ошибки - материал просто не будет иметь изменений
               }
 
+              try {
+                // Загружаем факты и суммируем их
+                const factsResponse = await apiService.getNomenclatureFacts(localProject.id, item.id, {
+                  per_page: 1000,
+                });
+                
+                let factsData: any[] = [];
+                if (factsResponse?.data?.data && Array.isArray(factsResponse.data.data)) {
+                  factsData = factsResponse.data.data;
+                } else if (factsResponse?.data && Array.isArray(factsResponse.data)) {
+                  factsData = factsResponse.data;
+                } else if (Array.isArray(factsResponse)) {
+                  factsData = factsResponse;
+                }
+
+                // Суммируем все факты (исключая удаленные)
+                factValue = factsData
+                  .filter((fact: any) => !fact.is_deleted)
+                  .reduce((sum: number, fact: any) => {
+                    const amount = Number(fact.amount) || 0;
+                    return sum + amount;
+                  }, 0);
+              } catch (error) {
+                // Игнорируем ошибки загрузки фактов, используем значение из pivot
+                factValue = Number(item?.pivot?.current_amount ?? item?.fact ?? 0);
+              }
+
               return {
                 id: item.id,
                 name: item.name,
@@ -522,7 +550,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                 unit: formatUnit(item.unit),
                 plan: item.pivot?.start_amount || 0,
                 changes: lastChange,
-                fact: 0 // Пока нет данных из мобильной версии
+                fact: Number.isFinite(factValue) ? factValue : 0
               };
             })
           );
@@ -817,18 +845,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       // Отправляем запрос на добавление номенклатуры в проект
       await apiService.addNomenclatureToProject(localProject.id, data.nomenclatureId, data.quantity);
       
-      // Добавляем новую номенклатуру в список
-      const newItem = {
-        id: data.nomenclatureId,
-        name: data.nomenclature,
-        status: 'Активен',
-        unit: formatUnit(data.unit),
-        plan: data.quantity,
-        changes: null,
-        fact: 0
-      };
+      // Обновляем проект, чтобы загрузить новую номенклатуру с фактами
+      const updatedProject = await apiService.getProjectById(localProject.id);
+      const projectData = updatedProject?.data || updatedProject;
       
-      setSpecificationItems(prev => [...prev, newItem]);
+      if (projectData) {
+        setLocalProject(projectData);
+        if (onProjectUpdate) {
+          onProjectUpdate(projectData);
+        }
+      }
     } catch (error) {
       console.error('Ошибка при добавлении номенклатуры:', error);
     }
@@ -847,11 +873,38 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         if (changesResponse && changesResponse.data && Array.isArray(changesResponse.data)) {
           // Форматируем данные для отображения в модальном окне
           // Разворачиваем массив, чтобы последние изменения были первыми
-          const formattedHistory = changesResponse.data.reverse().map((change: any) => ({
-            date: new Date(change.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }),
-            quantity: `${change.amount_change} ${formatUnit(item.unit) || ''}`,
-            changedBy: change.user?.last_name || 'Неизвестно' // TODO: получить данные пользователя из API
-          }));
+          const formattedHistory = changesResponse.data.reverse().map((change: any) => {
+            // Извлекаем данные пользователя из logs
+            let userName = 'Неизвестно';
+            if (change.logs && Array.isArray(change.logs) && change.logs.length > 0) {
+              const log = change.logs[0];
+              // Проверяем наличие объекта user в log
+              if (log.user) {
+                const user = log.user;
+                const lastName = user.last_name || '';
+                const firstName = user.first_name ? user.first_name.charAt(0) + '.' : '';
+                const middleName = user.middle_name ? user.middle_name.charAt(0) + '.' : '';
+                userName = [lastName, firstName, middleName].filter(Boolean).join(' ') || 'Неизвестно';
+              } else if (log.user_id) {
+                // Если есть только user_id, но нет объекта user, оставляем "Неизвестно"
+                // В будущем можно сделать отдельный запрос для получения данных пользователя
+                userName = 'Неизвестно';
+              }
+            } else if (change.user) {
+              // Fallback на старую структуру, если logs нет
+              const user = change.user;
+              const lastName = user.last_name || '';
+              const firstName = user.first_name ? user.first_name.charAt(0) + '.' : '';
+              const middleName = user.middle_name ? user.middle_name.charAt(0) + '.' : '';
+              userName = [lastName, firstName, middleName].filter(Boolean).join(' ') || 'Неизвестно';
+            }
+            
+            return {
+              date: new Date(change.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }),
+              quantity: `${change.amount_change} ${formatUnit(item.unit) || ''}`,
+              changedBy: userName
+            };
+          });
           setNomenclatureHistory(formattedHistory);
         }
       } catch (error) {
@@ -883,11 +936,38 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         const changesResponse = await apiService.getNomenclatureChanges(localProject.id, editingItem.id);
         if (changesResponse && changesResponse.data && Array.isArray(changesResponse.data)) {
           // Разворачиваем массив, чтобы последние изменения были первыми
-          const formattedHistory = changesResponse.data.reverse().map((change: any) => ({
-            date: new Date(change.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }),
-            quantity: `${change.amount_change} ${formatUnit(editingItem.unit) || ''}`,
-            changedBy: change.user?.last_name || 'Неизвестно'
-          }));
+          const formattedHistory = changesResponse.data.reverse().map((change: any) => {
+            // Извлекаем данные пользователя из logs
+            let userName = 'Неизвестно';
+            if (change.logs && Array.isArray(change.logs) && change.logs.length > 0) {
+              const log = change.logs[0];
+              // Проверяем наличие объекта user в log
+              if (log.user) {
+                const user = log.user;
+                const lastName = user.last_name || '';
+                const firstName = user.first_name ? user.first_name.charAt(0) + '.' : '';
+                const middleName = user.middle_name ? user.middle_name.charAt(0) + '.' : '';
+                userName = [lastName, firstName, middleName].filter(Boolean).join(' ') || 'Неизвестно';
+              } else if (log.user_id) {
+                // Если есть только user_id, но нет объекта user, оставляем "Неизвестно"
+                // В будущем можно сделать отдельный запрос для получения данных пользователя
+                userName = 'Неизвестно';
+              }
+            } else if (change.user) {
+              // Fallback на старую структуру, если logs нет
+              const user = change.user;
+              const lastName = user.last_name || '';
+              const firstName = user.first_name ? user.first_name.charAt(0) + '.' : '';
+              const middleName = user.middle_name ? user.middle_name.charAt(0) + '.' : '';
+              userName = [lastName, firstName, middleName].filter(Boolean).join(' ') || 'Неизвестно';
+            }
+            
+            return {
+              date: new Date(change.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }),
+              quantity: `${change.amount_change} ${formatUnit(editingItem.unit) || ''}`,
+              changedBy: userName
+            };
+          });
           setNomenclatureHistory(formattedHistory);
         }
 
@@ -2155,7 +2235,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                       </button>
                     </div>
                     <div className="projects__specification-col">
-                      <span>{item.fact}</span>
+                      <span>{item.fact !== null && item.fact !== undefined ? item.fact.toLocaleString('ru-RU') : '0'}</span>
                     </div>
                   </div>
                 ))}

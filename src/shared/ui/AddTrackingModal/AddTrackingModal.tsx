@@ -43,7 +43,13 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
 
   // Фильтруем сотрудников - показываем только тех, кто еще не в проекте ИЛИ удален из проекта
   // Удаленные сотрудники (с end_working_date) должны снова появляться в списке
+  // НО уволенные сотрудники (is_dismissed === true) не должны отображаться
   const availableEmployees = employees.filter((employee: any) => {
+    // Исключаем уволенных сотрудников
+    if (employee.is_dismissed === true) {
+      return false;
+    }
+    
     const projectEmployee = projectEmployees.find((pe: any) => pe.id === employee.id);
     
     // Если сотрудника нет в проекте - показываем
