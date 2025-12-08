@@ -48,6 +48,10 @@ type AddPaymentModalProps = {
     id: number;
     name: string;
     fullName?: string;
+    user?: {
+      is_dismissed?: boolean;
+    };
+    is_dismissed?: boolean;
   }>;
   editData?: PaymentEditData | null;
 };
