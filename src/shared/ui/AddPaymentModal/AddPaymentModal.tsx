@@ -329,18 +329,24 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
               </div>
               {isEmployeeDropdownOpen && !editData && (
                 <div className="add-payment-modal__dropdown">
-                  {employees.map((emp) => (
-                    <div
-                      key={emp.id}
-                      className="add-payment-modal__dropdown-option"
-                      onClick={() => {
-                        setSelectedEmployeeId(emp.id);
-                        setIsEmployeeDropdownOpen(false);
-                      }}
-                    >
-                      {emp.fullName || emp.name}
-                    </div>
-                  ))}
+                  {employees
+                    .filter((emp) => {
+                      // Исключаем уволенных сотрудников
+                      const isDismissed = emp.user?.is_dismissed === true || emp.is_dismissed === true;
+                      return !isDismissed;
+                    })
+                    .map((emp) => (
+                      <div
+                        key={emp.id}
+                        className="add-payment-modal__dropdown-option"
+                        onClick={() => {
+                          setSelectedEmployeeId(emp.id);
+                          setIsEmployeeDropdownOpen(false);
+                        }}
+                      >
+                        {emp.fullName || emp.name}
+                      </div>
+                    ))}
                 </div>
               )}
             </div>

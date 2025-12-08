@@ -124,7 +124,7 @@ export const EmployeesScreen: React.FC = () => {
     second_name: '',
     phone: '',
     email: '',
-    role: 'Управляющий',
+    role: '',
     work_schedule: '5/2',
     is_dismissed: false,
     employee_status: 'active',

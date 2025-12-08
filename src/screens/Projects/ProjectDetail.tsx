@@ -63,37 +63,6 @@ const EDITABLE_PROJECT_STATUS_OPTIONS = [
 const EDITABLE_PROJECT_STATUS_VALUES = EDITABLE_PROJECT_STATUS_OPTIONS.map((option) => option.value);
 const DEFAULT_EDITABLE_PROJECT_STATUS = EDITABLE_PROJECT_STATUS_OPTIONS[0].value;
 
-// Функция для форматирования единиц измерения
-const formatUnit = (unit: string | null | undefined): string => {
-  if (!unit) return '';
-  
-  const unitTrimmed = unit.trim();
-  const unitLower = unitTrimmed.toLowerCase();
-  
-  // Шт/шт/ШТ -> Шт.
-  if (unitLower === 'шт') {
-    return 'Шт.';
-  }
-  
-  // Литр/литр/ЛИТР/л/Л -> Л
-  if (unitLower === 'литр' || unitLower === 'л') {
-    return 'Л';
-  }
-  
-  // Метр/метр/МЕТР/м/М -> М
-  if (unitLower === 'метр' || unitLower === 'м') {
-    return 'М';
-  }
-  
-  // Если единица уже в правильном формате (Шт., Л, М), возвращаем как есть
-  if (unitTrimmed === 'Шт.' || unitTrimmed === 'Л' || unitTrimmed === 'М') {
-    return unitTrimmed;
-  }
-  
-  // Для всех остальных случаев возвращаем как есть
-  return unitTrimmed;
-};
-
 export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, onProjectUpdate, onProjectCreate, isNew = false }) => {
   const [localProject, setLocalProject] = useState(project);
   // Восстанавливаем activeTab из localStorage при загрузке
@@ -547,7 +516,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                 id: item.id,
                 name: item.name,
                 status: item.is_deleted ? `Удалён\n${new Date(item.deleted_at).toLocaleDateString('ru-RU')}` : 'Активен',
-                unit: formatUnit(item.unit),
+                unit: item.unit || '',
                 plan: item.pivot?.start_amount || 0,
                 changes: lastChange,
                 fact: Number.isFinite(factValue) ? factValue : 0
@@ -901,7 +870,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
             
             return {
               date: new Date(change.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }),
-              quantity: `${change.amount_change} ${formatUnit(item.unit) || ''}`,
+              quantity: `${change.amount_change} ${item.unit || ''}`,
               changedBy: userName
             };
           });
@@ -964,7 +933,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
             
             return {
               date: new Date(change.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }),
-              quantity: `${change.amount_change} ${formatUnit(editingItem.unit) || ''}`,
+              quantity: `${change.amount_change} ${editingItem.unit || ''}`,
               changedBy: userName
             };
           });

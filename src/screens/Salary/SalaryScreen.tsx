@@ -67,7 +67,7 @@ export const SalaryScreen: React.FC = () => {
           : (Array.isArray(response) ? response : []);
         
         const employeesList = users
-          .filter((user: any) => user.is_employee === true)
+          .filter((user: any) => user.is_employee === true && user.is_dismissed !== true)
           .map((user: any) => ({
             id: user.id,
             name: apiService.formatUserName(user),

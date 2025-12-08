@@ -416,23 +416,25 @@ const ImportModal: React.FC<ImportModalProps> = ({
                     Проверка файла...
                   </div>
                 </div>
-              ) : matches.length > 0 ? (
+              ) : uploadedFile ? (
                 <div className="import-modal__matches">
                   <div className="import-modal__matches-header">
                     Найдено совпадений: {matches.length} из {totalItems}
                   </div>
-                  <div className="import-modal__matches-list">
-                    {matches.slice(0, 10).map((match, index) => (
-                      <div key={index} className="import-modal__match-item">
-                        {match}
-                      </div>
-                    ))}
-                    {matches.length > 10 && (
-                      <div className="import-modal__match-item" style={{ fontStyle: 'italic', color: '#919399' }}>
-                        ... и еще {matches.length - 10} совпадений
-                      </div>
-                    )}
-                  </div>
+                  {matches.length > 0 && (
+                    <div className="import-modal__matches-list">
+                      {matches.slice(0, 10).map((match, index) => (
+                        <div key={index} className="import-modal__match-item">
+                          {match}
+                        </div>
+                      ))}
+                      {matches.length > 10 && (
+                        <div className="import-modal__match-item" style={{ fontStyle: 'italic', color: '#919399' }}>
+                          ... и еще {matches.length - 10} совпадений
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : null}
             </div>
