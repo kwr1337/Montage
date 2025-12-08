@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { FC } from 'react';
 import { Sidebar } from '../ui/Sidebar/Sidebar';
 
@@ -21,10 +21,38 @@ export const MainLayout: FC<MainLayoutProps> = ({ onLogout: _onLogout }) => {
     return saved || 'projects';
   });
 
+  // Устанавливаем флаг в sessionStorage при первой загрузке, чтобы отличить перезагрузку от переключения вкладок
+  useEffect(() => {
+    const isPageReload = !sessionStorage.getItem('isInitialized');
+    if (isPageReload) {
+      sessionStorage.setItem('isInitialized', 'true');
+      // При перезагрузке страницы сохраняем текущие значения selectedProjectId и selectedEmployeeId
+      // в sessionStorage, чтобы они не были очищены при переключении вкладок
+      const savedProjectId = localStorage.getItem('selectedProjectId');
+      const savedEmployeeId = localStorage.getItem('selectedEmployeeId');
+      if (savedProjectId) {
+        sessionStorage.setItem('savedProjectId', savedProjectId);
+      }
+      if (savedEmployeeId) {
+        sessionStorage.setItem('savedEmployeeId', savedEmployeeId);
+      }
+    }
+  }, []);
+
   // Обработчик изменения активного пункта меню с сохранением в localStorage
   const handleNavigate = (itemId: string) => {
     setActiveMenuItem(itemId);
     localStorage.setItem('activeMenuItem', itemId);
+    
+    // Очищаем открытые карточки при переключении вкладок (но не при перезагрузке страницы)
+    // Если флаг isInitialized уже установлен, значит это переключение вкладок, а не перезагрузка
+    if (sessionStorage.getItem('isInitialized')) {
+      localStorage.removeItem('selectedProjectId');
+      localStorage.removeItem('selectedEmployeeId');
+      // Также очищаем sessionStorage, чтобы карточки не восстанавливались при возврате на вкладку
+      sessionStorage.removeItem('savedProjectId');
+      sessionStorage.removeItem('savedEmployeeId');
+    }
   };
 
   const renderScreen = () => {

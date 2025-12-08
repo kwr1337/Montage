@@ -56,17 +56,26 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
   const [selectedProjectIds, setSelectedProjectIds] = useState<Set<number>>(new Set());
   const [isArchiving, setIsArchiving] = useState(false);
   // Восстанавливаем selectedProjectId из localStorage при загрузке
+  // При перезагрузке страницы восстанавливаем из sessionStorage (если есть)
+  // При переключении вкладок localStorage будет очищен, поэтому карточка не откроется
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(() => {
+    // Сначала проверяем sessionStorage (для перезагрузки страницы)
+    const savedFromSession = sessionStorage.getItem('savedProjectId');
+    if (savedFromSession) {
+      return parseInt(savedFromSession, 10);
+    }
+    // Затем проверяем localStorage (для обычной навигации)
     const saved = localStorage.getItem('selectedProjectId');
     return saved ? parseInt(saved, 10) : null;
   });
   const [navigationHistory, setNavigationHistory] = useState<ProjectHistoryEntry[]>(() => {
-    const saved = localStorage.getItem('selectedProjectId');
-    const savedId = saved ? parseInt(saved, 10) : null;
+    const savedFromSession = sessionStorage.getItem('savedProjectId');
+    const savedId = savedFromSession ? parseInt(savedFromSession, 10) : (localStorage.getItem('selectedProjectId') ? parseInt(localStorage.getItem('selectedProjectId')!, 10) : null);
     return savedId ? [null, savedId] : [null];
   });
   const [historyIndex, setHistoryIndex] = useState(() => {
-    const saved = localStorage.getItem('selectedProjectId');
+    const savedFromSession = sessionStorage.getItem('savedProjectId');
+    const saved = savedFromSession || localStorage.getItem('selectedProjectId');
     return saved ? 1 : 0;
   });
   const [currentPage, setCurrentPage] = useState(1);
@@ -398,24 +407,31 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
   useEffect(() => {
     const fetchProjectDetails = async () => {
       if (selectedProjectId) {
+        // Сначала показываем данные из локального списка (если есть) для мгновенного отображения
+        const localProject = projects.find(p => p.id === selectedProjectId);
+        if (localProject) {
+          setSelectedProject(localProject);
+        }
+        
         setIsLoadingProject(true);
         try {
+          // Параллельно загружаем полные данные с сервера
           const response = await apiService.getProjectById(selectedProjectId);
           
           if (response && response.data) {
             setSelectedProject(response.data);
           } else if (response) {
             setSelectedProject(response);
-          } else {
-            // Если не удалось загрузить с сервера, ищем в локальном списке
-            const localProject = projects.find(p => p.id === selectedProjectId);
-            setSelectedProject(localProject || null);
+          } else if (!localProject) {
+            // Если не удалось загрузить с сервера и нет локальных данных
+            setSelectedProject(null);
           }
         } catch (error) {
           console.error('Error fetching project details:', error);
-          // Fallback к локальному списку
-          const localProject = projects.find(p => p.id === selectedProjectId);
-          setSelectedProject(localProject || null);
+          // Если ошибка и нет локальных данных, очищаем
+          if (!localProject) {
+            setSelectedProject(null);
+          }
         } finally {
           setIsLoadingProject(false);
           setIsCreatingProject(false);

@@ -629,21 +629,30 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
 
       await apiService.updateProject(localProject.id, updateData);
 
-      const updatedProjectResponse = await apiService.getProjectById(localProject.id);
+      // Оптимистичное обновление - обновляем локальное состояние сразу
+      const optimisticUpdate = {
+        ...localProject,
+        name: trimmedName,
+        status: editedStatus,
+      };
+      setLocalProject(optimisticUpdate);
+      if (onProjectUpdate) {
+        onProjectUpdate(optimisticUpdate);
+      }
 
-      if (updatedProjectResponse && updatedProjectResponse.data) {
-        const updatedProject = updatedProjectResponse.data;
-        setLocalProject(updatedProject);
-
-        if (onProjectUpdate) {
-          onProjectUpdate(updatedProject);
+      // Перезагружаем с сервера в фоне для синхронизации (не блокируем UI)
+      try {
+        const updatedProjectResponse = await apiService.getProjectById(localProject.id);
+        if (updatedProjectResponse && updatedProjectResponse.data) {
+          const updatedProject = updatedProjectResponse.data;
+          setLocalProject(updatedProject);
+          if (onProjectUpdate) {
+            onProjectUpdate(updatedProject);
+          }
         }
-      } else {
-        setLocalProject((prev: any) => ({
-          ...prev,
-          name: trimmedName,
-          status: editedStatus,
-        }));
+      } catch (error) {
+        console.error('Error refreshing project after update:', error);
+        // Оставляем оптимистичное обновление
       }
 
       setIsEditingHeader(false);
@@ -754,21 +763,31 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     try {
       await apiService.updateProject(localProject.id, basePayload);
 
-      const updatedProjectResponse = await apiService.getProjectById(localProject.id);
-      if (updatedProjectResponse && updatedProjectResponse.data) {
-        const updatedProject = updatedProjectResponse.data;
-        setLocalProject(updatedProject);
+      // Оптимистичное обновление - обновляем локальное состояние сразу
+      const optimisticUpdate = {
+        ...localProject,
+        name: trimmedName,
+        status: statusForSave,
+        project_manager_id: effectiveProjectManagerId,
+      };
+      setLocalProject(optimisticUpdate);
+      if (onProjectUpdate) {
+        onProjectUpdate(optimisticUpdate);
+      }
 
-        if (onProjectUpdate) {
-          onProjectUpdate(updatedProject);
+      // Перезагружаем с сервера в фоне для синхронизации (не блокируем UI)
+      try {
+        const updatedProjectResponse = await apiService.getProjectById(localProject.id);
+        if (updatedProjectResponse && updatedProjectResponse.data) {
+          const updatedProject = updatedProjectResponse.data;
+          setLocalProject(updatedProject);
+          if (onProjectUpdate) {
+            onProjectUpdate(updatedProject);
+          }
         }
-      } else {
-        setLocalProject((prev: any) => ({
-          ...prev,
-          name: trimmedName,
-          status: statusForSave,
-          project_manager_id: effectiveProjectManagerId,
-        }));
+      } catch (error) {
+        console.error('Error refreshing project after update:', error);
+        // Оставляем оптимистичное обновление
       }
     } catch (error) {
       // Ошибка обработана без уведомления пользователя
@@ -964,15 +983,38 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       // Обрабатываем каждую строку из файла
       for (const row of parsedData) {
         // Ищем номенклатуру по названию в общем списке
-        const nomenclatureItem = allNomenclature.find((item: any) => {
+        let nomenclatureItem = allNomenclature.find((item: any) => {
           const itemName = String(item.name || '').toLowerCase().trim();
           const rowName = row.nomenclature.toLowerCase().trim();
           return itemName === rowName;
         });
 
+        // Если номенклатура не найдена - создаём её в общей номенклатуре
         if (!nomenclatureItem) {
-          console.warn(`Номенклатура "${row.nomenclature}" не найдена в системе, пропускаем`);
-          continue;
+          try {
+            console.log(`Создаём номенклатуру "${row.nomenclature}" в общей номенклатуре`);
+            const createResponse = await apiService.createNomenclature({
+              name: row.nomenclature,
+              unit: row.unit || '',
+              price: 1, // По умолчанию цена 1, можно будет изменить позже
+              description: '',
+            });
+            
+            // Получаем созданную номенклатуру из ответа
+            const createdNomenclature = createResponse?.data || createResponse;
+            if (createdNomenclature && createdNomenclature.id) {
+              nomenclatureItem = createdNomenclature;
+              // Добавляем в локальный список, чтобы не создавать повторно
+              allNomenclature.push(nomenclatureItem);
+              console.log(`Номенклатура "${row.nomenclature}" успешно создана с ID: ${nomenclatureItem.id}`);
+            } else {
+              console.error(`Не удалось создать номенклатуру "${row.nomenclature}"`);
+              continue;
+            }
+          } catch (error: any) {
+            console.error(`Ошибка при создании номенклатуры "${row.nomenclature}":`, error);
+            continue;
+          }
         }
 
         // Проверяем, есть ли эта номенклатура уже в проекте

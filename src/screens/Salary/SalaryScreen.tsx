@@ -350,17 +350,24 @@ export const SalaryScreen: React.FC = () => {
     // Фильтр по статусу выплаты
     if (paymentStatus !== 'all') {
       filtered = filtered.filter((payment) => {
-        const totalPaid = (payment.first_payment_amount || 0) + 
-                         (payment.second_payment_amount || 0) + 
-                         (payment.third_payment_amount || 0);
         const total = payment.total || 0;
-        const balance = total - totalPaid;
+        const firstAmount = payment.first_payment_amount || 0;
+        const secondAmount = payment.second_payment_amount || 0;
+        const balance = Math.max(0, total - firstAmount - secondAmount);
+        
+        // Проверяем, есть ли "ожидание по выплате" (не заполненные поля)
+        const hasFirstPending = !payment.first_payment_amount;
+        const hasSecondPending = !payment.second_payment_amount;
+        const hasThirdPending = !payment.third_payment_amount && balance > 0;
+        const hasAnyPending = hasFirstPending || hasSecondPending || hasThirdPending;
         
         if (paymentStatus === 'paid') {
-          return balance <= 0;
+          // "Оплачено" - нигде нет ожидания по выплате
+          return !hasAnyPending;
         }
         if (paymentStatus === 'pending') {
-          return balance > 0;
+          // "Ожидание" - хотя бы в одном месте есть ожидание по выплате
+          return hasAnyPending;
         }
         return true;
       });

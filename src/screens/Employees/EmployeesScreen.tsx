@@ -64,17 +64,26 @@ const updateEmployeeEndDateInAllProjects = async (employeeId: number, dismissalD
 
 export const EmployeesScreen: React.FC = () => {
   // Состояние для выбранного сотрудника
+  // При перезагрузке страницы восстанавливаем из sessionStorage (если есть)
+  // При переключении вкладок localStorage будет очищен, поэтому карточка не откроется
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(() => {
+    // Сначала проверяем sessionStorage (для перезагрузки страницы)
+    const savedFromSession = sessionStorage.getItem('savedEmployeeId');
+    if (savedFromSession) {
+      return parseInt(savedFromSession, 10);
+    }
+    // Затем проверяем localStorage (для обычной навигации)
     const saved = localStorage.getItem('selectedEmployeeId');
     return saved ? parseInt(saved, 10) : null;
   });
   const [navigationHistory, setNavigationHistory] = useState<EmployeeHistoryEntry[]>(() => {
-    const saved = localStorage.getItem('selectedEmployeeId');
-    const savedId = saved ? parseInt(saved, 10) : null;
+    const savedFromSession = sessionStorage.getItem('savedEmployeeId');
+    const savedId = savedFromSession ? parseInt(savedFromSession, 10) : (localStorage.getItem('selectedEmployeeId') ? parseInt(localStorage.getItem('selectedEmployeeId')!, 10) : null);
     return savedId ? [null, savedId] : [null];
   });
   const [historyIndex, setHistoryIndex] = useState(() => {
-    const saved = localStorage.getItem('selectedEmployeeId');
+    const savedFromSession = sessionStorage.getItem('savedEmployeeId');
+    const saved = savedFromSession || localStorage.getItem('selectedEmployeeId');
     return saved ? 1 : 0;
   });
   const [employees, setEmployees] = useState<any[]>([]);

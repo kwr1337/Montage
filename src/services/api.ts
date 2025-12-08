@@ -305,6 +305,24 @@ class ApiService {
     return response;
   }
 
+  // Создать номенклатуру в общей номенклатуре
+  async createNomenclature(data: { name: string; unit: string; price: number; description?: string }): Promise<any> {
+    const response = await this.request<any>('/nomenclature', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        name: data.name,
+        unit: data.unit,
+        price: data.price,
+        description: data.description || '',
+      }),
+    });
+    return response;
+  }
+
   // Добавить номенклатуру в проект
   async addNomenclatureToProject(projectId: number, nomenclatureId: number, startAmount: number): Promise<any> {
     const response = await this.request<any>(`/projects/${projectId}/nomenclature/${nomenclatureId}/add`, {
