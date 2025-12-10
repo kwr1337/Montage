@@ -45,42 +45,48 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
   }, [existingFact, isOpen]);
 
   const handleIncrement = () => {
-    const newValue = quantity + 1;
+    const newValue = parseFloat((quantity + 0.1).toFixed(1));
     setQuantity(newValue);
     setQuantityInput(String(newValue));
   };
 
   const handleDecrement = () => {
-    const newValue = Math.max(0, quantity - 1);
+    const newValue = Math.max(0, parseFloat((quantity - 0.1).toFixed(1)));
     setQuantity(newValue);
     setQuantityInput(String(newValue));
   };
 
   const handleQuantityInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+    let value = e.target.value;
+    // Заменяем запятую на точку для корректного парсинга
+    value = value.replace(',', '.');
     setQuantityInput(value);
     
-    // Парсим значение и обновляем quantity
-    const numericValue = value === '' ? 0 : Number(value);
+    // Парсим значение и обновляем quantity (поддерживаем дробные числа)
+    const numericValue = value === '' ? 0 : parseFloat(value);
     if (!isNaN(numericValue) && numericValue >= 0) {
       setQuantity(numericValue);
     }
   };
 
   const handleQuantityInputBlur = () => {
-    // При потере фокуса нормализуем значение
-    const numericValue = quantityInput === '' ? 0 : Number(quantityInput);
+    // При потере фокуса нормализуем значение (поддерживаем дробные числа)
+    const normalizedInput = quantityInput.replace(',', '.');
+    const numericValue = normalizedInput === '' ? 0 : parseFloat(normalizedInput);
     if (isNaN(numericValue) || numericValue < 0) {
       setQuantity(0);
       setQuantityInput('0');
     } else {
       setQuantity(numericValue);
+      // Сохраняем формат с точкой для корректного отображения
       setQuantityInput(String(numericValue));
     }
   };
 
   const handleSave = () => {
-    const finalQuantity = quantityInput === '' ? 0 : Number(quantityInput);
+    // Поддерживаем дробные числа (заменяем запятую на точку)
+    const normalizedInput = quantityInput.replace(',', '.');
+    const finalQuantity = normalizedInput === '' ? 0 : parseFloat(normalizedInput);
     if (isNaN(finalQuantity) || finalQuantity < 0) {
       return; // Не сохраняем некорректное значение
     }
@@ -162,12 +168,13 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
                 <input
                   type="number"
                   min="0"
-                  step="1"
+                  step="0.1"
                   value={quantityInput}
                   onChange={handleQuantityInputChange}
                   onBlur={handleQuantityInputBlur}
                   className="add-fact-modal__counter-input"
                   aria-label="Количество"
+                  inputMode="decimal"
                 />
                 <button
                   type="button"

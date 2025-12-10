@@ -27,8 +27,9 @@ const AddNomenclatureModal: React.FC<AddNomenclatureModalProps> = ({
     nomenclatureId: 0,
     nomenclature: '',
     unit: '',
-    quantity: 100,
+    quantity: 100 as number | string,
   });
+  const [error, setError] = useState<string>('');
 
   // Загружаем номенклатуру при открытии модального окна
   useEffect(() => {
@@ -73,6 +74,7 @@ const AddNomenclatureModal: React.FC<AddNomenclatureModalProps> = ({
       unit: nomenclature.unit,
     });
     setIsDropdownOpen(false);
+    setError(''); // Очищаем ошибку при выборе номенклатуры
   };
 
   const handleInputChange = (field: string, value: string | number) => {
@@ -83,20 +85,35 @@ const AddNomenclatureModal: React.FC<AddNomenclatureModalProps> = ({
   };
 
   const handleSubmit = () => {
-    if (formData.nomenclatureId && formData.quantity > 0) {
-      onAdd(formData);
-      onClose();
-      // Сброс формы
-      setFormData({
-        nomenclatureId: 0,
-        nomenclature: '',
-        unit: '',
-        quantity: 100,
-      });
+    // Валидация
+    if (!formData.nomenclatureId || formData.nomenclatureId === 0) {
+      setError('Необходимо выбрать номенклатуру');
+      return;
     }
+    const quantityValue = typeof formData.quantity === 'string' ? parseFloat(formData.quantity) : formData.quantity;
+    if (!quantityValue || quantityValue <= 0 || isNaN(quantityValue)) {
+      setError('Необходимо ввести количество больше нуля');
+      return;
+    }
+    
+    // Очищаем ошибку при успешной валидации
+    setError('');
+    onAdd({
+      ...formData,
+      quantity: quantityValue,
+    });
+    onClose();
+    // Сброс формы
+    setFormData({
+      nomenclatureId: 0,
+      nomenclature: '',
+      unit: '',
+      quantity: 100,
+    });
   };
 
   const handleCancel = () => {
+    setError('');
     onClose();
     // Сброс формы
     setFormData({
@@ -182,12 +199,26 @@ const AddNomenclatureModal: React.FC<AddNomenclatureModalProps> = ({
             <label className="add-nomenclature-modal__label">Введите кол-во</label>
             <input
               type="number"
+              step="0.1"
+              min="0"
               className="add-nomenclature-modal__input add-nomenclature-modal__input--quantity"
               value={formData.quantity}
-              onChange={(e) => handleInputChange('quantity', parseInt(e.target.value) || 0)}
+              onChange={(e) => {
+                const value = e.target.value;
+                // Разрешаем пустую строку и любые числовые значения (включая дробные)
+                if (value === '' || !isNaN(Number(value))) {
+                  handleInputChange('quantity', value === '' ? '' : parseFloat(value) || 0);
+                  setError(''); // Очищаем ошибку при изменении поля
+                }
+              }}
               placeholder="100"
             />
           </div>
+          {error && (
+            <div className="add-nomenclature-modal__error">
+              {error}
+            </div>
+          )}
         </div>
 
         <div className="add-nomenclature-modal__actions">

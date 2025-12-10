@@ -814,7 +814,18 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
 
         <div className="projects__table">
           <div className="projects__table-header">
-            <div className="projects__table-header-col">
+            <div 
+              className="projects__table-header-col"
+              onClick={(e) => {
+                // Не сортируем, если клик был на чекбокс
+                if ((e.target as HTMLElement).tagName === 'INPUT') {
+                  return;
+                }
+                e.stopPropagation();
+                handleSort('id');
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <input 
                 type="checkbox" 
                 className="projects__checkbox"
@@ -834,89 +845,96 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                 src={upDownTableFilter} 
                 alt="↑↓" 
                 className={`projects__sort-icon ${sortField === 'id' ? 'projects__sort-icon--active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSort('id');
-                }}
-                style={{ cursor: 'pointer' }}
               />
             </div>
-            <div className="projects__table-header-col">
+            <div 
+              className="projects__table-header-col"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSort('name');
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <span>Наименование</span>
               <img 
                 src={upDownTableFilter} 
                 alt="↑↓" 
                 className={`projects__sort-icon ${sortField === 'name' ? 'projects__sort-icon--active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSort('name');
-                }}
-                style={{ cursor: 'pointer' }}
               />
             </div>
-            <div className="projects__table-header-col">
+            <div 
+              className="projects__table-header-col"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSort('status');
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <span>Статус</span>
               <img 
                 src={upDownTableFilter} 
                 alt="↑↓" 
                 className={`projects__sort-icon ${sortField === 'status' ? 'projects__sort-icon--active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSort('status');
-                }}
-                style={{ cursor: 'pointer' }}
               />
             </div>
-            <div className="projects__table-header-col">
+            <div 
+              className="projects__table-header-col"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSort('dates');
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <span>Сроки</span>
               <img 
                 src={upDownTableFilter} 
                 alt="↑↓" 
                 className={`projects__sort-icon ${sortField === 'dates' ? 'projects__sort-icon--active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSort('dates');
-                }}
-                style={{ cursor: 'pointer' }}
               />
             </div>
-            <div className="projects__table-header-col">
+            <div 
+              className="projects__table-header-col"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSort('foreman');
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <span>Ответ. бригадир</span>
               <img 
                 src={upDownTableFilter} 
                 alt="↑↓" 
                 className={`projects__sort-icon ${sortField === 'foreman' ? 'projects__sort-icon--active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSort('foreman');
-                }}
-                style={{ cursor: 'pointer' }}
               />
             </div>
-            <div className="projects__table-header-col">
+            <div 
+              className="projects__table-header-col"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSort('employees');
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <span>Сотрудники</span>
               <img 
                 src={upDownTableFilter} 
                 alt="↑↓" 
                 className={`projects__sort-icon ${sortField === 'employees' ? 'projects__sort-icon--active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSort('employees');
-                }}
-                style={{ cursor: 'pointer' }}
               />
             </div>
-            <div className="projects__table-header-col">
+            <div 
+              className="projects__table-header-col"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSort('spent');
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <span>Расход ФОТ</span>
               <img 
                 src={upDownTableFilter} 
                 alt="↑↓" 
                 className={`projects__sort-icon ${sortField === 'spent' ? 'projects__sort-icon--active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSort('spent');
-                }}
-                style={{ cursor: 'pointer' }}
               />
             </div>
           </div>

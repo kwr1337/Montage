@@ -189,6 +189,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   
   // Данные для спецификации - берем из localProject.nomenclature
   const [specificationItems, setSpecificationItems] = useState<any[]>([]);
+  const [specificationSortField, setSpecificationSortField] = useState<string | null>(null);
+  const [specificationSortDirection, setSpecificationSortDirection] = useState<'asc' | 'desc'>('asc');
 
   // Выбранные элементы для удаления
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
@@ -197,6 +199,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
 
   // Данные для фиксации работ - формируем из реальных сотрудников проекта
   const [trackingItems, setTrackingItems] = useState<any[]>([]);
+  const [trackingSortField, setTrackingSortField] = useState<string | null>(null);
+  const [trackingSortDirection, setTrackingSortDirection] = useState<'asc' | 'desc'>('asc');
 
   // Вспомогательная функция для фильтрации активных (не удаленных) сотрудников
   const getActiveEmployees = (employees: any[]) => {
@@ -1546,11 +1550,149 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     return `${day} ${month} ${year}`;
   };
 
+  // Функция сортировки для спецификации
+  const handleSpecificationSort = (field: string | null) => {
+    if (specificationSortField === field) {
+      setSpecificationSortDirection(specificationSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSpecificationSortField(field);
+      setSpecificationSortDirection('asc');
+    }
+  };
+
+  // Сортировка спецификации
+  const sortedSpecificationItems = React.useMemo(() => {
+    const sorted = [...specificationItems];
+    if (specificationSortField) {
+      sorted.sort((a, b) => {
+        let aValue: any;
+        let bValue: any;
+        
+        switch (specificationSortField) {
+          case 'id':
+            aValue = a.id || 0;
+            bValue = b.id || 0;
+            break;
+          case 'name':
+            aValue = (a.name || '').toLowerCase();
+            bValue = (b.name || '').toLowerCase();
+            break;
+          case 'status':
+            aValue = (a.status || '').toLowerCase();
+            bValue = (b.status || '').toLowerCase();
+            break;
+          case 'unit':
+            aValue = (a.unit || '').toLowerCase();
+            bValue = (b.unit || '').toLowerCase();
+            break;
+          case 'plan':
+            aValue = Number(a.plan) || 0;
+            bValue = Number(b.plan) || 0;
+            break;
+          case 'changes':
+            aValue = Number(a.changes) || 0;
+            bValue = Number(b.changes) || 0;
+            break;
+          case 'fact':
+            aValue = Number(a.fact) || 0;
+            bValue = Number(b.fact) || 0;
+            break;
+          default:
+            return 0;
+        }
+        
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return specificationSortDirection === 'asc' 
+            ? aValue.localeCompare(bValue, 'ru')
+            : bValue.localeCompare(aValue, 'ru');
+        } else {
+          return specificationSortDirection === 'asc' 
+            ? aValue - bValue
+            : bValue - aValue;
+        }
+      });
+    }
+    return sorted;
+  }, [specificationItems, specificationSortField, specificationSortDirection]);
+
+  // Функция сортировки для фиксации работ
+  const handleTrackingSort = (field: string | null) => {
+    if (trackingSortField === field) {
+      setTrackingSortDirection(trackingSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setTrackingSortField(field);
+      setTrackingSortDirection('asc');
+    }
+  };
+
+  // Сортировка фиксации работ
+  const sortedTrackingItems = React.useMemo(() => {
+    const sorted = [...trackingItems];
+    if (trackingSortField) {
+      sorted.sort((a, b) => {
+        let aValue: any;
+        let bValue: any;
+        
+        switch (trackingSortField) {
+          case 'name':
+            aValue = (a.name || '').toLowerCase();
+            bValue = (b.name || '').toLowerCase();
+            break;
+          case 'status':
+            aValue = (a.status || '').toLowerCase();
+            bValue = (b.status || '').toLowerCase();
+            break;
+          case 'start':
+            aValue = a.startWorkingDate ? new Date(a.startWorkingDate).getTime() : 0;
+            bValue = b.startWorkingDate ? new Date(b.startWorkingDate).getTime() : 0;
+            break;
+          case 'days':
+            aValue = Number(a.daysInProject) || 0;
+            bValue = Number(b.daysInProject) || 0;
+            break;
+          case 'hours':
+            aValue = Number(a.hours) || 0;
+            bValue = Number(b.hours) || 0;
+            break;
+          case 'lastHours':
+            aValue = Number(a.lastHours) || 0;
+            bValue = Number(b.lastHours) || 0;
+            break;
+          case 'rate':
+            aValue = Number(a.rate) || 0;
+            bValue = Number(b.rate) || 0;
+            break;
+          case 'lastSum':
+            aValue = Number(a.lastSum) || 0;
+            bValue = Number(b.lastSum) || 0;
+            break;
+          case 'totalSum':
+            aValue = Number(a.totalSum) || 0;
+            bValue = Number(b.totalSum) || 0;
+            break;
+          default:
+            return 0;
+        }
+        
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return trackingSortDirection === 'asc' 
+            ? aValue.localeCompare(bValue, 'ru')
+            : bValue.localeCompare(aValue, 'ru');
+        } else {
+          return trackingSortDirection === 'asc' 
+            ? aValue - bValue
+            : bValue - aValue;
+        }
+      });
+    }
+    return sorted;
+  }, [trackingItems, trackingSortField, trackingSortDirection]);
+
   // Пагинация для спецификации
-  const totalPages = Math.ceil(specificationItems.length / itemsPerPage);
+  const totalPages = Math.ceil(sortedSpecificationItems.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedItems = specificationItems.slice(startIndex, endIndex);
+  const paginatedItems = sortedSpecificationItems.slice(startIndex, endIndex);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -2168,37 +2310,114 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                       onChange={(e) => handleSelectAll(e.target.checked)}
                     />
                   </div>
-                  <div className="projects__specification-header-col">
+                  <div 
+                    className="projects__specification-header-col"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSpecificationSort('id');
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <span>ID</span>
-                    <img src={upDownTableFilter} alt="↑↓" className="projects__sort-icon" />
+                    <img 
+                      src={upDownTableFilter} 
+                      alt="↑↓" 
+                      className={`projects__sort-icon ${specificationSortField === 'id' ? 'projects__sort-icon--active' : ''}`} 
+                    />
                   </div>
-                  <div className="projects__specification-header-col">
+                  <div 
+                    className="projects__specification-header-col"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSpecificationSort('name');
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <span>Номенклатура</span>
-                    <img src={upDownTableFilter} alt="↑↓" className="projects__sort-icon" />
+                    <img 
+                      src={upDownTableFilter} 
+                      alt="↑↓" 
+                      className={`projects__sort-icon ${specificationSortField === 'name' ? 'projects__sort-icon--active' : ''}`} 
+                    />
                   </div>
-                  <div className="projects__specification-header-col">
+                  <div 
+                    className="projects__specification-header-col"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSpecificationSort('status');
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <span>Статус</span>
-                    <img src={upDownTableFilter} alt="↑↓" className="projects__sort-icon" />
+                    <img 
+                      src={upDownTableFilter} 
+                      alt="↑↓" 
+                      className={`projects__sort-icon ${specificationSortField === 'status' ? 'projects__sort-icon--active' : ''}`} 
+                    />
                   </div>
-                  <div className="projects__specification-header-col">
+                  <div 
+                    className="projects__specification-header-col"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSpecificationSort('unit');
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <span>Ед. изм.</span>
-                    <img src={upDownTableFilter} alt="↑↓" className="projects__sort-icon" />
+                    <img 
+                      src={upDownTableFilter} 
+                      alt="↑↓" 
+                      className={`projects__sort-icon ${specificationSortField === 'unit' ? 'projects__sort-icon--active' : ''}`} 
+                    />
                   </div>
-                  <div className="projects__specification-header-col">
+                  <div 
+                    className="projects__specification-header-col"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSpecificationSort('plan');
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <span>Кол-во</span>
-                    <img src={upDownTableFilter} alt="↑↓" className="projects__sort-icon" />
+                    <img 
+                      src={upDownTableFilter} 
+                      alt="↑↓" 
+                      className={`projects__sort-icon ${specificationSortField === 'plan' ? 'projects__sort-icon--active' : ''}`} 
+                    />
                   </div>
-                  <div className="projects__specification-header-col">
+                  <div 
+                    className="projects__specification-header-col"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSpecificationSort('changes');
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <span>Кол-во</span>
-                    <img src={upDownTableFilter} alt="↑↓" className="projects__sort-icon" />
+                    <img 
+                      src={upDownTableFilter} 
+                      alt="↑↓" 
+                      className={`projects__sort-icon ${specificationSortField === 'changes' ? 'projects__sort-icon--active' : ''}`} 
+                    />
                   </div>
                   <div className="projects__specification-header-col">
                     <span>Действие</span>
                     <img src={upDownTableFilter} alt="↑↓" className="projects__sort-icon" />
                   </div>
-                  <div className="projects__specification-header-col">
+                  <div 
+                    className="projects__specification-header-col"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSpecificationSort('fact');
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <span>Кол-во</span>
-                    <img src={upDownTableFilter} alt="↑↓" className="projects__sort-icon" />
+                    <img 
+                      src={upDownTableFilter} 
+                      alt="↑↓" 
+                      className={`projects__sort-icon ${specificationSortField === 'fact' ? 'projects__sort-icon--active' : ''}`} 
+                    />
                   </div>
                 </div>
 
@@ -2257,7 +2476,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
               <div className="projects__specification-bottom-actions" style={{ flexShrink: 0 }}>
                 {/* Пагинация слева */}
                 <div className="projects__specification-pagination">
-                  {specificationItems.length > itemsPerPage && (
+                  {sortedSpecificationItems.length > itemsPerPage && (
                     <Pagination
                       currentPage={currentPage}
                       totalPages={totalPages}
@@ -2295,47 +2514,151 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
               <div className="projects__tracking-table">
                 {/* Заголовок таблицы */}
                 <div className="projects__tracking-header" style={{ flexShrink: 0 }}>
-                  <div className="projects__tracking-header-col">
+                  <div 
+                    className="projects__tracking-header-col"
+                    onClick={(e) => {
+                      // Не сортируем, если клик был на чекбокс
+                      if ((e.target as HTMLElement).tagName === 'INPUT') {
+                        return;
+                      }
+                      e.stopPropagation();
+                      handleTrackingSort('name');
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <input 
                       type="checkbox" 
                       className="projects__checkbox"
                       checked={trackingItems.length > 0 && selectedItems.size === trackingItems.length}
                       onChange={handleSelectAllEmployees}
+                      onClick={(e) => e.stopPropagation()}
                     />
                     <span>ФИО</span>
-                    <img src={upDownTableFilter} alt="↑↓" className="projects__sort-icon" />
+                    <img 
+                      src={upDownTableFilter} 
+                      alt="↑↓" 
+                      className={`projects__sort-icon ${trackingSortField === 'name' ? 'projects__sort-icon--active' : ''}`} 
+                    />
                   </div>
-                  <div className="projects__tracking-header-col">
+                  <div 
+                    className="projects__tracking-header-col"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTrackingSort('status');
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <span>Статус</span>
-                    <img src={upDownTableFilter} alt="↑↓" className="projects__sort-icon" />
+                    <img 
+                      src={upDownTableFilter} 
+                      alt="↑↓" 
+                      className={`projects__sort-icon ${trackingSortField === 'status' ? 'projects__sort-icon--active' : ''}`} 
+                    />
                   </div>
-                  <div className="projects__tracking-header-col">
+                  <div 
+                    className="projects__tracking-header-col"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTrackingSort('start');
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <span>Начало</span>
-                    <img src={upDownTableFilter} alt="↑↓" className="projects__sort-icon" />
+                    <img 
+                      src={upDownTableFilter} 
+                      alt="↑↓" 
+                      className={`projects__sort-icon ${trackingSortField === 'start' ? 'projects__sort-icon--active' : ''}`} 
+                    />
                   </div>
-                  <div className="projects__tracking-header-col">
+                  <div 
+                    className="projects__tracking-header-col"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTrackingSort('days');
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <span>Дней</span>
-                    <img src={upDownTableFilter} alt="↑↓" className="projects__sort-icon" />
+                    <img 
+                      src={upDownTableFilter} 
+                      alt="↑↓" 
+                      className={`projects__sort-icon ${trackingSortField === 'days' ? 'projects__sort-icon--active' : ''}`} 
+                    />
                   </div>
-                  <div className="projects__tracking-header-col">
+                  <div 
+                    className="projects__tracking-header-col"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTrackingSort('hours');
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <span>Часов</span>
-                    <img src={upDownTableFilter} alt="↑↓" className="projects__sort-icon" />
+                    <img 
+                      src={upDownTableFilter} 
+                      alt="↑↓" 
+                      className={`projects__sort-icon ${trackingSortField === 'hours' ? 'projects__sort-icon--active' : ''}`} 
+                    />
                   </div>
-                  <div className="projects__tracking-header-col">
+                  <div 
+                    className="projects__tracking-header-col"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTrackingSort('lastHours');
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <span>Часов (посл.)</span>
-                    <img src={upDownTableFilter} alt="↑↓" className="projects__sort-icon" />
+                    <img 
+                      src={upDownTableFilter} 
+                      alt="↑↓" 
+                      className={`projects__sort-icon ${trackingSortField === 'lastHours' ? 'projects__sort-icon--active' : ''}`} 
+                    />
                   </div>
-                  <div className="projects__tracking-header-col">
+                  <div 
+                    className="projects__tracking-header-col"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTrackingSort('rate');
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <span>Ставка, руб/час</span>
-                    <img src={upDownTableFilter} alt="↑↓" className="projects__sort-icon" />
+                    <img 
+                      src={upDownTableFilter} 
+                      alt="↑↓" 
+                      className={`projects__sort-icon ${trackingSortField === 'rate' ? 'projects__sort-icon--active' : ''}`} 
+                    />
                   </div>
-                  <div className="projects__tracking-header-col">
+                  <div 
+                    className="projects__tracking-header-col"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTrackingSort('lastSum');
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <span>Сумма (посл.)</span>
-                    <img src={upDownTableFilter} alt="↑↓" className="projects__sort-icon" />
+                    <img 
+                      src={upDownTableFilter} 
+                      alt="↑↓" 
+                      className={`projects__sort-icon ${trackingSortField === 'lastSum' ? 'projects__sort-icon--active' : ''}`} 
+                    />
                   </div>
-                  <div className="projects__tracking-header-col">
+                  <div 
+                    className="projects__tracking-header-col"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTrackingSort('totalSum');
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <span>Сумма (всего)</span>
-                    <img src={upDownTableFilter} alt="↑↓" className="projects__sort-icon" />
+                    <img 
+                      src={upDownTableFilter} 
+                      alt="↑↓" 
+                      className={`projects__sort-icon ${trackingSortField === 'totalSum' ? 'projects__sort-icon--active' : ''}`} 
+                    />
                   </div>
                 </div>
 
@@ -2345,7 +2668,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                   // Пагинация для trackingItems
                   const trackingStartIndex = (trackingCurrentPage - 1) * trackingItemsPerPage;
                   const trackingEndIndex = trackingStartIndex + trackingItemsPerPage;
-                  const paginatedTrackingItems = trackingItems.slice(trackingStartIndex, trackingEndIndex);
+                  const paginatedTrackingItems = sortedTrackingItems.slice(trackingStartIndex, trackingEndIndex);
                   
                   return paginatedTrackingItems.map((item) => (
                   <div
@@ -2440,7 +2763,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                 {/* Пагинация снизу справа */}
                 <div className="projects__tracking-total-pagination">
                   {(() => {
-                    const trackingTotalPages = Math.ceil(trackingItems.length / trackingItemsPerPage);
+                    const trackingTotalPages = Math.ceil(sortedTrackingItems.length / trackingItemsPerPage);
                     return trackingTotalPages > 1 && (
                       <Pagination
                         currentPage={trackingCurrentPage}

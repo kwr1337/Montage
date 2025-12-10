@@ -18,7 +18,7 @@
   display: flex;
   flex-direction: column;
   width: 509px;
-  height: 269px;
+  min-height: 269px;
   position: relative;
   
 
@@ -63,6 +63,18 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    flex: 1;
+    min-height: 0;
+  }
+
+  &__error {
+    color: #ff3333;
+    font-size: 12px;
+    margin-top: 8px;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    max-width: 100%;
+    padding: 0 4px;
   }
 
   &__row {

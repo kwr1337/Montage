@@ -3,8 +3,6 @@ import dashboardIconGrey from '../../icons/dashboardIconGrey.svg';
 import dashboardIconWhite from '../../icons/dashboardIconWhite.svg';
 import menuIconGrey from '../../icons/menuIconGrey.svg';
 import menuIconWhite from '../../icons/menuIconWhite.svg';
-import calendarIconGrey from '../../icons/calendarIconGrey.svg';
-import calendarIconWhite from '../../icons/calendarIconWhite.svg';
 import sotrudnikiIconGrey from '../../icons/sotrudnikiIconGrey.svg';
 import sotrudnikiIconWhite from '../../icons/sotrudnikiIconWhite.svg';
 import nomenculaturaIconGrey from '../../icons/nomenculaturaIconGrey.svg';
@@ -25,7 +23,6 @@ type MenuItem = {
 const menuItems: MenuItem[] = [
   { id: 'dashboard', label: 'Дашборд', iconGrey: dashboardIconGrey, iconWhite: dashboardIconWhite },
   { id: 'projects', label: 'Проекты', iconGrey: menuIconGrey, iconWhite: menuIconWhite },
-  { id: 'calendar', label: 'Календарь', iconGrey: calendarIconGrey, iconWhite: calendarIconWhite },
   { id: 'employees', label: 'Сотрудники', iconGrey: sotrudnikiIconGrey, iconWhite: sotrudnikiIconWhite },
   { id: 'nomenclature', label: 'Номенклатура', iconGrey: nomenculaturaIconGrey, iconWhite: nomenculaturaIconWhite },
   { id: 'reports', label: 'Отчеты', iconGrey: otchetIconGrey, iconWhite: otchetIconWhite },

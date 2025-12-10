@@ -114,37 +114,6 @@ const formatForemanName = (employee: any) => {
   return [last_name, first_name, second_name].filter(Boolean).join(' ') || 'Не назначен';
 };
 
-// Функция для форматирования единиц измерения
-const formatUnit = (unit: string | null | undefined): string => {
-  if (!unit) return '';
-  
-  const unitTrimmed = unit.trim();
-  const unitLower = unitTrimmed.toLowerCase();
-  
-  // Шт/шт/ШТ -> Шт.
-  if (unitLower === 'шт') {
-    return 'Шт.';
-  }
-  
-  // Литр/литр/ЛИТР/л/Л -> Л
-  if (unitLower === 'литр' || unitLower === 'л') {
-    return 'Л';
-  }
-  
-  // Метр/метр/МЕТР/м/М -> М
-  if (unitLower === 'метр' || unitLower === 'м') {
-    return 'М';
-  }
-  
-  // Если единица уже в правильном формате (Шт., Л, М), возвращаем как есть
-  if (unitTrimmed === 'Шт.' || unitTrimmed === 'Л' || unitTrimmed === 'М') {
-    return unitTrimmed;
-  }
-  
-  // Для всех остальных случаев возвращаем как есть
-  return unitTrimmed;
-};
-
 const getSpecificationStatusMeta = (item: any) => {
   if (item?.is_deleted) {
     const date = item?.deleted_at ? new Date(item.deleted_at).toLocaleDateString('ru-RU') : null;
@@ -177,6 +146,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   const foremanDropdownRef = useRef<HTMLDivElement | null>(null);
   const [specificationItems, setSpecificationItems] = useState<SpecificationItem[]>([]);
   const [isSpecificationLoading, setIsSpecificationLoading] = useState(false);
+  const [specificationSortField, setSpecificationSortField] = useState<string | null>(null);
+  const [specificationSortDirection, setSpecificationSortDirection] = useState<'asc' | 'desc'>('asc');
 
   // Отладочная информация (можно удалить после проверки)
   useEffect(() => {
@@ -201,6 +172,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   const [existingFact, setExistingFact] = useState<{ id: number; amount: number; fact_date: string } | null>(null);
   const [trackingItems, setTrackingItems] = useState<any[]>([]);
   const [isTrackingLoading, setIsTrackingLoading] = useState(false);
+  const [trackingSortField, setTrackingSortField] = useState<string | null>(null);
+  const [trackingSortDirection, setTrackingSortDirection] = useState<'asc' | 'desc'>('asc');
   const [isHoursModalOpen, setIsHoursModalOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<any | null>(null);
   const [trackedDates, setTrackedDates] = useState<string[]>([]);
@@ -390,7 +363,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
             return {
               id: item.id,
               name: item.name || '—',
-              unit: formatUnit(item.unit) || '—',
+              unit: item.unit || '—',
               plan: Number.isFinite(planValue) ? planValue : 0,
               changes: lastChange,
               fact: Number.isFinite(factValue) ? factValue : 0,
@@ -857,7 +830,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           return {
             id: item.id,
             name: item.name || '—',
-            unit: formatUnit(item.unit) || '—',
+              unit: item.unit || '—',
             plan: Number.isFinite(planValue) ? planValue : 0,
             changes: lastChange,
             fact: Number.isFinite(factValue) ? factValue : 0,
@@ -933,6 +906,132 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     setIsCommentModalOpen(false);
     setSelectedComment(null);
   };
+
+  // Функция сортировки для спецификации
+  const handleSpecificationSort = (field: string | null) => {
+    if (specificationSortField === field) {
+      setSpecificationSortDirection(specificationSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSpecificationSortField(field);
+      setSpecificationSortDirection('asc');
+    }
+  };
+
+  // Сортировка спецификации
+  const sortedSpecificationItems = useMemo(() => {
+    const sorted = [...specificationItems];
+    if (specificationSortField) {
+      sorted.sort((a, b) => {
+        let aValue: any;
+        let bValue: any;
+        
+        switch (specificationSortField) {
+          case 'id':
+            aValue = a.id || 0;
+            bValue = b.id || 0;
+            break;
+          case 'name':
+            aValue = (a.name || '').toLowerCase();
+            bValue = (b.name || '').toLowerCase();
+            break;
+          case 'status':
+            aValue = (a.statusLabel || '').toLowerCase();
+            bValue = (b.statusLabel || '').toLowerCase();
+            break;
+          case 'unit':
+            aValue = (a.unit || '').toLowerCase();
+            bValue = (b.unit || '').toLowerCase();
+            break;
+          case 'plan':
+            aValue = Number(a.plan) || 0;
+            bValue = Number(b.plan) || 0;
+            break;
+          case 'changes':
+            aValue = Number(a.changes) || 0;
+            bValue = Number(b.changes) || 0;
+            break;
+          case 'fact':
+            aValue = Number(a.fact) || 0;
+            bValue = Number(b.fact) || 0;
+            break;
+          default:
+            return 0;
+        }
+        
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return specificationSortDirection === 'asc' 
+            ? aValue.localeCompare(bValue, 'ru')
+            : bValue.localeCompare(aValue, 'ru');
+        } else {
+          return specificationSortDirection === 'asc' 
+            ? aValue - bValue
+            : bValue - aValue;
+        }
+      });
+    }
+    return sorted;
+  }, [specificationItems, specificationSortField, specificationSortDirection]);
+
+  // Функция сортировки для фиксации работ
+  const handleTrackingSort = (field: string | null) => {
+    if (trackingSortField === field) {
+      setTrackingSortDirection(trackingSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setTrackingSortField(field);
+      setTrackingSortDirection('asc');
+    }
+  };
+
+  // Сортировка фиксации работ
+  const sortedTrackingItems = useMemo(() => {
+    const sorted = [...trackingItems];
+    if (trackingSortField) {
+      sorted.sort((a, b) => {
+        let aValue: any;
+        let bValue: any;
+        
+        switch (trackingSortField) {
+          case 'id':
+            aValue = a.id || 0;
+            bValue = b.id || 0;
+            break;
+          case 'name':
+            aValue = (a.employeeName || '').toLowerCase();
+            bValue = (b.employeeName || '').toLowerCase();
+            break;
+          case 'date':
+            aValue = a.date ? new Date(a.date + 'T00:00:00').getTime() : 0;
+            bValue = b.date ? new Date(b.date + 'T00:00:00').getTime() : 0;
+            break;
+          case 'hours':
+            aValue = Number(a.hours) || 0;
+            bValue = Number(b.hours) || 0;
+            break;
+          case 'rate':
+            aValue = Number(a.hourlyRate) || 0;
+            bValue = Number(b.hourlyRate) || 0;
+            break;
+          case 'sum':
+            aValue = Number(a.totalSum) || 0;
+            bValue = Number(b.totalSum) || 0;
+            break;
+          default:
+            return 0;
+        }
+        
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return trackingSortDirection === 'asc' 
+            ? aValue.localeCompare(bValue, 'ru')
+            : bValue.localeCompare(aValue, 'ru');
+        } else {
+          return trackingSortDirection === 'asc' 
+            ? aValue - bValue
+            : bValue - aValue;
+        }
+      });
+    }
+    return sorted;
+  }, [trackingItems, trackingSortField, trackingSortDirection]);
 
   const handleSaveHours = async (_hours: number, _date: string, _isAbsent: boolean, _reason?: string) => {
     // API вызов теперь выполняется в AddHoursModal
@@ -1169,31 +1268,59 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                       {/* <div className="mobile-project-detail__specification-header-col mobile-project-detail__specification-header-col--checkbox">
                         <input type="checkbox" disabled />
                       </div> */}
-                      <div className="mobile-project-detail__specification-header-col mobile-project-detail__specification-header-col--id">
+                      <div 
+                        className="mobile-project-detail__specification-header-col mobile-project-detail__specification-header-col--id"
+                        onClick={() => handleSpecificationSort('id')}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <span>ID</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
-                      <div className="mobile-project-detail__specification-header-col mobile-project-detail__specification-header-col--name">
+                      <div 
+                        className="mobile-project-detail__specification-header-col mobile-project-detail__specification-header-col--name"
+                        onClick={() => handleSpecificationSort('name')}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <span>Номенклатура</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
-                      <div className="mobile-project-detail__specification-header-col">
+                      <div 
+                        className="mobile-project-detail__specification-header-col"
+                        onClick={() => handleSpecificationSort('status')}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <span>Статус</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
-                      <div className="mobile-project-detail__specification-header-col">
+                      <div 
+                        className="mobile-project-detail__specification-header-col"
+                        onClick={() => handleSpecificationSort('unit')}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <span>Ед. изм.</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
-                      <div className="mobile-project-detail__specification-header-col mobile-project-detail__specification-header-col--number">
+                      <div 
+                        className="mobile-project-detail__specification-header-col mobile-project-detail__specification-header-col--number"
+                        onClick={() => handleSpecificationSort('plan')}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <span>Кол-во</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
-                      <div className="mobile-project-detail__specification-header-col mobile-project-detail__specification-header-col--number">
+                      <div 
+                        className="mobile-project-detail__specification-header-col mobile-project-detail__specification-header-col--number"
+                        onClick={() => handleSpecificationSort('changes')}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <span>Кол-во</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
-                      <div className="mobile-project-detail__specification-header-col mobile-project-detail__specification-header-col--number">
+                      <div 
+                        className="mobile-project-detail__specification-header-col mobile-project-detail__specification-header-col--number"
+                        onClick={() => handleSpecificationSort('fact')}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <span>Кол-во</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
@@ -1204,7 +1331,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                     </div>
 
                     <div className="mobile-project-detail__specification-body">
-                      {specificationItems.map((item) => (
+                      {sortedSpecificationItems.map((item) => (
                         <div key={item.id} className="mobile-project-detail__specification-row">
                           {/* <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--checkbox">
                             <input type="checkbox" disabled />
@@ -1262,27 +1389,51 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                 <div className="mobile-project-detail__tracking-table-wrapper">
                   <div className="mobile-project-detail__tracking-table">
                     <div className="mobile-project-detail__tracking-header">
-                      <div className="mobile-project-detail__tracking-header-col">
+                      <div 
+                        className="mobile-project-detail__tracking-header-col"
+                        onClick={() => handleTrackingSort('id')}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <span>ID</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
-                      <div className="mobile-project-detail__tracking-header-col">
+                      <div 
+                        className="mobile-project-detail__tracking-header-col"
+                        onClick={() => handleTrackingSort('name')}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <span>ФИО сотрудника</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
-                      <div className="mobile-project-detail__tracking-header-col">
+                      <div 
+                        className="mobile-project-detail__tracking-header-col"
+                        onClick={() => handleTrackingSort('date')}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <span>Дата</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
-                      <div className="mobile-project-detail__tracking-header-col">
+                      <div 
+                        className="mobile-project-detail__tracking-header-col"
+                        onClick={() => handleTrackingSort('hours')}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <span>Кол-во часов</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
-                      <div className="mobile-project-detail__tracking-header-col">
+                      <div 
+                        className="mobile-project-detail__tracking-header-col"
+                        onClick={() => handleTrackingSort('rate')}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <span>Ставка в час</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
-                      <div className="mobile-project-detail__tracking-header-col">
+                      <div 
+                        className="mobile-project-detail__tracking-header-col"
+                        onClick={() => handleTrackingSort('sum')}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <span>Сумма</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
@@ -1293,7 +1444,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                     </div>
 
                     <div className="mobile-project-detail__tracking-body">
-                      {trackingItems.map((item) => (
+                      {sortedTrackingItems.map((item) => (
                         <div key={item.id} className="mobile-project-detail__tracking-row">
                           <div className="mobile-project-detail__tracking-col">
                             <span>{item.id}</span>
@@ -1425,4 +1576,3 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     </div>
   );
 };
-

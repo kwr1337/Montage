@@ -44,7 +44,8 @@ export const SalaryScreen: React.FC = () => {
   const [searchValue, setSearchValue] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [paymentStatus, setPaymentStatus] = useState<string>('all');
+  // const [paymentStatus, setPaymentStatus] = useState<string>('all');
+  // const paymentStatus = 'all'; // Временно отключен фильтр по статусу
   const dateFromRef = React.useRef<HTMLInputElement>(null);
   const dateToRef = React.useRef<HTMLInputElement>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -348,30 +349,30 @@ export const SalaryScreen: React.FC = () => {
     }
 
     // Фильтр по статусу выплаты
-    if (paymentStatus !== 'all') {
-      filtered = filtered.filter((payment) => {
-        const total = payment.total || 0;
-        const firstAmount = payment.first_payment_amount || 0;
-        const secondAmount = payment.second_payment_amount || 0;
-        const balance = Math.max(0, total - firstAmount - secondAmount);
-        
-        // Проверяем, есть ли "ожидание по выплате" (не заполненные поля)
-        const hasFirstPending = !payment.first_payment_amount;
-        const hasSecondPending = !payment.second_payment_amount;
-        const hasThirdPending = !payment.third_payment_amount && balance > 0;
-        const hasAnyPending = hasFirstPending || hasSecondPending || hasThirdPending;
-        
-        if (paymentStatus === 'paid') {
-          // "Оплачено" - нигде нет ожидания по выплате
-          return !hasAnyPending;
-        }
-        if (paymentStatus === 'pending') {
-          // "Ожидание" - хотя бы в одном месте есть ожидание по выплате
-          return hasAnyPending;
-        }
-        return true;
-      });
-    }
+    // if (paymentStatus !== 'all') {
+    //   filtered = filtered.filter((payment) => {
+    //     const total = payment.total || 0;
+    //     const firstAmount = payment.first_payment_amount || 0;
+    //     const secondAmount = payment.second_payment_amount || 0;
+    //     const balance = Math.max(0, total - firstAmount - secondAmount);
+    //     
+    //     // Проверяем, есть ли "ожидание по выплате" (не заполненные поля)
+    //     const hasFirstPending = !payment.first_payment_amount;
+    //     const hasSecondPending = !payment.second_payment_amount;
+    //     const hasThirdPending = !payment.third_payment_amount && balance > 0;
+    //     const hasAnyPending = hasFirstPending || hasSecondPending || hasThirdPending;
+    //     
+    //     if (paymentStatus === 'paid') {
+    //       // "Оплачено" - нигде нет ожидания по выплате
+    //       return !hasAnyPending;
+    //     }
+    //     if (paymentStatus === 'pending') {
+    //       // "Ожидание" - хотя бы в одном месте есть ожидание по выплате
+    //       return hasAnyPending;
+    //     }
+    //     return true;
+    //   });
+    // }
 
     // Фильтр по дате
     if (dateFrom || dateTo) {
@@ -417,7 +418,7 @@ export const SalaryScreen: React.FC = () => {
     }
 
     return filtered;
-  }, [payments, searchValue, paymentStatus, dateFrom, dateTo]);
+  }, [payments, searchValue, dateFrom, dateTo]);
 
   // Пагинация
   const paginatedPayments = useMemo(() => {
@@ -664,17 +665,17 @@ export const SalaryScreen: React.FC = () => {
               </div>
             </div>
 
-            <div className="salary__status-filter">
+            {/* <div className="salary__status-filter">
               <select
                 className="salary__status-select"
-                value={paymentStatus}
-                onChange={(e) => setPaymentStatus(e.target.value)}
+                value="all"
+                onChange={(e) => {}}
               >
                 <option value="all">Статус выплаты</option>
                 <option value="paid">Оплачено</option>
                 <option value="pending">Ожидание</option>
               </select>
-            </div>
+            </div> */}
           </div>
 
           <div className="salary__actions">

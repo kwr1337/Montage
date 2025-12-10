@@ -740,7 +740,18 @@ export const EmployeesScreen: React.FC = () => {
         <div className="employees__table">
           {/* Заголовок таблицы */}
           <div className="employees__table-header">
-            <div className="employees__table-header-col employees__table-header-col--id">
+            <div 
+              className="employees__table-header-col employees__table-header-col--id"
+              onClick={(e) => {
+                // Не сортируем, если клик был на чекбокс
+                if ((e.target as HTMLElement).tagName === 'INPUT') {
+                  return;
+                }
+                e.stopPropagation();
+                handleSort('id');
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <input 
                 type="checkbox" 
                 className="employees__checkbox"
@@ -760,68 +771,72 @@ export const EmployeesScreen: React.FC = () => {
                 src={upDownTableFilter} 
                 alt="↑↓" 
                 className={`employees__sort-icon ${sortField === 'id' ? 'employees__sort-icon--active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSort('id');
-                }}
-                style={{ cursor: 'pointer' }}
               />
             </div>
-            <div className="employees__table-header-col employees__table-header-col--name">
+            <div 
+              className="employees__table-header-col employees__table-header-col--name"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSort('name');
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <span>Сотрудник</span>
               <img 
                 src={upDownTableFilter} 
                 alt="↑↓" 
                 className={`employees__sort-icon ${sortField === 'name' ? 'employees__sort-icon--active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSort('name');
-                }}
-                style={{ cursor: 'pointer' }}
               />
             </div>
-            <div className="employees__table-header-col employees__table-header-col--email">
+            <div 
+              className="employees__table-header-col employees__table-header-col--email"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSort('email');
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <span>Электронная почта</span>
               <img 
                 src={upDownTableFilter} 
                 alt="↑↓" 
                 className={`employees__sort-icon ${sortField === 'email' ? 'employees__sort-icon--active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSort('email');
-                }}
-                style={{ cursor: 'pointer' }}
               />
             </div>
-            <div className="employees__table-header-col employees__table-header-col--status">
+            <div 
+              className="employees__table-header-col employees__table-header-col--status"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSort('status');
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <span>Статус</span>
               <img 
                 src={upDownTableFilter} 
                 alt="↑↓" 
                 className={`employees__sort-icon ${sortField === 'status' ? 'employees__sort-icon--active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSort('status');
-                }}
-                style={{ cursor: 'pointer' }}
               />
             </div>
-            <div className="employees__table-header-col employees__table-header-col--date">
+            <div 
+              className="employees__table-header-col employees__table-header-col--date"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSort('employment_date');
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <span>Дата трудоустройства</span>
               <img 
                 src={upDownTableFilter} 
                 alt="↑↓" 
                 className={`employees__sort-icon ${sortField === 'employment_date' ? 'employees__sort-icon--active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSort('employment_date');
-                }}
-                style={{ cursor: 'pointer' }}
               />
             </div>
           </div>
 
           {/* Строки таблицы */}
+          <div className="employees__table-body">
           {isLoading ? (
             <div className="employees__loading">Загрузка...</div>
           ) : paginatedEmployees.length === 0 ? (
@@ -904,6 +919,7 @@ export const EmployeesScreen: React.FC = () => {
               );
             })
           )}
+          </div>
         </div>
 
         {/* Пагинация */}

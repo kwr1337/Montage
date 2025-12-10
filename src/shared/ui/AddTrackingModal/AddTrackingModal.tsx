@@ -31,6 +31,7 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
   });
   const [isEmployeeDropdownOpen, setIsEmployeeDropdownOpen] = useState(false);
   const dateInputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string>('');
 
   // Функция для форматирования имени пользователя (должна быть определена до использования)
   const formatUserName = (user: any) => {
@@ -81,18 +82,37 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
     handleInputChange('employeeName', employeeName);
     handleInputChange('rate', ratePerHour.toString());
     setIsEmployeeDropdownOpen(false);
+    setError(''); // Очищаем ошибку при выборе сотрудника
   };
 
   const handleSubmit = async () => {
-    if (!formData.employeeId || !formData.rate || !formData.startDate) {
-      return; // Валидация - все поля должны быть заполнены
+    // Валидация
+    if (!formData.employeeId || formData.employeeId === 0) {
+      setError('Необходимо выбрать сотрудника');
+      return;
     }
+    if (!formData.rate || formData.rate.trim() === '') {
+      setError('Необходимо ввести ставку в час');
+      return;
+    }
+    const rateValue = parseFloat(formData.rate.replace(/\s/g, '').replace('₽', ''));
+    if (isNaN(rateValue) || rateValue <= 0) {
+      setError('Ставка должна быть числом больше нуля');
+      return;
+    }
+    if (!formData.startDate) {
+      setError('Необходимо выбрать дату входа в проект');
+      return;
+    }
+
+    // Очищаем ошибку при успешной валидации
+    setError('');
 
     try {
       await onAdd({
         employeeId: formData.employeeId,
         employeeName: formData.employeeName,
-        rate: parseFloat(formData.rate.replace(/\s/g, '').replace('₽', '')) || 0,
+        rate: rateValue,
         startDate: formData.startDate,
       });
       
@@ -113,6 +133,7 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
   };
 
   const handleCancel = () => {
+    setError('');
     onClose();
     // Сброс формы
     setFormData({
@@ -195,7 +216,10 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
                   type="date"
                   className="add-tracking-modal__date-input"
                   value={formData.startDate}
-                  onChange={(e) => handleInputChange('startDate', e.target.value)}
+                  onChange={(e) => {
+                    handleInputChange('startDate', e.target.value);
+                    setError(''); // Очищаем ошибку при изменении даты
+                  }}
                   min={today}
                   onClick={(e) => e.stopPropagation()}
                 />
@@ -208,11 +232,19 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
                 type="text"
                 className="add-tracking-modal__input add-tracking-modal__input--rate"
                 value={formData.rate}
-                onChange={(e) => handleInputChange('rate', e.target.value)}
+                onChange={(e) => {
+                  handleInputChange('rate', e.target.value);
+                  setError(''); // Очищаем ошибку при изменении поля
+                }}
                 placeholder="950 ₽"
               />
             </div>
           </div>
+          {error && (
+            <div className="add-tracking-modal__error">
+              {error}
+            </div>
+          )}
         </div>
 
         <div className="add-tracking-modal__actions">

@@ -7,7 +7,6 @@ type MainLayoutProps = {
 };
 import { ProjectsScreen } from '../../screens/Projects/ProjectsScreen';
 import { DashboardScreen } from '../../screens/Dashboard/DashboardScreen';
-import { CalendarScreen } from '../../screens/Calendar/CalendarScreen';
 import { EmployeesScreen } from '../../screens/Employees/EmployeesScreen';
 import { NomenclatureScreen } from '../../screens/Nomenclature/NomenclatureScreen';
 import { ReportsScreen } from '../../screens/Reports/ReportsScreen';
@@ -18,6 +17,11 @@ export const MainLayout: FC<MainLayoutProps> = ({ onLogout: _onLogout }) => {
   // Восстанавливаем activeMenuItem из localStorage при загрузке
   const [activeMenuItem, setActiveMenuItem] = useState(() => {
     const saved = localStorage.getItem('activeMenuItem');
+    // Если сохранен 'calendar', перенаправляем на 'projects'
+    if (saved === 'calendar') {
+      localStorage.setItem('activeMenuItem', 'projects');
+      return 'projects';
+    }
     return saved || 'projects';
   });
 
@@ -61,8 +65,6 @@ export const MainLayout: FC<MainLayoutProps> = ({ onLogout: _onLogout }) => {
         return <DashboardScreen />;
       case 'projects':
         return <ProjectsScreen />;
-      case 'calendar':
-        return <CalendarScreen />;
       case 'employees':
         return <EmployeesScreen />;
       case 'nomenclature':
