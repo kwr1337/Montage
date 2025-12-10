@@ -3,6 +3,7 @@ import { apiService } from '../../services/api';
 import menuIconGrey from '../../shared/icons/menuIconGrey.svg';
 import editMobIcon from '../../shared/icons/editMob.svg';
 import exitMobIcon from '../../shared/icons/exitMob.svg';
+import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
 import { ProjectDetailMobile } from './ProjectDetailMobile';
 import './projects-mobile.scss';
 
@@ -104,6 +105,8 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [selectedProject, setSelectedProject] = useState<any | null>(null);
   const [isProjectLoading, setIsProjectLoading] = useState(false);
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [isPortrait, setIsPortrait] = useState(() => {
     if (typeof window !== 'undefined') {
       return window.innerHeight > window.innerWidth;
@@ -209,6 +212,63 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
     });
   }, [projects, search]);
 
+  // Функция обработки сортировки
+  const handleSort = (field: string | null) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Сортировка проектов
+  const sortedProjects = useMemo(() => {
+    const sorted = [...filteredProjects];
+    if (sortField) {
+      sorted.sort((a, b) => {
+        let aValue: any;
+        let bValue: any;
+        
+        switch (sortField) {
+          case 'id':
+            aValue = a.id || 0;
+            bValue = b.id || 0;
+            break;
+          case 'name':
+            aValue = (a.name || '').toLowerCase();
+            bValue = (b.name || '').toLowerCase();
+            break;
+          case 'dates':
+            aValue = a.start_date ? new Date(a.start_date).getTime() : 0;
+            bValue = b.start_date ? new Date(b.start_date).getTime() : 0;
+            break;
+          case 'foreman':
+            aValue = getForemanName(a).toLowerCase();
+            bValue = getForemanName(b).toLowerCase();
+            break;
+          case 'employees':
+            aValue = getActiveEmployeesCount(a);
+            bValue = getActiveEmployeesCount(b);
+            break;
+          default:
+            return 0;
+        }
+        
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return sortDirection === 'asc' 
+            ? aValue.localeCompare(bValue, 'ru')
+            : bValue.localeCompare(aValue, 'ru');
+        } else {
+          return sortDirection === 'asc' 
+            ? aValue - bValue
+            : bValue - aValue;
+        }
+      });
+    }
+    return sorted;
+  }, [filteredProjects, sortField, sortDirection]);
+
   const handleOpenProject = async (projectId: number) => {
     setSelectedProjectId(projectId);
     const fallbackProject = projects.find((project) => project.id === projectId) || { id: projectId };
@@ -267,7 +327,7 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
           </div> */}
        <section className="mobile-projects__header">
           <h1>
-            Проекты <span>· {filteredProjects.length}</span>
+            Проекты <span>· {sortedProjects.length}</span>
           </h1>
         </section>
 
@@ -314,16 +374,46 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
             <table className="mobile-projects__table">
               <thead>
                 <tr>
-                  <th>ID</th>
-                  <th>Наименование</th>
-                  <th>Сроки</th>
-                  <th>Ответственный бригадир</th>
-                  <th>Сотрудников в проекте</th>
+                  <th 
+                    onClick={() => handleSort('id')}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <span>ID</span>
+                    <img src={upDownTableFilter} alt="" aria-hidden="true" />
+                  </th>
+                  <th 
+                    onClick={() => handleSort('name')}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <span>Наименование</span>
+                    <img src={upDownTableFilter} alt="" aria-hidden="true" />
+                  </th>
+                  <th 
+                    onClick={() => handleSort('dates')}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <span>Сроки</span>
+                    <img src={upDownTableFilter} alt="" aria-hidden="true" />
+                  </th>
+                  <th 
+                    onClick={() => handleSort('foreman')}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <span>Ответственный бригадир</span>
+                    <img src={upDownTableFilter} alt="" aria-hidden="true" />
+                  </th>
+                  <th 
+                    onClick={() => handleSort('employees')}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <span>Сотрудников в проекте</span>
+                    <img src={upDownTableFilter} alt="" aria-hidden="true" />
+                  </th>
                   <th aria-label="Действия" />
                 </tr>
               </thead>
               <tbody>
-                {filteredProjects.map((project) => {
+                {sortedProjects.map((project) => {
                   const employeesCount = getActiveEmployeesCount(project);
                   const yearsLabel = getYearsLabel(project.start_date, project.end_date);
                   const periodLabel = getPeriodLabel(project.start_date, project.end_date);
