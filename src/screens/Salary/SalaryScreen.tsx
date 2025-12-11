@@ -57,6 +57,8 @@ export const SalaryScreen: React.FC = () => {
   const [isAddPaymentModalOpen, setIsAddPaymentModalOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [employees, setEmployees] = useState<any[]>([]);
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   // Загрузка сотрудников
   useEffect(() => {
@@ -420,19 +422,93 @@ export const SalaryScreen: React.FC = () => {
     return filtered;
   }, [payments, searchValue, dateFrom, dateTo]);
 
+  // Обработчик сортировки
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Сортировка выплат
+  const sortedPayments = useMemo(() => {
+    const sorted = [...filteredPayments];
+    if (sortField) {
+      sorted.sort((a, b) => {
+        let aValue: any;
+        let bValue: any;
+        
+        switch (sortField) {
+          case 'employee':
+            aValue = (a.employeeName || '').toLowerCase();
+            bValue = (b.employeeName || '').toLowerCase();
+            break;
+          case 'hours':
+            aValue = Number(a.hours) || 0;
+            bValue = Number(b.hours) || 0;
+            break;
+          case 'rate':
+            aValue = Number(a.rate) || 0;
+            bValue = Number(b.rate) || 0;
+            break;
+          case 'total':
+            aValue = Number(a.total) || 0;
+            bValue = Number(b.total) || 0;
+            break;
+          case 'firstPayment':
+            aValue = Number(a.first_payment_amount) || 0;
+            bValue = Number(b.first_payment_amount) || 0;
+            break;
+          case 'secondPayment':
+            aValue = Number(a.second_payment_amount) || 0;
+            bValue = Number(b.second_payment_amount) || 0;
+            break;
+          case 'balance':
+            const aTotal = Number(a.total) || 0;
+            const aFirst = Number(a.first_payment_amount) || 0;
+            const aSecond = Number(a.second_payment_amount) || 0;
+            const aThird = Number(a.third_payment_amount) || 0;
+            aValue = aThird > 0 ? aThird : Math.max(0, aTotal - aFirst - aSecond);
+            
+            const bTotal = Number(b.total) || 0;
+            const bFirst = Number(b.first_payment_amount) || 0;
+            const bSecond = Number(b.second_payment_amount) || 0;
+            const bThird = Number(b.third_payment_amount) || 0;
+            bValue = bThird > 0 ? bThird : Math.max(0, bTotal - bFirst - bSecond);
+            break;
+          default:
+            return 0;
+        }
+        
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return sortDirection === 'asc' 
+            ? aValue.localeCompare(bValue, 'ru')
+            : bValue.localeCompare(aValue, 'ru');
+        } else {
+          return sortDirection === 'asc' 
+            ? aValue - bValue
+            : bValue - aValue;
+        }
+      });
+    }
+    return sorted;
+  }, [filteredPayments, sortField, sortDirection]);
+
   // Пагинация
   const paginatedPayments = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
-    return filteredPayments.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredPayments, currentPage, itemsPerPage]);
+    return sortedPayments.slice(startIndex, startIndex + itemsPerPage);
+  }, [sortedPayments, currentPage, itemsPerPage]);
 
-  // Обновление totalPages при изменении filteredPayments
+  // Обновление totalPages при изменении sortedPayments
   useEffect(() => {
-    setTotalPages(Math.ceil(filteredPayments.length / itemsPerPage));
-    if (currentPage > Math.ceil(filteredPayments.length / itemsPerPage) && filteredPayments.length > 0) {
+    setTotalPages(Math.ceil(sortedPayments.length / itemsPerPage));
+    if (currentPage > Math.ceil(sortedPayments.length / itemsPerPage) && sortedPayments.length > 0) {
       setCurrentPage(1);
     }
-  }, [filteredPayments.length, itemsPerPage]);
+  }, [sortedPayments.length, itemsPerPage]);
 
   const handleSelectPayment = (paymentId: number) => {
     const newSelected = new Set(selectedPaymentIds);
@@ -489,8 +565,8 @@ export const SalaryScreen: React.FC = () => {
   const handleExportToExcel = () => {
     // Определяем, какие данные экспортировать: выбранные или все
     const dataToExport = selectedPaymentIds.size > 0
-      ? filteredPayments.filter((p) => selectedPaymentIds.has(p.id))
-      : filteredPayments;
+      ? sortedPayments.filter((p) => selectedPaymentIds.has(p.id))
+      : sortedPayments;
 
     if (dataToExport.length === 0) {
       alert('Нет данных для экспорта');
@@ -700,47 +776,109 @@ export const SalaryScreen: React.FC = () => {
           <>
             <div className="salary__table">
               <div className="salary__table-header">
-                <div className="salary__table-header-col salary__table-header-col--employee">
+                <div 
+                  className="salary__table-header-col salary__table-header-col--employee"
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest('input') || (e.target as HTMLElement).tagName === 'INPUT') {
+                      return;
+                    }
+                    handleSort('employee');
+                  }}
+                  style={{ cursor: 'pointer' }}
+                >
                   <input
                     type="checkbox"
                     className="salary__checkbox"
                     checked={paginatedPayments.length > 0 && paginatedPayments.every((p) => selectedPaymentIds.has(p.id))}
                     onChange={handleSelectAll}
+                    onClick={(e) => e.stopPropagation()}
                   />
                   <span>Сотрудник</span>
-                  <img src={upDownTableFilter} alt="↑↓" className="salary__sort-icon" />
+                  <img 
+                    src={upDownTableFilter} 
+                    alt="↑↓" 
+                    className={`salary__sort-icon ${sortField === 'employee' ? 'salary__sort-icon--active' : ''}`}
+                  />
                 </div>
-                <div className="salary__table-header-col salary__table-header-col--hours">
+                <div 
+                  className="salary__table-header-col salary__table-header-col--hours"
+                  onClick={() => handleSort('hours')}
+                  style={{ cursor: 'pointer' }}
+                >
                   <span>Кол-во часов</span>
-                  <img src={upDownTableFilter} alt="↑↓" className="salary__sort-icon" />
+                  <img 
+                    src={upDownTableFilter} 
+                    alt="↑↓" 
+                    className={`salary__sort-icon ${sortField === 'hours' ? 'salary__sort-icon--active' : ''}`}
+                  />
                 </div>
-                <div className="salary__table-header-col salary__table-header-col--rate">
+                <div 
+                  className="salary__table-header-col salary__table-header-col--rate"
+                  onClick={() => handleSort('rate')}
+                  style={{ cursor: 'pointer' }}
+                >
                   <span>Ставка, ₽/час</span>
-                  <img src={upDownTableFilter} alt="↑↓" className="salary__sort-icon" />
+                  <img 
+                    src={upDownTableFilter} 
+                    alt="↑↓" 
+                    className={`salary__sort-icon ${sortField === 'rate' ? 'salary__sort-icon--active' : ''}`}
+                  />
                 </div>
-                <div className="salary__table-header-col salary__table-header-col--total">
+                <div 
+                  className="salary__table-header-col salary__table-header-col--total"
+                  onClick={() => handleSort('total')}
+                  style={{ cursor: 'pointer' }}
+                >
                   <span>Всего</span>
-                  <img src={upDownTableFilter} alt="↑↓" className="salary__sort-icon" />
+                  <img 
+                    src={upDownTableFilter} 
+                    alt="↑↓" 
+                    className={`salary__sort-icon ${sortField === 'total' ? 'salary__sort-icon--active' : ''}`}
+                  />
                 </div>
-                <div className="salary__table-header-col salary__table-header-col--payment">
+                <div 
+                  className="salary__table-header-col salary__table-header-col--payment"
+                  onClick={() => handleSort('firstPayment')}
+                  style={{ cursor: 'pointer' }}
+                >
                   <span>1-я выплата</span>
-                  <img src={upDownTableFilter} alt="↑↓" className="salary__sort-icon" />
+                  <img 
+                    src={upDownTableFilter} 
+                    alt="↑↓" 
+                    className={`salary__sort-icon ${sortField === 'firstPayment' ? 'salary__sort-icon--active' : ''}`}
+                  />
                 </div>
                 <div className="salary__table-header-col salary__table-header-col--method">
                   <span>Способ</span>
                   <img src={upDownTableFilter} alt="↑↓" className="salary__sort-icon" />
                 </div>
-                <div className="salary__table-header-col salary__table-header-col--payment">
+                <div 
+                  className="salary__table-header-col salary__table-header-col--payment"
+                  onClick={() => handleSort('secondPayment')}
+                  style={{ cursor: 'pointer' }}
+                >
                   <span>2-я выплата</span>
-                  <img src={upDownTableFilter} alt="↑↓" className="salary__sort-icon" />
+                  <img 
+                    src={upDownTableFilter} 
+                    alt="↑↓" 
+                    className={`salary__sort-icon ${sortField === 'secondPayment' ? 'salary__sort-icon--active' : ''}`}
+                  />
                 </div>
                 <div className="salary__table-header-col salary__table-header-col--method">
                   <span>Способ</span>
                   <img src={upDownTableFilter} alt="↑↓" className="salary__sort-icon" />
                 </div>
-                <div className="salary__table-header-col salary__table-header-col--payment">
+                <div 
+                  className="salary__table-header-col salary__table-header-col--payment"
+                  onClick={() => handleSort('balance')}
+                  style={{ cursor: 'pointer' }}
+                >
                   <span>Остаток</span>
-                  <img src={upDownTableFilter} alt="↑↓" className="salary__sort-icon" />
+                  <img 
+                    src={upDownTableFilter} 
+                    alt="↑↓" 
+                    className={`salary__sort-icon ${sortField === 'balance' ? 'salary__sort-icon--active' : ''}`}
+                  />
                 </div>
                 <div className="salary__table-header-col salary__table-header-col--method">
                   <span>Способ</span>

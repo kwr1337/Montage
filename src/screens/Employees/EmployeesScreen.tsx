@@ -230,10 +230,20 @@ export const EmployeesScreen: React.FC = () => {
     
     sorted.sort((a: any, b: any) => {
       if (sortField === null) {
-        // По умолчанию сортируем по ID по убыванию
+        // По умолчанию сначала работающие, потом уволенные
+        // Внутри каждой группы сортируем по ID по убыванию
+        const aIsDismissed = a.is_dismissed === true;
+        const bIsDismissed = b.is_dismissed === true;
+        
+        // Если статусы разные, работающие идут первыми
+        if (aIsDismissed !== bIsDismissed) {
+          return aIsDismissed ? 1 : -1; // Работающие (false) идут первыми
+        }
+        
+        // Если статусы одинаковые, сортируем по ID по убыванию
         const aValue = a.id || 0;
         const bValue = b.id || 0;
-        return sortDirection === 'desc' ? bValue - aValue : aValue - bValue;
+        return bValue - aValue;
       }
       
       let aValue: any;
