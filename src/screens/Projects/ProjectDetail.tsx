@@ -625,7 +625,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         start_date: formData.startDate,
         end_date: formData.endDate,
         budget: formData.budget ? parseFloat(formData.budget.toString()) : null,
-        address: formData.address,
+        address: formData.address || null,
         description: localProject.description || '',
         status: editedStatus,
         employee: employeeObjects,
@@ -709,7 +709,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       start_date: formData.startDate || null,
       end_date: formData.endDate || null,
       budget: budgetValue,
-      address: formData.address,
+      address: formData.address || null,
       description: localProject.description || '',
       status: statusForSave,
       employee: employeeObjects,
@@ -2122,7 +2122,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
             <div className="projects__detail-general">
               {/* Форма - первая строка */}
               <div className="projects__detail-form-row">
-                <div className="projects__form-field">
+                {/* Поле адреса скрыто */}
+                {/* <div className="projects__form-field">
                   <label>Адрес проекта</label>
                   <input
                     type="text"
@@ -2131,7 +2132,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                     onChange={(e) => handleInputChange('address', e.target.value)}
                     placeholder="Введите адрес проекта"
                   />
-                </div>
+                </div> */}
 
                 <div className="projects__form-field">
                   <label>Сроки проекта</label>
@@ -2207,11 +2208,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                     )}
                   </div>
                 </div>
-              </div>
 
-              {/* Форма - вторая строка */}
-              <div className="projects__detail-form-row">
-                <div className="projects__form-field projects__form-field--single">
+                <div className="projects__form-field">
                   <label>Выделено на ФОТ</label>
                   <input
                     type="text"
