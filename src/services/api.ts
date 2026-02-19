@@ -156,8 +156,21 @@ class ApiService {
     return response;
   }
 
-  async getProjects(page: number = 1, perPage: number = 11): Promise<any> {
-    const response = await this.request<any>(`/projects?page=${page}&per_page=${perPage}`, {
+  async getProjects(
+    page: number = 1,
+    perPage: number = 11,
+    options?: { with?: string[]; noPagination?: boolean }
+  ): Promise<any> {
+    const params = new URLSearchParams();
+    if (!options?.noPagination) {
+      params.set('page', String(page));
+      params.set('per_page', String(perPage));
+    }
+    if (options?.with?.length) {
+      options.with.forEach((rel) => params.append('with[]', rel));
+    }
+    const query = params.toString();
+    const response = await this.request<any>(`/projects${query ? `?${query}` : ''}`, {
       method: 'GET',
     });
     return response;
@@ -173,6 +186,48 @@ class ApiService {
   async getUsers(): Promise<any> {
     const response = await this.request<any>('/users', {
       method: 'GET',
+    });
+    return response;
+  }
+
+  /** Назначения рабочих на день (для бригадира) */
+  async getAssignments(assignmentDate: string): Promise<any> {
+    const response = await this.request<any>(`/assignments?assignment_date=${assignmentDate}`, {
+      method: 'GET',
+    });
+    return response;
+  }
+
+  /** Рабочие с информацией о занятости (кто кем назначен) */
+  async getAssignmentsWorkers(assignmentDate: string): Promise<any> {
+    const response = await this.request<any>(`/assignments/workers?assignment_date=${assignmentDate}`, {
+      method: 'GET',
+    });
+    return response;
+  }
+
+  /** Добавить рабочего на день */
+  async addAssignment(workerId: number, assignmentDate: string): Promise<any> {
+    const response = await this.request<any>('/assignments/add', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ worker_id: workerId, assignment_date: assignmentDate }),
+    });
+    return response;
+  }
+
+  /** Удалить рабочего с дня */
+  async deleteAssignment(workerId: number, assignmentDate: string): Promise<any> {
+    const response = await this.request<any>(`/assignments/delete/${workerId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ assignment_date: assignmentDate }),
     });
     return response;
   }

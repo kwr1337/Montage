@@ -45,6 +45,7 @@ type ProjectDetailProps = {
   onBack: () => void;
   onProjectUpdate?: (updatedProject: any) => void;
   onProjectCreate?: (createdProject: any) => void;
+  onRefresh?: () => Promise<void>;
   isNew?: boolean;
 };
 
@@ -63,7 +64,7 @@ const EDITABLE_PROJECT_STATUS_OPTIONS = [
 const EDITABLE_PROJECT_STATUS_VALUES = EDITABLE_PROJECT_STATUS_OPTIONS.map((option) => option.value);
 const DEFAULT_EDITABLE_PROJECT_STATUS = EDITABLE_PROJECT_STATUS_OPTIONS[0].value;
 
-export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, onProjectUpdate, onProjectCreate, isNew = false }) => {
+export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, onProjectUpdate, onProjectCreate, onRefresh, isNew = false }) => {
   const [localProject, setLocalProject] = useState(project);
   // Восстанавливаем activeTab из localStorage при загрузке
   const [activeTab, setActiveTab] = useState(() => {
@@ -94,7 +95,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     foreman: '',
     budget: project.budget || ''
   });
-  const [isForemanDropdownOpen, setIsForemanDropdownOpen] = useState(false);
   const [isDotsMenuOpen, setIsDotsMenuOpen] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -189,7 +189,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   
   // Данные для спецификации - берем из localProject.nomenclature
   const [specificationItems, setSpecificationItems] = useState<any[]>([]);
-  const [specificationSortField, setSpecificationSortField] = useState<string | null>(null);
+  const [specificationSortField, setSpecificationSortField] = useState<string | null>('npp');
   const [specificationSortDirection, setSpecificationSortDirection] = useState<'asc' | 'desc'>('asc');
 
   // Выбранные элементы для удаления
@@ -201,6 +201,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   const [trackingItems, setTrackingItems] = useState<any[]>([]);
   const [trackingSortField, setTrackingSortField] = useState<string | null>(null);
   const [trackingSortDirection, setTrackingSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // Проверка, является ли сотрудник ГИП (не отображаем в иконках и в фиксации работ)
+  const isGIP = (emp: any) => {
+    const role = (emp?.role || emp?.position || '').toLowerCase();
+    return role.includes('гип') || role === 'главный инженер проекта';
+  };
 
   // Вспомогательная функция для фильтрации активных (не удаленных) сотрудников
   const getActiveEmployees = (employees: any[]) => {
@@ -248,8 +254,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   useEffect(() => {
     if (localProject.employees && Array.isArray(localProject.employees) && localProject.id) {
       const loadTrackingData = async () => {
+        const employeesWithoutGIP = localProject.employees.filter((emp: any) => !isGIP(emp));
         const formattedEmployees = await Promise.all(
-          localProject.employees.map(async (employee: any) => {
+          employeesWithoutGIP.map(async (employee: any) => {
             // Получаем дату начала работы сотрудника из pivot
             const startWorkingDate = employee.pivot?.start_working_date || null;
             const endWorkingDate = employee.pivot?.end_working_date || null;
@@ -472,7 +479,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         try {
           // Загружаем изменения для каждого материала
           const itemsWithChanges = await Promise.all(
-            localProject.nomenclature.map(async (item: any) => {
+            localProject.nomenclature.map(async (item: any, index: number) => {
               let lastChange = null;
               let factValue = 0;
               
@@ -518,6 +525,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
 
               return {
                 id: item.id,
+                npp: item.npp ?? item.pivot?.npp ?? index + 1,
                 name: item.name,
                 status: item.is_deleted ? `Удалён\n${new Date(item.deleted_at).toLocaleDateString('ru-RU')}` : 'Активен',
                 unit: item.unit || '',
@@ -843,10 +851,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       
       if (projectData) {
         setLocalProject(projectData);
-        if (onProjectUpdate) {
-          onProjectUpdate(projectData);
-        }
+        onProjectUpdate?.(projectData);
       }
+      await onRefresh?.();
     } catch (error) {
       console.error('Ошибка при добавлении номенклатуры:', error);
     }
@@ -1049,12 +1056,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       
       if (projectData) {
         setLocalProject(projectData);
-        if (onProjectUpdate) {
-          onProjectUpdate(projectData);
-        }
+        onProjectUpdate?.(projectData);
       }
-      
-      // Закрываем модальное окно
+      await onRefresh?.();
       setIsImportModalOpen(false);
     } catch (error: any) {
       console.error('Error importing nomenclature:', error);
@@ -1569,9 +1573,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         let bValue: any;
         
         switch (specificationSortField) {
-          case 'id':
-            aValue = a.id || 0;
-            bValue = b.id || 0;
+          case 'npp':
+            aValue = a.npp ?? 0;
+            bValue = b.npp ?? 0;
             break;
           case 'name':
             aValue = (a.name || '').toLowerCase();
@@ -1593,7 +1597,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
             aValue = Number(a.changes) || 0;
             bValue = Number(b.changes) || 0;
             break;
-          case 'fact':
+          case 'total':
             aValue = Number(a.fact) || 0;
             bValue = Number(b.fact) || 0;
             break;
@@ -1726,16 +1730,21 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     if (selectedItems.size === 0 || !localProject.id) return;
 
     try {
-      // Удаляем все выбранные элементы
       for (const itemId of selectedItems) {
         await apiService.removeNomenclature(localProject.id, itemId);
       }
 
-      // Обновляем список элементов, исключая удаленные
       setSpecificationItems(prev => prev.filter(item => !selectedItems.has(item.id)));
-
-      // Очищаем выбор
       setSelectedItems(new Set());
+
+      // Обновляем проект с сервера и синхронизируем с родителем
+      const response = await apiService.getProjectById(localProject.id);
+      const updatedProject = response?.data ?? response;
+      if (updatedProject) {
+        setLocalProject(updatedProject);
+        onProjectUpdate?.(updatedProject);
+      }
+      await onRefresh?.();
     } catch (error) {
       // Ошибка обработана без уведомления пользователя
     }
@@ -2002,7 +2011,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
           <div className="projects__detail-employees-cards">
             <div className="projects__detail-employees-list">
               {(() => {
-                const activeEmployees = getActiveEmployees(localProject.employees);
+                const activeEmployees = getActiveEmployees(localProject.employees).filter((emp: any) => !isGIP(emp));
                 return activeEmployees.slice(0, 3).map((emp: any) => (
                   <div key={emp.id} className="projects__detail-employee-card">
                     {emp.avatar_id || emp.avatar_url ? (
@@ -2025,7 +2034,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
               })()}
             </div>
             {(() => {
-              const activeEmployees = getActiveEmployees(localProject.employees);
+              const activeEmployees = getActiveEmployees(localProject.employees).filter((emp: any) => !isGIP(emp));
               // Дополнительная фильтрация: убеждаемся, что в tooltip попадают только активные сотрудники
               const hiddenEmployees = activeEmployees
                 .slice(3)
@@ -2109,6 +2118,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                 {trackingItems.reduce((sum, item) => sum + (item.totalSum || 0), 0).toLocaleString('ru-RU')} ₽
               </div>
             </div>
+            <div className="projects__detail-budget-card projects__detail-budget-card--remaining">
+              <span className="projects__detail-budget-label">Остаток</span>
+              <div className="projects__detail-budget-value">
+                {(() => {
+                  const allocated = localProject.budget || 0;
+                  const spent = trackingItems.reduce((sum, item) => sum + (item.totalSum || 0), 0);
+                  const remaining = allocated - spent;
+                  return `${remaining.toLocaleString('ru-RU')} ₽`;
+                })()}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -2181,30 +2201,26 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                   </div>
                 </div>
 
-                <div className="projects__form-field">
-                  <label>Бригадир</label>
-                  <div className="projects__form-field--dropdown">
-                    <div 
-                      className="projects__form-input projects__form-input--dropdown projects__form-input--readonly"
-                      onClick={() => setIsForemanDropdownOpen(!isForemanDropdownOpen)}
-                    >
-                      <span>{foremen.length > 0 
-                        ? formatUserName(foremen[0])
-                        : 'Нет бригадиров в проекте'}
-                      </span>
-                      <img src={userDropdownIcon} alt="▼" />
-                    </div>
-                    {isForemanDropdownOpen && foremen.length > 0 && (
-                      <div className="projects__form-dropdown">
-                        {foremen.map((foreman) => (
-                          <div
-                            key={foreman.id}
-                            className="projects__form-dropdown-item projects__form-dropdown-item--readonly"
-                          >
-                            {formatUserName(foreman)}
-                          </div>
-                        ))}
-                      </div>
+                <div className="projects__form-field projects__form-field--foremen">
+                  <label>Бригадиры</label>
+                  <div className="projects__form-foremen-fields">
+                    {foremen.length > 0 ? (
+                      foremen.map((foreman) => (
+                        <input
+                          key={foreman.id}
+                          type="text"
+                          className="projects__form-input projects__form-input--editable"
+                          value={formatUserName(foreman)}
+                          readOnly
+                        />
+                      ))
+                    ) : (
+                      <input
+                        type="text"
+                        className="projects__form-input projects__form-input--editable"
+                        value="Нет бригадиров в проекте"
+                        readOnly
+                      />
                     )}
                   </div>
                 </div>
@@ -2295,7 +2311,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                   <div className="projects__specification-header-group"></div>
                   <div className="projects__specification-header-group">План</div>
                   <div className="projects__specification-header-group">Изменения</div>
-                  <div className="projects__specification-header-group">Факт</div>
+                  <div className="projects__specification-header-group">Итого</div>
                 </div>
 
                 {/* Заголовок таблицы */}
@@ -2312,15 +2328,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                     className="projects__specification-header-col"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleSpecificationSort('id');
+                      handleSpecificationSort('npp');
                     }}
                     style={{ cursor: 'pointer' }}
                   >
-                    <span>ID</span>
+                    <span>№</span>
                     <img 
                       src={upDownTableFilter} 
                       alt="↑↓" 
-                      className={`projects__sort-icon ${specificationSortField === 'id' ? 'projects__sort-icon--active' : ''}`} 
+                      className={`projects__sort-icon ${specificationSortField === 'npp' ? 'projects__sort-icon--active' : ''}`} 
                     />
                   </div>
                   <div 
@@ -2406,22 +2422,22 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                     className="projects__specification-header-col"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleSpecificationSort('fact');
+                      handleSpecificationSort('total');
                     }}
                     style={{ cursor: 'pointer' }}
                   >
-                    <span>Кол-во</span>
+                    <span>Итого</span>
                     <img 
                       src={upDownTableFilter} 
                       alt="↑↓" 
-                      className={`projects__sort-icon ${specificationSortField === 'fact' ? 'projects__sort-icon--active' : ''}`} 
+                      className={`projects__sort-icon ${specificationSortField === 'total' ? 'projects__sort-icon--active' : ''}`} 
                     />
                   </div>
                 </div>
 
                 {/* Строки таблицы */}
                 <div className="projects__specification-table-body">
-                {paginatedItems.map((item) => (
+                {paginatedItems.map((item, index) => (
                   <div 
                     key={item.id} 
                     className={`projects__specification-row ${item.status.includes('Удалён') ? 'projects__specification-row--deleted' : ''}`}
@@ -2435,7 +2451,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                       />
                     </div>
                     <div className="projects__specification-col">
-                      <span>{item.id}</span>
+                      <span>{item.npp ?? startIndex + index + 1}</span>
                     </div>
                     <div className="projects__specification-col">
                       <span>{item.name}</span>
@@ -2449,10 +2465,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                       <span>{item.unit}</span>
                     </div>
                     <div className="projects__specification-col">
-                      <span>{item.plan}</span>
+                      <span>{Math.floor(Number(item.plan) || 0)}</span>
                     </div>
                     <div className="projects__specification-col">
-                      <span>{item.changes !== null ? item.changes : ''}</span>
+                      <span>{item.changes !== null ? Math.floor(Number(item.changes)) : ''}</span>
                     </div>
                     <div className="projects__specification-col">
                       <button 
@@ -2463,7 +2479,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                       </button>
                     </div>
                     <div className="projects__specification-col">
-                      <span>{item.fact !== null && item.fact !== undefined ? item.fact.toLocaleString('ru-RU') : '0'}</span>
+                      <span>{item.fact !== null && item.fact !== undefined ? Math.floor(Number(item.fact)).toLocaleString('ru-RU') : '0'}</span>
                     </div>
                   </div>
                 ))}
@@ -2551,21 +2567,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                       src={upDownTableFilter} 
                       alt="↑↓" 
                       className={`projects__sort-icon ${trackingSortField === 'status' ? 'projects__sort-icon--active' : ''}`} 
-                    />
-                  </div>
-                  <div 
-                    className="projects__tracking-header-col"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleTrackingSort('start');
-                    }}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <span>Начало</span>
-                    <img 
-                      src={upDownTableFilter} 
-                      alt="↑↓" 
-                      className={`projects__sort-icon ${trackingSortField === 'start' ? 'projects__sort-icon--active' : ''}`} 
                     />
                   </div>
                   <div 
@@ -2693,9 +2694,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                           <div className="projects__tracking-status-date">{item.deletionDate}</div>
                         )}
                       </div>
-                    </div>
-                    <div className="projects__tracking-col">
-                      <span>{item.startDate}</span>
                     </div>
                     <div className="projects__tracking-col">
                       <span>{item.days}</span>

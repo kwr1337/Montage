@@ -141,6 +141,15 @@
     &:hover {
       border-color: #2787f5;
     }
+
+    &--disabled {
+      cursor: default;
+      pointer-events: none;
+
+      &:hover {
+        border-color: #dfe3eb;
+      }
+    }
   }
 
   &__date-icon {

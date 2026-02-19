@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { apiService } from '../../services/api';
+import { mockData } from '../../mocks/mobile-project-mock';
 import menuIconGrey from '../../shared/icons/menuIconGrey.svg';
 import editMobIcon from '../../shared/icons/editMob.svg';
 import exitMobIcon from '../../shared/icons/exitMob.svg';
@@ -22,6 +23,7 @@ type ProjectListItem = {
   budget?: number;
   total_spent?: number;
   remaining_budget?: number;
+  is_archived?: boolean | number;
 };
 
 const formatDateValue = (value?: string | null, options?: Intl.DateTimeFormatOptions) => {
@@ -97,6 +99,22 @@ const getActiveEmployeesCount = (project: ProjectListItem) => {
   return project.employees.filter((emp: any) => !emp.pivot?.end_working_date).length;
 };
 
+const extractProjectsFromResponse = (response: any): ProjectListItem[] => {
+  if (!response) return [];
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response.data)) return response.data;
+  if (Array.isArray(response.data?.data)) return response.data.data;
+  if (Array.isArray(response.projects)) return response.projects;
+  if (Array.isArray(response.items)) return response.items;
+  if (Array.isArray(response.results)) return response.results;
+  if (response.data && typeof response.data === 'object' && !Array.isArray(response.data)) {
+    const d = response.data;
+    if (Array.isArray(d.projects)) return d.projects;
+    if (Array.isArray(d.items)) return d.items;
+  }
+  return [];
+};
+
 export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLogout }) => {
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -114,6 +132,11 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
     return false;
   });
 
+  const useMockData = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('mock') === '1';
+  }, []);
+
   useEffect(() => {
     const checkOrientation = () => {
       setIsPortrait(window.innerHeight > window.innerWidth);
@@ -129,71 +152,60 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
     };
   }, []);
 
-  useEffect(() => {
-    let mounted = true;
-
-    const fetchProjects = async () => {
+  const fetchProjects = React.useCallback(async () => {
       setIsLoading(true);
       setError(null);
 
       try {
-        const response = await apiService.getProjects(1, 100);
-
         let data: ProjectListItem[] = [];
 
-        if (Array.isArray(response)) {
-          data = response;
-        } else if (response?.data && Array.isArray(response.data)) {
-          data = response.data;
-        } else if (response?.projects && Array.isArray(response.projects)) {
-          data = response.projects;
+        const attempts: Array<() => Promise<any>> = [
+          () => apiService.getProjects(1, 100, { with: ['employees', 'logs'] }),
+          () => apiService.getProjects(1, 100, { with: ['logs'] }),
+          () => apiService.getProjects(1, 100),
+          () => apiService.getProjects(1, 100, { noPagination: true, with: ['logs'] }),
+        ];
+
+        for (const fetchFn of attempts) {
+          const response = await fetchFn();
+          data = extractProjectsFromResponse(response);
+          if (data.length > 0) break;
         }
 
-        // Фильтруем проекты для бригадира
-        const currentUser = apiService.getCurrentUser();
-        const currentUserId = currentUser?.id;
-
-        const filteredData = data.filter((project) => {
-          // Исключаем архивные проекты
-          if (project.status === 'Архив' || project.status === 'archived') {
-            return false;
+        if (data.length === 0) {
+          try {
+            const meResponse = await apiService.getCurrentUserProfile();
+            const meData = meResponse?.data ?? meResponse;
+            const projectsFromMe = meData?.projects ?? meData?.user?.projects;
+            if (Array.isArray(projectsFromMe) && projectsFromMe.length > 0) {
+              data = projectsFromMe;
+            }
+          } catch {
+            // /auth/me может не возвращать проекты
           }
+        }
 
-          // Проверяем, является ли текущий пользователь участником проекта
-          if (!project.employees || !Array.isArray(project.employees)) {
-            return false;
-          }
-
-          // Проверяем активных сотрудников (без end_working_date)
-          const isParticipant = project.employees.some((emp: any) => {
-            const isCurrentUser = emp.id === currentUserId;
-            const isActive = !emp.pivot?.end_working_date;
-            return isCurrentUser && isActive;
-          });
-
-          return isParticipant;
+        let filteredData = data.filter((project) => {
+          if (project.status === 'Архив' || project.status === 'archived') return false;
+          if (project.is_archived === 1 || project.is_archived === true) return false;
+          return true;
         });
 
-        if (mounted) {
-          setProjects(filteredData);
+        if (useMockData) {
+          filteredData = [mockData.project as ProjectListItem, ...filteredData];
         }
+
+        setProjects(filteredData);
       } catch (err) {
-        if (mounted) {
-          setError('Не удалось загрузить проекты. Попробуйте позже.');
-        }
+        setError('Не удалось загрузить проекты. Попробуйте позже.');
       } finally {
-        if (mounted) {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
       }
-    };
+  }, [useMockData]);
 
+  useEffect(() => {
     fetchProjects();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  }, [fetchProjects]);
 
   const filteredProjects = useMemo(() => {
     if (!search.trim()) {
@@ -294,12 +306,32 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
     setIsProjectLoading(false);
   };
 
+  const handleRefreshProject = async () => {
+    if (selectedProjectId) {
+      try {
+        const response = await apiService.getProjectById(selectedProjectId);
+        const updatedProject = response?.data ?? response;
+        if (updatedProject) {
+          setSelectedProject(updatedProject);
+          setProjects((prev) =>
+            prev.map((p) => (p.id === updatedProject.id ? updatedProject : p))
+          );
+        }
+      } catch (e) {
+        console.error('Ошибка обновления проекта:', e);
+      }
+    }
+  };
+
   if (selectedProjectId !== null && selectedProject) {
+    const isMockProject = useMockData && selectedProject.id === mockData.project.id;
     return (
       <ProjectDetailMobile
         project={selectedProject}
         onBack={handleCloseProject}
+        onRefresh={handleRefreshProject}
         isLoading={isProjectLoading}
+        mockApiResponses={isMockProject ? mockData.mockApiResponses : undefined}
       />
     );
   }
@@ -364,9 +396,12 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
           </div>
         ) : filteredProjects.length === 0 ? (
           <div className="mobile-projects__state">
-            <p>Ничего не найдено</p>
-            <button type="button" onClick={() => setSearch('')}>
-              Сбросить фильтр
+            <p>Проекты не найдены</p>
+            <p className="mobile-projects__state-hint">
+              Если вы бригадир, убедитесь, что вас добавили в проект (Фиксация работ).
+            </p>
+            <button type="button" onClick={() => { setError(''); setIsLoading(true); fetchProjects(); }}>
+              Обновить
             </button>
           </div>
         ) : (

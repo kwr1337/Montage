@@ -29,13 +29,14 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
 }) => {
   const [quantity, setQuantity] = useState<number>(existingFact?.amount || 0);
   const [date, setDate] = useState<string>(existingFact?.fact_date || new Date().toISOString().split('T')[0]);
-  const [quantityInput, setQuantityInput] = useState<string>(String(existingFact?.amount || 0));
+  const [quantityInput, setQuantityInput] = useState<string>(String(Math.floor(existingFact?.amount || 0)));
 
   // Обновляем состояние при изменении existingFact
   useEffect(() => {
     if (existingFact) {
-      setQuantity(existingFact.amount);
-      setQuantityInput(String(existingFact.amount));
+      const intAmount = Math.floor(existingFact.amount);
+      setQuantity(intAmount);
+      setQuantityInput(String(intAmount));
       setDate(existingFact.fact_date);
     } else {
       setQuantity(0);
@@ -45,51 +46,36 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
   }, [existingFact, isOpen]);
 
   const handleIncrement = () => {
-    const newValue = parseFloat((quantity + 0.1).toFixed(1));
+    const newValue = quantity + 1;
     setQuantity(newValue);
     setQuantityInput(String(newValue));
   };
 
   const handleDecrement = () => {
-    const newValue = Math.max(0, parseFloat((quantity - 0.1).toFixed(1)));
+    const newValue = Math.max(0, quantity - 1);
     setQuantity(newValue);
     setQuantityInput(String(newValue));
   };
 
   const handleQuantityInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value;
-    // Заменяем запятую на точку для корректного парсинга
-    value = value.replace(',', '.');
+    const value = e.target.value;
     setQuantityInput(value);
-    
-    // Парсим значение и обновляем quantity (поддерживаем дробные числа)
-    const numericValue = value === '' ? 0 : parseFloat(value);
-    if (!isNaN(numericValue) && numericValue >= 0) {
-      setQuantity(numericValue);
+    const parsed = value === '' ? 0 : parseInt(value, 10);
+    if (!isNaN(parsed) && parsed >= 0) {
+      setQuantity(parsed);
     }
   };
 
   const handleQuantityInputBlur = () => {
-    // При потере фокуса нормализуем значение (поддерживаем дробные числа)
-    const normalizedInput = quantityInput.replace(',', '.');
-    const numericValue = normalizedInput === '' ? 0 : parseFloat(normalizedInput);
-    if (isNaN(numericValue) || numericValue < 0) {
-      setQuantity(0);
-      setQuantityInput('0');
-    } else {
-      setQuantity(numericValue);
-      // Сохраняем формат с точкой для корректного отображения
-      setQuantityInput(String(numericValue));
-    }
+    const parsed = quantityInput === '' ? 0 : parseInt(quantityInput, 10);
+    const intValue = isNaN(parsed) || parsed < 0 ? 0 : Math.floor(parsed);
+    setQuantity(intValue);
+    setQuantityInput(String(intValue));
   };
 
   const handleSave = () => {
-    // Поддерживаем дробные числа (заменяем запятую на точку)
-    const normalizedInput = quantityInput.replace(',', '.');
-    const finalQuantity = normalizedInput === '' ? 0 : parseFloat(normalizedInput);
-    if (isNaN(finalQuantity) || finalQuantity < 0) {
-      return; // Не сохраняем некорректное значение
-    }
+    const parsed = quantityInput === '' ? 0 : parseInt(quantityInput, 10);
+    const finalQuantity = isNaN(parsed) || parsed < 0 ? 0 : Math.floor(parsed);
     onSave(finalQuantity, date);
     onClose();
   };
@@ -135,7 +121,7 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
             {nomenclature.previousValue !== undefined && (
               <div className="add-fact-modal__row">
                 <span className="add-fact-modal__label">Введенное ранее значение</span>
-                <span className="add-fact-modal__value">{nomenclature.previousValue}</span>
+                <span className="add-fact-modal__value">{Math.floor(Number(nomenclature.previousValue))}</span>
               </div>
             )}
           </div>
@@ -167,14 +153,14 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
                 </button>
                 <input
                   type="number"
-                  min="0"
-                  step="0.1"
+                  min={0}
+                  step={1}
                   value={quantityInput}
                   onChange={handleQuantityInputChange}
                   onBlur={handleQuantityInputBlur}
                   className="add-fact-modal__counter-input"
                   aria-label="Количество"
-                  inputMode="decimal"
+                  inputMode="numeric"
                 />
                 <button
                   type="button"

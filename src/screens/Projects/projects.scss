@@ -1182,6 +1182,10 @@
       &--spent {
         background: rgba(38, 171, 105, 0.1);
       }
+
+      &--remaining {
+        background: rgba(255, 158, 0, 0.15);
+      }
     }
 
     &-budget-label {
@@ -1208,6 +1212,10 @@
 
     &-budget-card--spent &-budget-value {
       background: #26ab69;
+    }
+
+    &-budget-card--remaining &-budget-value {
+      background: #ff9e00;
     }
 
     &-form {
@@ -1483,6 +1491,14 @@
     position: relative;
   }
 
+  &__form-field--foremen {
+    .projects__form-foremen-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+  }
+
   &__form-dropdown {
     position: absolute;
     top: 100%;
@@ -1657,7 +1673,7 @@
       min-width: 20px;
     }
 
-    // ID
+    // № (порядковый номер)
     &:nth-child(2) {
       flex: 0 0 80px;
       // min-width: 80px;
@@ -1699,10 +1715,9 @@
       align-items: center;
     }
 
-    // Факт (1 колонка): 80px + 8px (padding-left) + 8px (padding-right) = 96px
+    // Итого (1 колонка) — сумма затраченных материалов всеми бригадирами
     &:nth-child(8) {
-      flex: 0 0 96px;
-      // min-width: 96px;
+      flex: 0 0 80px;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -1819,7 +1834,7 @@
       }
     }
 
-    // Факт - левая и правая линии + верхняя линия
+    // Итого
     &:nth-child(9) {
       flex: 0 0 80px;
       min-width: 80px;
@@ -1919,17 +1934,19 @@
     }
 
     &:nth-child(4) {
-      flex: 0 0 135px;
+      flex: 0 0 120px;
+      min-width: 120px;
     }
 
     &:nth-child(5) {
-      flex: 0 0 108px;
+      flex: 0 0 100px;
+      min-width: 100px;
     }
 
     // План
     &:nth-child(6) {
       flex: 0 0 80px;
-      // min-width: 80px;
+      min-width: 80px;
       padding-left: 8px;
       padding-right: 10px;
       margin-right: 4px;
@@ -1937,25 +1954,25 @@
 
     // Изменения - Кол-во
     &:nth-child(7) {
-      flex: 0 0 68px;
-      // min-width: 80px;
-      // padding-left: 8px;
+      flex: 0 0 80px;
+      min-width: 80px;
+      padding-left: 8px;
     }
 
     // Изменения - Действие
     &:nth-child(8) {
-      flex: 0 0 148px;
-      // min-width: 120px;
+      flex: 0 0 120px;
+      min-width: 120px;
       padding-right: 10px;
       margin-right: 4px;
     }
 
-    // Факт
+    // Итого (сумма затраченных материалов всеми бригадирами)
     &:nth-child(9) {
-      flex: 0 0 53px;
-      // min-width: 80px;
-      // padding-left: 8px;
-      // padding-right: 8px;
+      flex: 0 0 80px;
+      min-width: 80px;
+      padding-left: 8px;
+      padding-right: 8px;
     }
 
     &:last-child {

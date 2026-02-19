@@ -90,13 +90,13 @@ const AddNomenclatureModal: React.FC<AddNomenclatureModalProps> = ({
       setError('Необходимо выбрать номенклатуру');
       return;
     }
-    const quantityValue = typeof formData.quantity === 'string' ? parseFloat(formData.quantity) : formData.quantity;
-    if (!quantityValue || quantityValue <= 0 || isNaN(quantityValue)) {
-      setError('Необходимо ввести количество больше нуля');
+    const raw = typeof formData.quantity === 'string' ? parseInt(formData.quantity, 10) : formData.quantity;
+    const quantityValue = Number.isFinite(raw) ? Math.floor(Number(raw)) : 0;
+    if (!quantityValue || quantityValue <= 0) {
+      setError('Необходимо ввести целое число больше нуля');
       return;
     }
     
-    // Очищаем ошибку при успешной валидации
     setError('');
     onAdd({
       ...formData,
@@ -199,16 +199,22 @@ const AddNomenclatureModal: React.FC<AddNomenclatureModalProps> = ({
             <label className="add-nomenclature-modal__label">Введите кол-во</label>
             <input
               type="number"
-              step="0.1"
+              step="1"
               min="0"
+              inputMode="numeric"
               className="add-nomenclature-modal__input add-nomenclature-modal__input--quantity"
               value={formData.quantity}
               onChange={(e) => {
                 const value = e.target.value;
-                // Разрешаем пустую строку и любые числовые значения (включая дробные)
-                if (value === '' || !isNaN(Number(value))) {
-                  handleInputChange('quantity', value === '' ? '' : parseFloat(value) || 0);
-                  setError(''); // Очищаем ошибку при изменении поля
+                if (value === '') {
+                  handleInputChange('quantity', '');
+                  setError('');
+                  return;
+                }
+                const parsed = parseInt(value, 10);
+                if (!isNaN(parsed) && parsed >= 0) {
+                  handleInputChange('quantity', parsed);
+                  setError('');
                 }
               }}
               placeholder="100"

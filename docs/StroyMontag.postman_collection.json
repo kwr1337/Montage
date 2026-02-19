@@ -1,0 +1,1507 @@
+{
+  "info": {
+    "_postman_id": "e0a328b0-326d-43cb-890b-2c94889aec19",
+    "name": "StroyMontag",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "45768245"
+  },
+  "item": [
+    {
+      "name": "Пользователи",
+      "item": [
+        {
+          "name": "Регистрация нового пользователя",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"first_name\": \"back dev\",\n    \"second_name\": \"second_name\",\n    \"last_name\": \"last_name\",\n    \"birth_date\": \"2020-01-01\",\n    \"gender\": \"male\",\n    \"email\": \"org3@com.net\",\n    \"phone\": \"+79999999999\",\n    \"password\": \"super-secret\",\n    \"role\": \"Главный Инженер проекта (ГИП)\",\n    \"is_employee\": true,\n    \"is_system_admin\": false,\n    \"employment_date\": \"2021-01-01\",\n    \"position\": \"Самый главный\",\n    \"employee_status\": \"active\",\n    \"rate_per_hour\": 3000.00,\n    \"work_schedule\": \"5/2\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/auth/register",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Регистрация рабочего",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"first_name\": \"back dev\",\n    \"second_name\": \"second_name\",\n    \"last_name\": \"last_name\",\n    \"birth_date\": \"2020-01-01\",\n    \"gender\": \"male\",\n    \"email\": \"or3g3@com.net\",\n    \"phone\": \"+79999999999\",\n    \"role\": \"Рабочий\",\n    \"is_employee\": true,\n    \"is_system_admin\": false,\n    \"employment_date\": \"2021-01-01\",\n    \"position\": \"\",\n    \"employee_status\": \"active\",\n    \"rate_per_hour\": 3000.00,\n    \"work_schedule\": \"5/2\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/auth/register",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Авторизация пользователя",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"root@mail.com\",\n    \"password\": \"08648016\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/auth/login",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Данные о авторизованном пользователе",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/auth/me",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Получение списка пользователей",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/users?page=1&per_page=100&with=[logs]",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "per_page",
+                  "value": "100"
+                },
+                {
+                  "key": "with",
+                  "value": "[logs]"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Получение пользователя",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/users/2",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "2"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Редактирование пользователя",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"password\":\"12345678\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/users/3/update",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "3",
+                "update"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Проекты",
+      "item": [
+        {
+          "name": "Получение списка проектов",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"update_id\": 18119769,\n    \"message\": {\n        \"message_id\": 30,\n        \"from\": {\n            \"id\": 441374926,\n            \"is_bot\": false,\n            \"first_name\": \"Ivan\",\n            \"username\": \"Lyakher\",\n            \"language_code\": \"ru\",\n            \"is_premium\": true\n        },\n        \"chat\": {\n            \"id\": 441374926,\n            \"first_name\": \"Ivan\",\n            \"username\": \"Lyakher\",\n            \"type\": \"private\"\n        },\n        \"date\": 1759766343,\n        \"text\": \"136385\"\n    }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/projects?with[]=logs",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects"
+              ],
+              "query": [
+                {
+                  "key": "with[]",
+                  "value": "logs"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Получение проекта",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/projects/5?with[]=logs",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "5"
+              ],
+              "query": [
+                {
+                  "key": "with[]",
+                  "value": "logs"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Добавление проекта",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Тестовый проект\",\n    \"project_managers\": [2],\n    \"start_date\": \"2025-10-01\",\n    \"end_date\": \"2025-12-01\",\n    \"budget\": 1000000.00,\n    \"address\": \"Москва, ул. Снежная, д. 16, к. 4\",\n    \"description\": \"Это тестовый прокет, который создается из Postman\",\n    \"status\": \"В работе\",\n    \"employee\": [\n        {\n            \"id\": 2,\n            \"start_working_date\": \"2025-10-01\",\n            \"end_working_date\": null,\n            \"rate_per_hour\": 3000\n        },\n        {\n            \"id\": 3,\n            \"start_working_date\": \"2025-10-01\",\n            \"end_working_date\": null,\n            \"rate_per_hour\": 1000\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/projects",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Удаление проекта",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/projects/7",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "7"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Редактирование проекта",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Тестовый проект\",\n    \"project_manager_id\": 2,\n    \"start_date\": \"2025-10-01\",\n    \"end_date\": \"2025-12-01\",\n    \"budget\": 1000000.00,\n    \"address\": \"Москва, ул. Снежная, д. 16, к. 4e\",\n    \"description\": \"Это тестовый прокет, который создается из Postman\",\n    \"status\": \"В работе\",\n    \"employee\": [\n        {\n            \"id\": 2,\n            \"start_working_date\": \"2025-10-01\",\n            \"end_working_date\": null,\n            \"rate_per_hour\": 3000\n        },\n        {\n            \"id\": 3,\n            \"start_working_date\": \"2025-10-01\",\n            \"end_working_date\": null,\n            \"rate_per_hour\": 1000\n        },\n        {\n            \"id\": 4,\n            \"rate_per_hour\": 10\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/projects/6",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "6"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Архивировать проект",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/projects/6/archive",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "6",
+                "archive"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Номенклатура проекта",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"start_amount\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/projects/5/nomenclature/5/add",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "5",
+                "nomenclature",
+                "5",
+                "add"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Удалит номенклатуру из проекта (не изменение)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/projects/5/nomenclature/6/remove",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "5",
+                "nomenclature",
+                "6",
+                "remove"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Номенклатура",
+      "item": [
+        {
+          "name": "Получить номенклатуру список",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/nomenclature?with[]=logs",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "nomenclature"
+              ],
+              "query": [
+                {
+                  "key": "with[]",
+                  "value": "logs"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Получить номенклатуру по ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/nomenclature/6?with[]=logs",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "nomenclature",
+                "6"
+              ],
+              "query": [
+                {
+                  "key": "with[]",
+                  "value": "logs"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Создать номенклатуру",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Вода\",\n    \"unit\": \"Литры\",\n    \"price\": 10,\n    \"description\":\"Это просот техническая вода по 10 рублей за литр. Вдруг кому-то надо?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/nomenclature",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "nomenclature"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Удалить номенклатуру",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Вода\",\n    \"unit\": \"Литры\",\n    \"price\": 10,\n    \"description\":\"Это просот техническая вода по 10 рублей за литр. Вдруг кому-то надо?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/nomenclature/1",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "nomenclature",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Изменить номенклатуру",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"price\": 103\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/nomenclature/2",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "nomenclature",
+                "2"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Импорт из файла",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/home/tiget/git/StroyMontag/public/examples/test.csv"
+                },
+                {
+                  "key": "mode",
+                  "value": "import",
+                  "type": "text"
+                },
+                {
+                  "key": "project_id",
+                  "value": "5",
+                  "type": "text",
+                  "uuid": "0d100995-1e49-469d-85c6-190d2576bd97"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{domain}}/api/nomenclature/import",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "nomenclature",
+                "import"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Изменения номенклатуры",
+      "item": [
+        {
+          "name": "Получение изменений",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/projects/5/nomenclature/1/changes?with[]=logs",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "5",
+                "nomenclature",
+                "1",
+                "changes"
+              ],
+              "query": [
+                {
+                  "key": "with[]",
+                  "value": "logs"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Добавление изменений",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"amount_change\": 10003\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/projects/5/nomenclature/1/changes",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "5",
+                "nomenclature",
+                "1",
+                "changes"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Рабочий график",
+      "item": [
+        {
+          "name": "Получить график сотрудника в проекте",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/projects/5/user/2/work-reports?with[]=logs",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "5",
+                "user",
+                "2",
+                "work-reports"
+              ],
+              "query": [
+                {
+                  "key": "with[]",
+                  "value": "logs"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Добавить запись в график",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"report_date\": \"2025-10-12\",\n    \"hours_worked\": 12,\n    \"absent\": false,\n    \"notes\": \"Переработка\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/projects/5/user/2/work-reports",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "5",
+                "user",
+                "2",
+                "work-reports"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "изменение записи в графике",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"hours_worked\": 18.33\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/projects/5/user/2/work-reports/3",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "5",
+                "user",
+                "2",
+                "work-reports",
+                "3"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Удалить запись",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/projects/5/user/2/work-reports/1",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "5",
+                "user",
+                "2",
+                "work-reports",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Выплаты сотрудникам",
+      "item": [
+        {
+          "name": "Получение выплат",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/payments?page=1&per_page=100&with[]=logs&filter[users][]=1&filter[users][]=2&filter[users][]=3&filter[users][]=4&filter[date_from]=2025-10-01&filter[date_to]=2025-10-30",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "payments"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "per_page",
+                  "value": "100"
+                },
+                {
+                  "key": "with[]",
+                  "value": "logs"
+                },
+                {
+                  "key": "filter[users][]",
+                  "value": "1"
+                },
+                {
+                  "key": "filter[users][]",
+                  "value": "2"
+                },
+                {
+                  "key": "filter[users][]",
+                  "value": "3"
+                },
+                {
+                  "key": "filter[users][]",
+                  "value": "4"
+                },
+                {
+                  "key": "filter[date_from]",
+                  "value": "2025-10-01"
+                },
+                {
+                  "key": "filter[date_to]",
+                  "value": "2025-10-30"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Создание выплаты",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"user_id\": 2,\n    \"first_payment_date\": \"2025-10-01\",\n    \"first_payment_amount\": 300.00,\n    \"first_payment_type\": \"card\",\n    \"second_payment_date\": \"2025-10-15\",\n    \"second_payment_amount\": 300.00,\n    \"second_payment_type\": \"cash\",\n    \"third_payment_date\": null,\n    \"third_payment_amount\": null,\n    \"third_payment_type\": null,\n    \"notes\": \"Почти все выплатили, осталось еще 50, выплатим после 20го\",\n    \"project_id\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/payments",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "payments"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Редактирование выплаты",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"third_payment_date\": \"2025-10-30\",\n    \"third_payment_amount\": 50,\n    \"third_payment_type\": \"USDT\",\n    \"notes\": \"Вот теперь всё выплатили\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/payments/1",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Удаление выплаты",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/payments/3",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "3"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Факт номенклатуры в проекте",
+      "item": [
+        {
+          "name": "Получение фактической номенклатуры в проекте",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/projects/5/nomenclature/1/facts?with[]=logs",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "5",
+                "nomenclature",
+                "1",
+                "facts"
+              ],
+              "query": [
+                {
+                  "key": "with[]",
+                  "value": "logs"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Создание фактического расхода номенклатуры",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"fact_date\": \"2025-10-10\",\n    \"amount\": 33\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/projects/5/nomenclature/1/facts",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "5",
+                "nomenclature",
+                "1",
+                "facts"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Редактирование фактического расхода",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"amount\": 31\n}"
+            },
+            "url": {
+              "raw": "{{domain}}/api/projects/5/nomenclature/1/facts/3",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "5",
+                "nomenclature",
+                "1",
+                "facts",
+                "3"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Удаление факта",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/projects/5/nomenclature/1/facts/2",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "5",
+                "nomenclature",
+                "1",
+                "facts",
+                "2"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Отчеты",
+      "item": [
+        {
+          "name": "Генерация отчета по номенклатуре",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/projects/5/reports/nomenclature?period_start=2025-10-01&period_end=2025-12-31",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "5",
+                "reports",
+                "nomenclature"
+              ],
+              "query": [
+                {
+                  "key": "period_start",
+                  "value": "2025-10-01",
+                  "type": "text"
+                },
+                {
+                  "key": "period_end",
+                  "value": "2025-12-31",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Отчет по оплатам",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/reports/payments?period=2025-10-01",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "reports",
+                "payments"
+              ],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "2025-10-01",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Назначение рабочих",
+      "item": [
+        {
+          "name": "Назначение рабочего",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"worker_id\": 9,\n    \"assignment_date\": \"2026-01-30\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/assignments/add",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "assignments",
+                "add"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Удаление",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"assignment_date\": \"2026-01-30\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{domain}}/api/assignments/delete/9",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "assignments",
+                "delete",
+                "9"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Получение рабочих для бригадира",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/assignments?assignment_date=2026-01-30",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "assignments"
+              ],
+              "query": [
+                {
+                  "key": "assignment_date",
+                  "value": "2026-01-30"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Получение рабочих с информацией о занятости",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{domain}}/api/assignments/workers?assignment_date=2026-01-30",
+              "host": [
+                "{{domain}}"
+              ],
+              "path": [
+                "api",
+                "assignments",
+                "workers"
+              ],
+              "query": [
+                {
+                  "key": "assignment_date",
+                  "value": "2026-01-30"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "domain",
+      "value": ""
+    }
+  ]
+}

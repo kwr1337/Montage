@@ -43,7 +43,7 @@ const EditNomenclatureModal: React.FC<EditNomenclatureModalProps> = ({
       setFormData({
         nomenclature: initialData.nomenclature,
         changeDate: initialData.changeDate,
-        quantity: initialData.quantity,
+        quantity: Math.floor(Number(initialData.quantity)) || 0,
       });
     }
   }, [isOpen, initialData]);
@@ -56,11 +56,11 @@ const EditNomenclatureModal: React.FC<EditNomenclatureModalProps> = ({
   };
 
   const handleSubmit = () => {
-    // Отправляем только количество, дата всегда текущая
+    const quantityValue = Math.floor(Number(formData.quantity)) || 0;
     onEdit({
       nomenclature: formData.nomenclature,
-      changeDate: new Date().toISOString().split('T')[0], // Текущая дата в формате YYYY-MM-DD
-      quantity: formData.quantity
+      changeDate: new Date().toISOString().split('T')[0],
+      quantity: quantityValue >= 0 ? quantityValue : 0
     });
     onClose();
   };
@@ -118,9 +118,22 @@ const EditNomenclatureModal: React.FC<EditNomenclatureModalProps> = ({
                   <label className="edit-nomenclature-modal__label">Введите кол-во</label>
                   <input
                     type="number"
+                    min={0}
+                    step={1}
+                    inputMode="numeric"
                     className="edit-nomenclature-modal__input"
                     value={formData.quantity}
-                    onChange={(e) => handleInputChange('quantity', parseInt(e.target.value) || 0)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === '') {
+                        handleInputChange('quantity', 0);
+                        return;
+                      }
+                      const parsed = parseInt(v, 10);
+                      if (!isNaN(parsed) && parsed >= 0) {
+                        handleInputChange('quantity', parsed);
+                      }
+                    }}
                     placeholder="100"
                   />
                 </div>

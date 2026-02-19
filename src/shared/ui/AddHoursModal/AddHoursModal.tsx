@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import closeIcon from '../../icons/closeIcon.svg';
 import calendarIconGrey from '../../icons/calendarIconGrey.svg';
 import { apiService } from '../../../services/api';
@@ -31,48 +31,23 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isAbsent, setIsAbsent] = useState(false);
   const [reason, setReason] = useState('');
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [savedDates, setSavedDates] = useState<string[]>(trackedDates);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const calendarRef = useRef<HTMLDivElement>(null);
 
   // Обновляем savedDates при изменении trackedDates
   useEffect(() => {
     setSavedDates(trackedDates);
   }, [trackedDates]);
 
-  // Устанавливаем последнюю дату из trackedDates при открытии модального окна
+  // Всегда используем сегодняшнюю дату при открытии модального окна
   useEffect(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // Сбрасываем время для корректного сравнения
-    
-    if (isOpen && trackedDates.length > 0) {
-      // Находим последнюю (самую позднюю) дату
-      const sortedDates = [...trackedDates].sort((a, b) => {
-        const dateA = new Date(a).getTime();
-        const dateB = new Date(b).getTime();
-        return dateB - dateA; // Сортируем от новых к старым
-      });
-      
-      const lastDate = new Date(sortedDates[0]);
-      lastDate.setHours(0, 0, 0, 0);
-      
-      // Если последняя дата в будущем, используем сегодняшнюю дату
-      if (!isNaN(lastDate.getTime()) && lastDate <= today) {
-        setSelectedDate(lastDate);
-        setCurrentMonth(lastDate);
-      } else {
-        setSelectedDate(today);
-        setCurrentMonth(today);
-      }
-    } else if (isOpen && trackedDates.length === 0) {
-      // Если нет записей, устанавливаем текущую дату
+    if (isOpen) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
       setSelectedDate(today);
-      setCurrentMonth(today);
     }
-  }, [isOpen, trackedDates]);
+  }, [isOpen]);
 
   // Функция для форматирования даты в YYYY-MM-DD (используем локальное время, чтобы избежать проблем с часовыми поясами)
   const formatDateString = (date: Date): string => {
@@ -88,28 +63,10 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
     return savedDates.includes(dateStr);
   };
 
-  // Проверка, нужно ли показывать красный "!" для выбранной даты
+  // Показывать "!" только если есть прошлые фиксации и выбранная дата без фиксации
   const needsWarning = (): boolean => {
-    return !hasTracking(selectedDate);
+    return trackedDates.length > 0 && !hasTracking(selectedDate);
   };
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (calendarRef.current && !calendarRef.current.contains(event.target as Node)) {
-        setIsCalendarOpen(false);
-      }
-    };
-
-    if (isCalendarOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      // Синхронизируем currentMonth с selectedDate при открытии календаря
-      setCurrentMonth(selectedDate);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isCalendarOpen, selectedDate]);
 
   const handleIncrement = () => {
     if (hours < 24 && !isAbsent) {
@@ -216,132 +173,11 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
     return `${day} ${month} ${year}`;
   };
 
-  const formatMonthYear = (date: Date) => {
-    return date.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
-  };
-
-  const getDaysInMonth = (date: Date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const daysInMonth = lastDay.getDate();
-    const startDayOfWeek = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1; // Понедельник = 0
-
-    const days: (number | null)[] = [];
-    
-    // Добавляем пустые ячейки для дней предыдущего месяца
-    for (let i = 0; i < startDayOfWeek; i++) {
-      days.push(null);
-    }
-    
-    // Добавляем дни текущего месяца
-    for (let i = 1; i <= daysInMonth; i++) {
-      days.push(i);
-    }
-    
-    return days;
-  };
-
-  const handlePrevMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1));
-  };
-
-  const handleNextMonth = () => {
-    const nextMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    // Не позволяем переходить к месяцам в будущем
-    const nextMonthStart = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1);
-    nextMonthStart.setHours(0, 0, 0, 0);
-    
-    if (nextMonthStart <= today) {
-      setCurrentMonth(nextMonth);
-    }
-  };
-
-  // Проверка, можно ли перейти к следующему месяцу
-  const canGoToNextMonth = (): boolean => {
-    const nextMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const nextMonthStart = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1);
-    nextMonthStart.setHours(0, 0, 0, 0);
-    return nextMonthStart <= today;
-  };
-
-  const handleDateClick = (day: number) => {
-    const newDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-    newDate.setHours(0, 0, 0, 0);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    // Не позволяем выбирать будущие даты
-    if (newDate > today) {
-      return;
-    }
-    
-    setSelectedDate(newDate);
-    setCurrentMonth(newDate);
-    setIsCalendarOpen(false);
-  };
-
-  const isDateSelected = (day: number | null) => {
-    if (!day) return false;
-    const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-    return (
-      date.getDate() === selectedDate.getDate() &&
-      date.getMonth() === selectedDate.getMonth() &&
-      date.getFullYear() === selectedDate.getFullYear()
-    );
-  };
-
-  const isToday = (day: number | null) => {
-    if (!day) return false;
-    const today = new Date();
-    const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-    return (
-      date.getDate() === today.getDate() &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear()
-    );
-  };
-
-  // Проверка, является ли день днем без фиксации (красный)
-  const isMissingTracking = (day: number | null): boolean => {
-    if (!day) return false;
-    const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-    date.setHours(0, 0, 0, 0);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    // Показываем красным только прошедшие дни без фиксации
-    if (date > today) return false;
-    return !hasTracking(date);
-  };
-
-  // Проверка, является ли день будущим (недоступным для выбора)
-  const isFutureDate = (day: number | null): boolean => {
-    if (!day) return false;
-    const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-    date.setHours(0, 0, 0, 0);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return date > today;
-  };
-
   if (!isOpen) return null;
-
-  const days = getDaysInMonth(currentMonth);
-  const weekDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
   const handleOverlayClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
-      if (isCalendarOpen) {
-        setIsCalendarOpen(false);
-      } else {
-        onClose();
-      }
+      onClose();
     }
   };
 
@@ -376,11 +212,8 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
             </div>
           </div>
 
-          <div className="add-hours-modal__date-wrapper" ref={calendarRef}>
-            <div
-              className="add-hours-modal__date-picker"
-              onClick={() => setIsCalendarOpen(!isCalendarOpen)}
-            >
+          <div className="add-hours-modal__date-wrapper">
+            <div className="add-hours-modal__date-picker add-hours-modal__date-picker--disabled">
               <img src={calendarIconGrey} alt="" className="add-hours-modal__date-icon" />
               <span className="add-hours-modal__date-display">{formatDate(selectedDate)}</span>
               {needsWarning() && (
@@ -389,72 +222,6 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
                 </span>
               )}
             </div>
-
-            {isCalendarOpen && (
-              <div className="add-hours-modal__calendar">
-                <div className="add-hours-modal__calendar-header">
-                  <button
-                    type="button"
-                    className="add-hours-modal__calendar-nav"
-                    onClick={handlePrevMonth}
-                    aria-label="Предыдущий месяц"
-                  >
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <path d="M12 15L7 10L12 5" stroke="#2787F5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </button>
-                  <span className="add-hours-modal__calendar-month">
-                    {formatMonthYear(currentMonth)}
-                  </span>
-                  <button
-                    type="button"
-                    className="add-hours-modal__calendar-nav"
-                    onClick={handleNextMonth}
-                    disabled={!canGoToNextMonth()}
-                    aria-label="Следующий месяц"
-                  >
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <path d="M8 5L13 10L8 15" stroke="#2787F5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </button>
-                </div>
-
-                <div className="add-hours-modal__calendar-weekdays">
-                  {weekDays.map((day) => (
-                    <div key={day} className="add-hours-modal__calendar-weekday">
-                      {day}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="add-hours-modal__calendar-days">
-                  {days.map((day, index) => {
-                    const isFuture = isFutureDate(day);
-                    return (
-                      <button
-                        key={index}
-                        type="button"
-                        className={`add-hours-modal__calendar-day ${
-                          !day ? 'add-hours-modal__calendar-day--empty' : ''
-                        } ${
-                          isDateSelected(day) ? 'add-hours-modal__calendar-day--selected' : ''
-                        } ${
-                          isToday(day) ? 'add-hours-modal__calendar-day--today' : ''
-                        } ${
-                          isMissingTracking(day) ? 'add-hours-modal__calendar-day--missing' : ''
-                        } ${
-                          isFuture ? 'add-hours-modal__calendar-day--disabled' : ''
-                        }`}
-                        onClick={() => day && !isFuture && handleDateClick(day)}
-                        disabled={!day || isFuture}
-                      >
-                        {day || ''}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
 
           {!isAbsent && (

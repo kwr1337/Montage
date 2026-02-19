@@ -1,22 +1,32 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import paginationIconActiveLeft from '../../shared/icons/paginationIconActiveLeft.svg';
-import calendarIconGrey from '../../shared/icons/calendarIconGrey.svg';
-import userDropdownIcon from '../../shared/icons/user-dropdown-icon.svg';
 import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
 import commentMobIcon from '../../shared/icons/commentMob.svg';
 import { apiService } from '../../services/api';
 import { AddFactModal } from '../../shared/ui/AddFactModal/AddFactModal';
 import { AddHoursModal } from '../../shared/ui/AddHoursModal/AddHoursModal';
 import { CommentModal } from '../../shared/ui/CommentModal/CommentModal';
+import { AddEmployeesModal, type WorkerWithBusy } from '../../shared/ui/AddEmployeesModal/AddEmployeesModal';
+import { RemoveEmployeeConfirmModal } from '../../shared/ui/RemoveEmployeeConfirmModal/RemoveEmployeeConfirmModal';
 import '../../shared/ui/AddFactModal/add-fact-modal.scss';
 import '../../shared/ui/AddHoursModal/add-hours-modal.scss';
 import '../../shared/ui/CommentModal/comment-modal.scss';
+import '../../shared/ui/AddEmployeesModal/add-employees-modal.scss';
+import '../../shared/ui/RemoveEmployeeConfirmModal/remove-employee-confirm-modal.scss';
 import './project-detail-mobile.scss';
 
 type ProjectDetailMobileProps = {
   project: any;
   onBack: () => void;
+  onRefresh?: () => Promise<void>;
   isLoading?: boolean;
+  /** Тестовые данные для просмотра без бэкенда */
+  mockApiResponses?: {
+    getNomenclatureChanges?: Record<string, { data: any[] }>;
+    getNomenclatureFacts?: Record<string, { data: any[] }>;
+    getAssignments?: { data: any[] };
+    getAssignmentsWorkers?: { data: any[] };
+  };
 };
 
 const formatCurrency = (value?: number | string | null) => {
@@ -43,7 +53,7 @@ const formatNumber = (value?: number | string | null, fallback: string = '—') 
     return fallback;
   }
 
-  return numeric.toLocaleString('ru-RU');
+  return Math.floor(numeric).toLocaleString('ru-RU');
 };
 
 const formatDate = (value?: string | null) => {
@@ -131,22 +141,23 @@ const getSpecificationStatusMeta = (item: any) => {
 
 type SpecificationItem = {
   id: number;
+  npp?: number;
   name: string;
   unit: string;
   plan: number;
   changes: number | null;
   fact: number | null;
+  /** Сумма фактов по бригадирам за день (user_id -> sum) */
+  factByForeman?: Record<number, number>;
   statusLabel: string;
   statusVariant: 'active' | 'deleted';
 };
 
-export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ project, onBack, isLoading = false }) => {
+export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ project, onBack, onRefresh, isLoading = false, mockApiResponses }) => {
   const [activeTab, setActiveTab] = useState<'general' | 'specification' | 'tracking'>('general');
-  const [isForemanDropdownOpen, setIsForemanDropdownOpen] = useState(false);
-  const foremanDropdownRef = useRef<HTMLDivElement | null>(null);
   const [specificationItems, setSpecificationItems] = useState<SpecificationItem[]>([]);
   const [isSpecificationLoading, setIsSpecificationLoading] = useState(false);
-  const [specificationSortField, setSpecificationSortField] = useState<string | null>(null);
+  const [specificationSortField, setSpecificationSortField] = useState<string | null>('npp');
   const [specificationSortDirection, setSpecificationSortDirection] = useState<'asc' | 'desc'>('asc');
 
   // Отладочная информация (можно удалить после проверки)
@@ -180,6 +191,29 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   const [calculatedSpent, setCalculatedSpent] = useState<number | null>(null);
   const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
   const [selectedComment, setSelectedComment] = useState<{ comment: string; employeeName: string; date: string } | null>(null);
+
+  // Назначения рабочих на день (для вкладки СОТРУДНИКИ)
+  const [dayAssignedWorkers, setDayAssignedWorkers] = useState<any[]>([]);
+  const [workersWithBusy, setWorkersWithBusy] = useState<WorkerWithBusy[]>([]);
+  const [isAddEmployeesModalOpen, setIsAddEmployeesModalOpen] = useState(false);
+  const [removeConfirmEmployee, setRemoveConfirmEmployee] = useState<{ id: number; name: string } | null>(null);
+
+  const assignmentDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const foremen = useMemo(() => {
+    const employees = project?.employees || [];
+    const active = employees.filter((emp: any) => !emp.pivot?.end_working_date);
+    return active.filter((emp: any) => emp.role === 'Бригадир');
+  }, [project?.employees]);
+
+  // Текущий бригадир (вошедший пользователь) — в колонке Факт показываем только его данные
+  const currentForeman = useMemo(() => {
+    const currentUser = apiService.getCurrentUser();
+    if (!currentUser?.id) return null;
+    return foremen.find(
+      (f: any) => f.user_id === currentUser.id || f.id === currentUser.id
+    ) ?? null;
+  }, [foremen]);
 
   const summary = useMemo(() => {
     const allocated = Number(project?.budget) || 0;
@@ -234,14 +268,6 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     return `Проект ${idPart}${namePart}`.trim();
   }, [project?.id, project?.name]);
 
-  const foremen = useMemo(() => {
-    if (!Array.isArray(project?.employees)) {
-      return [];
-    }
-
-    return project.employees.filter((emp: any) => emp.role === 'Бригадир' && !emp.pivot?.end_working_date);
-  }, [project?.employees]);
-
   useEffect(() => {
     const checkOrientation = () => {
       setIsPortrait(window.innerHeight > window.innerWidth);
@@ -257,24 +283,96 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     };
   }, []);
 
+  // Загрузка назначений рабочих на день (для вкладки СОТРУДНИКИ)
   useEffect(() => {
-    if (foremen.length === 0 && isForemanDropdownOpen) {
-      setIsForemanDropdownOpen(false);
-    }
-  }, [foremen.length, isForemanDropdownOpen]);
+    if (activeTab !== 'general') return;
+    let isCancelled = false;
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (foremanDropdownRef.current && !foremanDropdownRef.current.contains(event.target as Node)) {
-        setIsForemanDropdownOpen(false);
+    const loadAssignments = async () => {
+      try {
+        let assignRes: any;
+        let workersRes: any;
+
+        if (mockApiResponses?.getAssignments && mockApiResponses?.getAssignmentsWorkers) {
+          assignRes = mockApiResponses.getAssignments;
+          workersRes = mockApiResponses.getAssignmentsWorkers;
+        } else {
+          [assignRes, workersRes] = await Promise.all([
+            apiService.getAssignments(assignmentDate),
+            apiService.getAssignmentsWorkers(assignmentDate),
+          ]);
+        }
+
+        if (isCancelled) return;
+
+        // Нормализация назначений: { data: [...] } или { data: { data: [...] } }
+        let assigned: any[] = [];
+        const assignData = assignRes?.data ?? assignRes;
+        if (Array.isArray(assignData)) {
+          assigned = assignData;
+        } else if (assignData?.data && Array.isArray(assignData.data)) {
+          assigned = assignData.data;
+        } else if (assignData?.assignments && Array.isArray(assignData.assignments)) {
+          assigned = assignData.assignments;
+        }
+
+        const workersList = assigned.map((a: any) => {
+          const u = a.user ?? a;
+          return { id: u.id ?? a.worker_id ?? a.user_id, ...u };
+        });
+        setDayAssignedWorkers(workersList);
+
+        // Нормализация workers с busy
+        let workers: WorkerWithBusy[] = [];
+        const workersData = workersRes?.data ?? workersRes;
+        if (Array.isArray(workersData)) {
+          workers = workersData.map((w: any) => ({
+            id: w.id ?? w.user_id,
+            first_name: w.first_name,
+            second_name: w.second_name,
+            last_name: w.last_name,
+            busy: w.busy ?? w.assigned_by ? { foreman_name: w.busy?.foreman_name ?? w.assigned_by } : undefined,
+          }));
+        } else if (workersData?.workers && Array.isArray(workersData.workers)) {
+          workers = workersData.workers.map((w: any) => ({
+            id: w.id ?? w.user_id,
+            first_name: w.first_name,
+            second_name: w.second_name,
+            last_name: w.last_name,
+            busy: w.busy ?? w.assigned_by ? { foreman_name: w.busy?.foreman_name ?? w.assigned_by } : undefined,
+          }));
+        } else {
+          // Fallback: используем users если assignments/workers не вернул данные
+          const usersRes = await apiService.getUsers();
+          const usersData = usersRes?.data ?? usersRes;
+          const arr = Array.isArray(usersData)
+            ? usersData
+            : Array.isArray(usersData?.data)
+            ? usersData.data
+            : [];
+          workers = arr
+            .filter((u: any) => u.is_employee !== false && u.employee_status !== 'dismissed')
+            .map((u: any) => ({
+              id: u.id,
+              first_name: u.first_name,
+              second_name: u.second_name,
+              last_name: u.last_name,
+              busy: undefined,
+            }));
+        }
+        if (!isCancelled) setWorkersWithBusy(workers);
+      } catch (e) {
+        console.error('Error loading assignments:', e);
+        if (!isCancelled) {
+          setDayAssignedWorkers([]);
+          setWorkersWithBusy([]);
+        }
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
+    loadAssignments();
+    return () => { isCancelled = true; };
+  }, [activeTab, assignmentDate, isAddEmployeesModalOpen, mockApiResponses]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -304,15 +402,19 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
 
       try {
         const itemsWithMeta = await Promise.all(
-          project.nomenclature.map(async (item: any) => {
+          project.nomenclature.map(async (item: any, index: number) => {
             if (!item?.id) return null;
 
             let lastChange: number | null = null;
             let factValue: number = 0;
 
             try {
-              // Загружаем изменения
-              const response = await apiService.getNomenclatureChanges(project.id, item.id);
+              let response: any;
+              if (mockApiResponses?.getNomenclatureChanges?.[String(item.id)]) {
+                response = mockApiResponses.getNomenclatureChanges[String(item.id)];
+              } else {
+                response = await apiService.getNomenclatureChanges(project.id, item.id);
+              }
               const changesData = Array.isArray(response?.data)
                 ? response.data
                 : Array.isArray(response)
@@ -330,12 +432,19 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
               // Игнорируем ошибки загрузки изменений
             }
 
+            let factByForeman: Record<number, number> = {};
+
             try {
-              // Загружаем факты и суммируем их
-              const factsResponse = await apiService.getNomenclatureFacts(project.id, item.id, {
-                per_page: 1000,
-              });
-              
+              let factsResponse: any;
+              if (mockApiResponses?.getNomenclatureFacts?.[String(item.id)]) {
+                factsResponse = mockApiResponses.getNomenclatureFacts[String(item.id)];
+              } else {
+                factsResponse = await apiService.getNomenclatureFacts(project.id, item.id, {
+                  per_page: 1000,
+                  with: ['user'],
+                });
+              }
+
               let factsData: any[] = [];
               if (factsResponse?.data?.data && Array.isArray(factsResponse.data.data)) {
                 factsData = factsResponse.data.data;
@@ -345,13 +454,24 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                 factsData = factsResponse;
               }
 
-              // Суммируем все факты (исключая удаленные)
-              factValue = factsData
-                .filter((fact: any) => !fact.is_deleted)
-                .reduce((sum: number, fact: any) => {
-                  const amount = Number(fact.amount) || 0;
-                  return sum + amount;
-                }, 0);
+              const today = new Date().toISOString().slice(0, 10);
+              const activeFacts = factsData.filter((fact: any) => !fact.is_deleted);
+
+              // Сумма всех фактов (общая)
+              factValue = activeFacts.reduce((sum: number, fact: any) => {
+                const amount = Number(fact.amount) || 0;
+                return sum + amount;
+              }, 0);
+
+              // Сумма за день по бригадирам (user_id -> sum)
+              activeFacts
+                .filter((fact: any) => fact.fact_date === today)
+                .forEach((fact: any) => {
+                  const uid = fact.user_id ?? fact.user?.id;
+                  if (uid != null) {
+                    factByForeman[uid] = (factByForeman[uid] || 0) + (Number(fact.amount) || 0);
+                  }
+                });
             } catch {
               // Игнорируем ошибки загрузки фактов, используем значение из pivot
               factValue = Number(item?.pivot?.current_amount ?? item?.fact ?? 0);
@@ -362,11 +482,13 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
 
             return {
               id: item.id,
+              npp: item.npp ?? item.pivot?.npp ?? index + 1,
               name: item.name || '—',
               unit: item.unit || '—',
               plan: Number.isFinite(planValue) ? planValue : 0,
               changes: lastChange,
               fact: Number.isFinite(factValue) ? factValue : 0,
+              factByForeman: Object.keys(factByForeman).length > 0 ? factByForeman : undefined,
               statusLabel: statusMeta.label,
               statusVariant: statusMeta.variant,
             } as SpecificationItem;
@@ -396,7 +518,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     return () => {
       isCancelled = true;
     };
-  }, [project?.id, project?.nomenclature]);
+  }, [project?.id, project?.nomenclature, mockApiResponses]);
 
   // Загружаем и рассчитываем потраченную сумму из work_reports
   useEffect(() => {
@@ -750,10 +872,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
         }
       }
       
-      // Обновляем список спецификации после сохранения
       await loadSpecification();
-      
-      // Закрываем модальное окно
+      await onRefresh?.();
       handleCloseFactModal();
     } catch (error) {
       console.error('Error saving fact:', error);
@@ -778,8 +898,12 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           let factValue: number = 0;
 
           try {
-            // Загружаем изменения
-            const response = await apiService.getNomenclatureChanges(project.id, item.id);
+            let response: any;
+            if (mockApiResponses?.getNomenclatureChanges?.[String(item.id)]) {
+              response = mockApiResponses.getNomenclatureChanges[String(item.id)];
+            } else {
+              response = await apiService.getNomenclatureChanges(project.id, item.id);
+            }
             const changesData = Array.isArray(response?.data)
               ? response.data
               : Array.isArray(response)
@@ -797,12 +921,19 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
             // Игнорируем ошибки загрузки изменений
           }
 
+          let factByForeman: Record<number, number> = {};
+
           try {
-            // Загружаем факты и суммируем их
-            const factsResponse = await apiService.getNomenclatureFacts(project.id, item.id, {
-              per_page: 1000,
-            });
-            
+            let factsResponse: any;
+            if (mockApiResponses?.getNomenclatureFacts?.[String(item.id)]) {
+              factsResponse = mockApiResponses.getNomenclatureFacts[String(item.id)];
+            } else {
+              factsResponse = await apiService.getNomenclatureFacts(project.id, item.id, {
+                per_page: 1000,
+                with: ['user'],
+              });
+            }
+
             let factsData: any[] = [];
             if (factsResponse?.data?.data && Array.isArray(factsResponse.data.data)) {
               factsData = factsResponse.data.data;
@@ -812,15 +943,23 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
               factsData = factsResponse;
             }
 
-            // Суммируем все факты (исключая удаленные)
-            factValue = factsData
-              .filter((fact: any) => !fact.is_deleted)
-              .reduce((sum: number, fact: any) => {
-                const amount = Number(fact.amount) || 0;
-                return sum + amount;
-              }, 0);
+            const today = new Date().toISOString().slice(0, 10);
+            const activeFacts = factsData.filter((fact: any) => !fact.is_deleted);
+
+            factValue = activeFacts.reduce((sum: number, fact: any) => {
+              const amount = Number(fact.amount) || 0;
+              return sum + amount;
+            }, 0);
+
+            activeFacts
+              .filter((fact: any) => fact.fact_date === today)
+              .forEach((fact: any) => {
+                const uid = fact.user_id ?? fact.user?.id;
+                if (uid != null) {
+                  factByForeman[uid] = (factByForeman[uid] || 0) + (Number(fact.amount) || 0);
+                }
+              });
           } catch {
-            // Игнорируем ошибки загрузки фактов, используем значение из pivot
             factValue = Number(item?.pivot?.current_amount ?? item?.fact ?? 0);
           }
 
@@ -829,11 +968,13 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
 
           return {
             id: item.id,
+            npp: item.npp ?? item.pivot?.npp,
             name: item.name || '—',
-              unit: item.unit || '—',
+            unit: item.unit || '—',
             plan: Number.isFinite(planValue) ? planValue : 0,
             changes: lastChange,
             fact: Number.isFinite(factValue) ? factValue : 0,
+            factByForeman: Object.keys(factByForeman).length > 0 ? factByForeman : undefined,
             statusLabel: statusMeta.label,
             statusVariant: statusMeta.variant,
           } as SpecificationItem;
@@ -847,7 +988,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     } finally {
       setIsSpecificationLoading(false);
     }
-  }, [project?.id, project?.nomenclature]);
+  }, [project?.id, project?.nomenclature, mockApiResponses]);
 
   const handleOpenHoursModal = async (item: any) => {
     // Создаем объект employee для модального окна
@@ -907,6 +1048,45 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     setSelectedComment(null);
   };
 
+  const formatWorkerNameShort = (emp: any) => {
+    if (!emp) return '—';
+    const ln = emp.last_name || '';
+    const fi = emp.first_name ? `${emp.first_name.charAt(0)}.` : '';
+    const si = emp.second_name ? `${emp.second_name.charAt(0)}.` : '';
+    return `${ln} ${fi}${si}`.trim() || '—';
+  };
+
+  const handleAddEmployees = async (workerIds: number[]) => {
+    if (!mockApiResponses) {
+      for (const id of workerIds) {
+        await apiService.addAssignment(id, assignmentDate);
+      }
+    }
+    const workersList = workersWithBusy.filter((w) => workerIds.includes(w.id));
+    const toAdd = workersList.map((w) => ({
+      id: w.id,
+      first_name: w.first_name,
+      second_name: w.second_name,
+      last_name: w.last_name,
+    }));
+    setDayAssignedWorkers((prev) => {
+      const existingIds = new Set(prev.map((p: any) => p.id));
+      const newOnes = toAdd.filter((w) => !existingIds.has(w.id));
+      return [...prev, ...newOnes];
+    });
+    await onRefresh?.();
+  };
+
+  const handleRemoveEmployee = async () => {
+    if (!removeConfirmEmployee) return;
+    if (!mockApiResponses) {
+      await apiService.deleteAssignment(removeConfirmEmployee.id, assignmentDate);
+    }
+    setDayAssignedWorkers((prev) => prev.filter((p: any) => p.id !== removeConfirmEmployee.id));
+    setRemoveConfirmEmployee(null);
+    await onRefresh?.();
+  };
+
   // Функция сортировки для спецификации
   const handleSpecificationSort = (field: string | null) => {
     if (specificationSortField === field) {
@@ -926,9 +1106,9 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
         let bValue: any;
         
         switch (specificationSortField) {
-          case 'id':
-            aValue = a.id || 0;
-            bValue = b.id || 0;
+          case 'npp':
+            aValue = a.npp ?? 0;
+            bValue = b.npp ?? 0;
             break;
           case 'name':
             aValue = (a.name || '').toLowerCase();
@@ -954,6 +1134,16 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
             aValue = Number(a.fact) || 0;
             bValue = Number(b.fact) || 0;
             break;
+          case 'total':
+            aValue =
+              foremen.length > 0
+                ? foremen.reduce((s, f) => s + (Number(a.factByForeman?.[f.id]) || 0), 0)
+                : Number(a.fact) || 0;
+            bValue =
+              foremen.length > 0
+                ? foremen.reduce((s, f) => s + (Number(b.factByForeman?.[f.id]) || 0), 0)
+                : Number(b.fact) || 0;
+            break;
           default:
             return 0;
         }
@@ -970,7 +1160,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       });
     }
     return sorted;
-  }, [specificationItems, specificationSortField, specificationSortDirection]);
+  }, [specificationItems, specificationSortField, specificationSortDirection, foremen]);
 
   // Функция сортировки для фиксации работ
   const handleTrackingSort = (field: string | null) => {
@@ -1107,10 +1297,10 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       }
     }
     
-    // Перезагружаем trackingItems после сохранения часов
     if (activeTab === 'tracking') {
       await loadTrackingItems();
     }
+    await onRefresh?.();
   };
 
   if (isPortrait) {
@@ -1168,76 +1358,56 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           {activeTab === 'general' && (
             <>
               <section className="mobile-project-detail__budget">
-                <span className="mobile-project-detail__section-label">ФОТ</span>
-                <div className="mobile-project-detail__budget-cards">
-                  <div className="mobile-project-detail__budget-card mobile-project-detail__budget-card--allocated">
-                    <span className="mobile-project-detail__budget-label">Выделено</span>
-                    <div className="mobile-project-detail__budget-value">{formatCurrency(summary.allocated)}</div>
-                  </div>
-                  <div className="mobile-project-detail__budget-card mobile-project-detail__budget-card--spent">
-                    <span className="mobile-project-detail__budget-label">Потрачено</span>
-                    <div className="mobile-project-detail__budget-value">{formatCurrency(summary.spent)}</div>
-                  </div>
-                  <div className="mobile-project-detail__budget-card mobile-project-detail__budget-card--remaining">
-                    <span className="mobile-project-detail__budget-label">Остаток</span>
-                    <div className="mobile-project-detail__budget-value">{formatCurrency(summary.remaining)}</div>
+                <div className="mobile-project-detail__budget-header">
+                  <span className="mobile-project-detail__section-label">ФОТ</span>
+                  <div className="mobile-project-detail__budget-pills">
+                    <div className="mobile-project-detail__budget-pill mobile-project-detail__budget-pill--allocated">
+                      <span className="mobile-project-detail__budget-pill-label">Выделено</span>
+                      <span className="mobile-project-detail__budget-pill-value">{formatCurrency(summary.allocated)}</span>
+                    </div>
+                    <div className="mobile-project-detail__budget-pill mobile-project-detail__budget-pill--spent">
+                      <span className="mobile-project-detail__budget-pill-label">Израсходовали</span>
+                      <span className="mobile-project-detail__budget-pill-value">{formatCurrency(summary.spent)}</span>
+                    </div>
+                    <div className="mobile-project-detail__budget-pill mobile-project-detail__budget-pill--remaining">
+                      <span className="mobile-project-detail__budget-pill-label">Остаток</span>
+                      <span className="mobile-project-detail__budget-pill-value">{formatCurrency(summary.remaining)}</span>
+                    </div>
                   </div>
                 </div>
               </section>
 
-              <section className="mobile-project-detail__summary">
-                <span className="mobile-project-detail__section-label">Сводка по проекту</span>
-
-                <div className="mobile-project-detail__summary-grid">
-                  <div className="mobile-project-detail__summary-card">
-                    <span className="mobile-project-detail__summary-meta">Сроки</span>
-                    <div className="mobile-project-detail__summary-date-picker" aria-hidden="true">
-                      <div className="mobile-project-detail__summary-date-picker-inner">
-                        <img src={calendarIconGrey} alt="" className="mobile-project-detail__summary-date-picker-icon" />
-                        <div className="mobile-project-detail__summary-date-display mobile-project-detail__summary-date-display--start">
-                          {formatDate(summary.startDate)}
-                        </div>
-                        <div className="mobile-project-detail__summary-date-display mobile-project-detail__summary-date-display--end">
-                          {formatDate(summary.endDate)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mobile-project-detail__summary-card">
-                    <span className="mobile-project-detail__summary-meta">Бригадир</span>
-                    <div
-                      className={`mobile-project-detail__summary-foreman ${isForemanDropdownOpen ? 'mobile-project-detail__summary-foreman--open' : ''}`}
-                      ref={foremanDropdownRef}
-                    >
+              <section className="mobile-project-detail__employees">
+                <div className="mobile-project-detail__employees-header">
+                  <span className="mobile-project-detail__section-label">СОТРУДНИКИ</span>
+                  <button
+                    type="button"
+                    className="mobile-project-detail__employees-add"
+                    onClick={() => setIsAddEmployeesModalOpen(true)}
+                  >
+                    + Добавить
+                  </button>
+                </div>
+                <div className="mobile-project-detail__employees-chips">
+                  {dayAssignedWorkers.map((emp: any) => (
+                    <div key={emp.id} className="mobile-project-detail__employees-chip">
+                      <span>{formatWorkerNameShort(emp)}</span>
                       <button
                         type="button"
-                        className="mobile-project-detail__summary-foreman-inner"
-                        onClick={() => {
-                          if (foremen.length > 0) {
-                            setIsForemanDropdownOpen((prev) => !prev);
-                          }
-                        }}
-                        disabled={foremen.length === 0}
-                        aria-expanded={isForemanDropdownOpen}
-                        aria-haspopup="listbox"
+                        className="mobile-project-detail__employees-chip-remove"
+                        onClick={() => setRemoveConfirmEmployee({ id: emp.id, name: formatWorkerNameShort(emp) })}
+                        aria-label="Удалить"
                       >
-                        <span>{summary.foreman}</span>
-                        <img src={userDropdownIcon} alt="" className="mobile-project-detail__summary-foreman-icon" aria-hidden="true" />
+                        ×
                       </button>
-
-                      {isForemanDropdownOpen && foremen.length > 0 && (
-                        <div className="mobile-project-detail__summary-foreman-dropdown" role="listbox">
-                          {foremen.map((foreman: any) => (
-                            <div key={foreman.id} className="mobile-project-detail__summary-foreman-item" role="option" aria-selected="false">
-                              {formatForemanName(foreman)}
-                            </div>
-                          ))}
-                        </div>
-                      )}
                     </div>
-                  </div>
+                  ))}
                 </div>
+                {dayAssignedWorkers.length === 0 && (
+                  <div className="mobile-project-detail__employees-empty">
+                    Нет сотрудников на сегодня
+                  </div>
+                )}
               </section>
             </>
           )}
@@ -1257,23 +1427,20 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                       <div className="mobile-project-detail__specification-header-group" />
                       <div className="mobile-project-detail__specification-header-group" />
                       <div className="mobile-project-detail__specification-header-group" />
-                      <div className="mobile-project-detail__specification-header-group" />
-                      <div className="mobile-project-detail__specification-header-group">План</div>
-                      <div className="mobile-project-detail__specification-header-group">Изм</div>
-                      <div className="mobile-project-detail__specification-header-group">Факт</div>
+                      <div className="mobile-project-detail__specification-header-group">ПЛАН</div>
+                      <div className="mobile-project-detail__specification-header-group">ИЗМ.</div>
+                      <div className="mobile-project-detail__specification-header-group">ФАКТ</div>
+                      <div className="mobile-project-detail__specification-header-group">ИТОГО</div>
                       <div className="mobile-project-detail__specification-header-group" />
                     </div>
 
                     <div className="mobile-project-detail__specification-header">
-                      {/* <div className="mobile-project-detail__specification-header-col mobile-project-detail__specification-header-col--checkbox">
-                        <input type="checkbox" disabled />
-                      </div> */}
                       <div 
-                        className="mobile-project-detail__specification-header-col mobile-project-detail__specification-header-col--id"
-                        onClick={() => handleSpecificationSort('id')}
+                        className="mobile-project-detail__specification-header-col mobile-project-detail__specification-header-col--npp"
+                        onClick={() => handleSpecificationSort('npp')}
                         style={{ cursor: 'pointer' }}
                       >
-                        <span>ID</span>
+                        <span>№</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
                       <div 
@@ -1281,15 +1448,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                         onClick={() => handleSpecificationSort('name')}
                         style={{ cursor: 'pointer' }}
                       >
-                        <span>Номенклатура</span>
-                        <img src={upDownTableFilter} alt="" aria-hidden="true" />
-                      </div>
-                      <div 
-                        className="mobile-project-detail__specification-header-col"
-                        onClick={() => handleSpecificationSort('status')}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <span>Статус</span>
+                        <span>НОМЕНКЛАТУРА</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
                       <div 
@@ -1297,7 +1456,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                         onClick={() => handleSpecificationSort('unit')}
                         style={{ cursor: 'pointer' }}
                       >
-                        <span>Ед. изм.</span>
+                        <span>ЕД. ИЗМ.</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
                       <div 
@@ -1305,7 +1464,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                         onClick={() => handleSpecificationSort('plan')}
                         style={{ cursor: 'pointer' }}
                       >
-                        <span>Кол-во</span>
+                        <span>КОЛ-ВО</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
                       <div 
@@ -1313,7 +1472,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                         onClick={() => handleSpecificationSort('changes')}
                         style={{ cursor: 'pointer' }}
                       >
-                        <span>Кол-во</span>
+                        <span>КОЛ-ВО</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
                       <div 
@@ -1321,31 +1480,36 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                         onClick={() => handleSpecificationSort('fact')}
                         style={{ cursor: 'pointer' }}
                       >
-                        <span>Кол-во</span>
+                        <span>КОЛ-ВО</span>
+                        <img src={upDownTableFilter} alt="" aria-hidden="true" />
+                      </div>
+                      <div 
+                        className="mobile-project-detail__specification-header-col mobile-project-detail__specification-header-col--number"
+                        onClick={() => handleSpecificationSort('total')}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <span>КОЛ-ВО</span>
                         <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
                       <div className="mobile-project-detail__specification-header-col mobile-project-detail__specification-header-col--action">
                         <span>Действие</span>
-                        <img src={upDownTableFilter} alt="" aria-hidden="true" />
                       </div>
                     </div>
 
                     <div className="mobile-project-detail__specification-body">
-                      {sortedSpecificationItems.map((item) => (
+                      {sortedSpecificationItems.map((item, index) => {
+                        // Итого = сумма затраченных материалов всеми бригадирами на проекте
+                        const totalFact =
+                          foremen.length > 0
+                            ? foremen.reduce((sum, f) => sum + (Number(item.factByForeman?.[f.id]) || 0), 0)
+                            : Number(item.fact) || 0;
+                        return (
                         <div key={item.id} className="mobile-project-detail__specification-row">
-                          {/* <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--checkbox">
-                            <input type="checkbox" disabled />
-                          </div> */}
-                          <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--id">
-                            <span>{item.id}</span>
+                          <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--npp">
+                            <span>{item.npp ?? index + 1}</span>
                           </div>
                           <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--name">
                             <span>{item.name}</span>
-                          </div>
-                          <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--status">
-                            <span className={`mobile-project-detail__specification-status mobile-project-detail__specification-status--${item.statusVariant}`}>
-                              {item.statusLabel}
-                            </span>
                           </div>
                           <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--unit">
                             <span>{item.unit || '—'}</span>
@@ -1354,10 +1518,22 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                             <span>{formatNumber(item.plan, '0')}</span>
                           </div>
                           <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--number">
-                            <span>{formatNumber(item.changes, '—')}</span>
+                            <span>{formatNumber(item.changes, '0')}</span>
+                          </div>
+                          <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--number mobile-project-detail__specification-col--fact">
+                            <span>
+                              {currentForeman
+                                ? formatNumber(item.factByForeman?.[currentForeman.id] ?? 0, '0')
+                                : foremen.length > 0
+                                  ? formatNumber(
+                                      foremen.reduce((sum, f) => sum + (Number(item.factByForeman?.[f.id]) || 0), 0),
+                                      '0'
+                                    )
+                                  : formatNumber(item.fact, '0')}
+                            </span>
                           </div>
                           <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--number">
-                            <span>{formatNumber(item.fact, '0')}</span>
+                            <span>{formatNumber(totalFact, '0')}</span>
                           </div>
                           <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--action">
                             <button
@@ -1369,7 +1545,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                             </button>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -1573,6 +1750,21 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           })() : undefined}
         />
       )}
+
+      <AddEmployeesModal
+        isOpen={isAddEmployeesModalOpen}
+        onClose={() => setIsAddEmployeesModalOpen(false)}
+        onAdd={handleAddEmployees}
+        workers={workersWithBusy}
+        myAssignedIds={dayAssignedWorkers.map((w: any) => w.id)}
+      />
+
+      <RemoveEmployeeConfirmModal
+        isOpen={!!removeConfirmEmployee}
+        onClose={() => setRemoveConfirmEmployee(null)}
+        onConfirm={handleRemoveEmployee}
+        employeeName={removeConfirmEmployee?.name ?? ''}
+      />
     </div>
   );
 };

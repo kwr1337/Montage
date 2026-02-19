@@ -86,8 +86,9 @@ function App() {
   const userRole = currentUser?.role || currentUser?.position;
   const isBrigadier = userRole === 'Бригадир';
   const isMobileContext = isMobileViewport;
-  const shouldUseMobileProjects = isAuthenticated && isMobileContext && isBrigadier;
-  const shouldShowMobileRestriction = isAuthenticated && isMobileContext && !isBrigadier;
+  const useMockData = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mock') === '1';
+  const shouldUseMobileProjects = isAuthenticated && isMobileContext && (isBrigadier || useMockData);
+  const shouldShowMobileRestriction = isAuthenticated && isMobileContext && !isBrigadier && !useMockData;
 
   if (isLoading) {
     return (

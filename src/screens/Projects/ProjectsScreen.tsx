@@ -588,6 +588,20 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     }
   };
 
+  const handleRefreshProject = async () => {
+    if (selectedProjectId) {
+      try {
+        const response = await apiService.getProjectById(selectedProjectId);
+        const updatedProject = response?.data ?? response;
+        if (updatedProject) {
+          handleProjectUpdate(updatedProject);
+        }
+      } catch (e) {
+        console.error('Ошибка обновления проекта:', e);
+      }
+    }
+  };
+
   // Обработчик выбора/снятия выбора проекта
   const handleProjectSelect = (projectId: number, event?: React.MouseEvent) => {
     if (event) {
@@ -1153,6 +1167,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
             localStorage.removeItem('selectedProjectId');
           }}
           onProjectUpdate={handleProjectUpdate}
+          onRefresh={handleRefreshProject}
           onProjectCreate={(createdProject) => {
             setProjects(prev => [createdProject, ...prev]);
             setIsCreatingProject(false);

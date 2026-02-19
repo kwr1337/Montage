@@ -1,0 +1,86 @@
+.remove-employee-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.remove-employee-confirm-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 360px;
+  width: 100%;
+}
+
+.remove-employee-confirm__title {
+  margin: 0 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b6c70;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+
+.remove-employee-confirm {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 24px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  text-align: center;
+
+  &__question {
+    margin: 0 0 8px;
+    font-size: 18px;
+    font-weight: 600;
+    color: #2c2d2e;
+    line-height: 1.4;
+  }
+
+  &__hint {
+    margin: 0 0 24px;
+    font-size: 14px;
+    color: #919399;
+    line-height: 1.4;
+  }
+
+  &__actions {
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+  }
+
+  &__btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    &--cancel {
+      background: rgba(39, 135, 245, 0.08);
+      color: #2787f5;
+    }
+
+    &--delete {
+      background: #2787f5;
+      color: #ffffff;
+
+      &:hover:not(:disabled) {
+        background: #1e6ccc;
+      }
+    }
+  }
+}
