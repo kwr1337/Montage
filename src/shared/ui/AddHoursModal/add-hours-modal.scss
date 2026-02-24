@@ -491,6 +491,12 @@
     font-weight: 400;
     line-height: 1.4;
     text-align: center;
+
+    &--info {
+      background: rgba(39, 135, 245, 0.08);
+      border-color: #2787f5;
+      color: #2787f5;
+    }
   }
 
   &__actions {

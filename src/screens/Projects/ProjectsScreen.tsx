@@ -168,7 +168,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     const fetchProjects = async () => {
       setIsLoading(true);
       try {
-        const response = await apiService.getProjects(currentPage, itemsPerPage);
+        const response = await apiService.getProjects(currentPage, itemsPerPage, getProjectsFilter);
         
         // Проверяем разные варианты структуры ответа
         let projectsList: any[] = [];
@@ -508,6 +508,8 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
   };
 
   const currentUser = apiService.getCurrentUser();
+  const isBrigadier = (currentUser?.role || currentUser?.position) === 'Бригадир';
+  const getProjectsFilter = isBrigadier && currentUser?.id ? { filter: { manager_id: [currentUser.id] } } : undefined;
 
   const createEmptyProjectDraft = () => ({
     id: null,
@@ -518,7 +520,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     address: '',
     description: '',
     budget: '',
-    project_manager_id: currentUser?.id ?? null,
+    project_managers: currentUser?.id ? [currentUser.id] : [] as number[],
     employees: [],
     nomenclature: [],
   });
@@ -544,7 +546,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     // Если проект был удален, обновляем список с сервера
     if (updatedProject.is_deleted === true || updatedProject.is_deleted === 1) {
       try {
-        const response = await apiService.getProjects(currentPage, itemsPerPage);
+        const response = await apiService.getProjects(currentPage, itemsPerPage, getProjectsFilter);
         
         let projectsList: any[] = [];
         if (Array.isArray(response)) {
@@ -698,7 +700,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
       
       // Перезагружаем список проектов с сервера для получения актуальных данных
       try {
-        const response = await apiService.getProjects(currentPage, itemsPerPage);
+        const response = await apiService.getProjects(currentPage, itemsPerPage, getProjectsFilter);
         
         let projectsList: any[] = [];
         if (Array.isArray(response)) {
@@ -1123,6 +1125,10 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                       <span className="projects__budget-label">Осталось:</span>
                       <span className="projects__budget-amount">
                         {(() => {
+                          const budgetBalance = (project as { budget_balance?: number })?.budget_balance;
+                          if (budgetBalance != null && Number.isFinite(Number(budgetBalance))) {
+                            return `${Number(budgetBalance).toLocaleString('ru-RU')} ₽`;
+                          }
                           const budget = project.budget || 0;
                           const spent = calculateTotalSpent(project);
                           const remaining = budget - spent;

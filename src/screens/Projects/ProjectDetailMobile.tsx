@@ -56,6 +56,15 @@ const formatNumber = (value?: number | string | null, fallback: string = '—') 
   return Math.floor(numeric).toLocaleString('ru-RU');
 };
 
+/** Локальная дата YYYY-MM-DD (для сравнения с fact_date) */
+const getTodayLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+/** Нормализует fact_date к YYYY-MM-DD (API может вернуть с временем) */
+const normalizeFactDate = (d: string | undefined | null) =>
+  (d || '').slice(0, 10);
+
 const formatDate = (value?: string | null) => {
   if (!value) {
     return '—';
@@ -187,7 +196,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   const [dayAssignedWorkers, setDayAssignedWorkers] = useState<any[]>([]);
   const [workersWithBusy, setWorkersWithBusy] = useState<WorkerWithBusy[]>([]);
   const [isAddEmployeesModalOpen, setIsAddEmployeesModalOpen] = useState(false);
-  const [removeConfirmEmployee, setRemoveConfirmEmployee] = useState<{ id: number; name: string } | null>(null);
+  const [removeConfirmEmployee, setRemoveConfirmEmployee] = useState<{ id: number; assignment_id?: number; name: string } | null>(null);
 
   const assignmentDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
@@ -205,6 +214,23 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       (f: any) => f.user_id === currentUser.id || f.id === currentUser.id
     ) ?? null;
   }, [foremen]);
+
+  // Колонка Факт: только данные текущего бригадира за день. API использует project_manager_id = id текущего пользователя
+  const getMyFactValue = (item: SpecificationItem): number => {
+    const currentUser = apiService.getCurrentUser();
+    const isBrigadier = (currentUser?.role || currentUser?.position) === 'Бригадир';
+    if (isBrigadier && item.factByForeman && currentUser?.id != null) {
+      const key = Number(currentUser.id);
+      const val = item.factByForeman[key] ?? item.factByForeman[currentUser.id];
+      return Number(val) || 0;
+    }
+    return 0;
+  };
+
+  // Колонка Итого: сумма затрат материалов всех бригадиров за всё время
+  const getTotalFactValue = (item: SpecificationItem): number => {
+    return Number(item.fact) || 0;
+  };
 
   const summary = useMemo(() => {
     const allocated = Number(project?.budget) || 0;
@@ -238,10 +264,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       spentValue = Number(spent) || 0;
     }
 
-    const remainingCandidate = project?.remaining_budget ?? project?.budget_remaining ?? (allocated - spentValue);
-    const remaining = Number.isFinite(Number(remainingCandidate))
-      ? Number(remainingCandidate)
-      : Math.max(allocated - spentValue, 0);
+    // Остаток = Выделено - Израсходовали (рассчитываем локально по work_reports)
+    const remaining = Math.max(0, allocated - spentValue);
 
     return {
       allocated,
@@ -274,10 +298,12 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     };
   }, []);
 
-  // Загрузка назначений рабочих на день (для вкладки СОТРУДНИКИ)
+  // Загрузка назначений рабочих на день (вкладка СОТРУДНИКИ и для фильтрации Фиксации работ)
   useEffect(() => {
-    if (activeTab !== 'general') return;
+    if (activeTab !== 'general' && activeTab !== 'tracking') return;
     let isCancelled = false;
+    const currentUser = apiService.getCurrentUser();
+    const myBrigadierId = currentUser?.id ?? null;
 
     const loadAssignments = async () => {
       try {
@@ -289,14 +315,14 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           workersRes = mockApiResponses.getAssignmentsWorkers;
         } else {
           [assignRes, workersRes] = await Promise.all([
-            apiService.getAssignments(assignmentDate),
+            apiService.getAssignments(assignmentDate, { all: true }),
             apiService.getAssignmentsWorkers(assignmentDate),
           ]);
         }
 
         if (isCancelled) return;
 
-        // Нормализация назначений: { data: [...] } или { data: { data: [...] } }
+        // Нормализация назначений: { data: [...] }
         let assigned: any[] = [];
         const assignData = assignRes?.data ?? assignRes;
         if (Array.isArray(assignData)) {
@@ -307,31 +333,56 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           assigned = assignData.assignments;
         }
 
-        const workersList = assigned.map((a: any) => {
-          const u = a.user ?? a;
-          return { id: u.id ?? a.worker_id ?? a.user_id, ...u };
+        // Рабочие, занятые другими бригадирами (не текущим) — по данным assignments
+        const busyByOther = new Map<number, string>();
+        assigned.forEach((a: any) => {
+          const brigId = a.brigadier_id ?? a.brigadier?.id;
+          const workerId = a.worker_id ?? a.worker?.id;
+          if (workerId != null && brigId != null && Number(brigId) !== Number(myBrigadierId)) {
+            const brig = a.brigadier;
+            const foremanName = brig?.last_name
+              ? `${brig.last_name} ${(brig.first_name || '').charAt(0)}. ${(brig.second_name || '').charAt(0)}.`.trim()
+              : 'др. бригадиром';
+            busyByOther.set(workerId, foremanName);
+          }
         });
-        setDayAssignedWorkers(workersList);
 
         // Нормализация workers с busy
+        // API /assignments/workers возвращает: assigned, brigadier_id, brigadier (при занятости другим)
         let workers: WorkerWithBusy[] = [];
         const workersData = workersRes?.data ?? workersRes;
+        const formatBrigadierName = (b: any) => {
+          if (!b) return 'др. бригадиром';
+          const ln = b.last_name || '';
+          const fi = b.first_name ? `${b.first_name.charAt(0)}.` : '';
+          const si = b.second_name ? `${b.second_name.charAt(0)}.` : '';
+          return [ln, fi, si].filter(Boolean).join(' ') || 'др. бригадиром';
+        };
+        const parseWorker = (w: any) => {
+          const wid = w.id ?? w.user_id;
+          let apiBusy: { foreman_name: string } | undefined;
+          if (w.assigned === true && w.brigadier_id != null && Number(w.brigadier_id) !== Number(myBrigadierId)) {
+            apiBusy = { foreman_name: formatBrigadierName(w.brigadier) };
+          } else if (w.busy) {
+            apiBusy = { foreman_name: w.busy?.foreman_name ?? w.busy?.brigadier_name ?? (typeof w.busy === 'string' ? w.busy : 'др. бригадиром') };
+          } else if (w.assigned_by) {
+            apiBusy = { foreman_name: typeof w.assigned_by === 'string' ? w.assigned_by : w.assigned_by?.foreman_name ?? 'др. бригадиром' };
+          } else if (w.assigned_to_brigadier || w.brigadier_name) {
+            apiBusy = { foreman_name: w.brigadier_name ?? w.assigned_to_brigadier ?? 'др. бригадиром' };
+          }
+          const ourBusy = busyByOther.has(wid) ? { foreman_name: busyByOther.get(wid)! } : undefined;
+          return {
+            id: wid,
+            first_name: w.first_name,
+            second_name: w.second_name,
+            last_name: w.last_name,
+            busy: apiBusy ?? ourBusy,
+          };
+        };
         if (Array.isArray(workersData)) {
-          workers = workersData.map((w: any) => ({
-            id: w.id ?? w.user_id,
-            first_name: w.first_name,
-            second_name: w.second_name,
-            last_name: w.last_name,
-            busy: w.busy ?? w.assigned_by ? { foreman_name: w.busy?.foreman_name ?? w.assigned_by } : undefined,
-          }));
+          workers = workersData.map(parseWorker);
         } else if (workersData?.workers && Array.isArray(workersData.workers)) {
-          workers = workersData.workers.map((w: any) => ({
-            id: w.id ?? w.user_id,
-            first_name: w.first_name,
-            second_name: w.second_name,
-            last_name: w.last_name,
-            busy: w.busy ?? w.assigned_by ? { foreman_name: w.busy?.foreman_name ?? w.assigned_by } : undefined,
-          }));
+          workers = workersData.workers.map(parseWorker);
         } else {
           // Fallback: используем users если assignments/workers не вернул данные
           const usersRes = await apiService.getUsers();
@@ -343,15 +394,61 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
             : [];
           workers = arr
             .filter((u: any) => u.is_employee !== false && u.employee_status !== 'dismissed')
-            .map((u: any) => ({
-              id: u.id,
-              first_name: u.first_name,
-              second_name: u.second_name,
-              last_name: u.last_name,
-              busy: undefined,
-            }));
+            .map((u: any) => {
+              const ourBusy = busyByOther.has(u.id) ? { foreman_name: busyByOther.get(u.id)! } : undefined;
+              return {
+                id: u.id,
+                first_name: u.first_name,
+                second_name: u.second_name,
+                last_name: u.last_name,
+                busy: ourBusy,
+              };
+            });
         }
         if (!isCancelled) setWorkersWithBusy(workers);
+
+        // Обогащаем именами: workers + getUsers (assignments/workers может не включать уже назначенных)
+        const workersById = new Map(workers.map((w) => [w.id, w]));
+        try {
+          const usersRes = await apiService.getUsers();
+          const usersData = usersRes?.data ?? usersRes;
+          const usersArr = Array.isArray(usersData)
+            ? usersData
+            : Array.isArray(usersData?.data)
+            ? usersData.data
+            : [];
+          usersArr.forEach((u: any) => {
+            if (u?.id != null && !workersById.has(u.id)) {
+              workersById.set(u.id, {
+                id: u.id,
+                first_name: u.first_name,
+                second_name: u.second_name,
+                last_name: u.last_name,
+              });
+            }
+          });
+        } catch {
+          // игнорируем ошибку getUsers
+        }
+
+        // API возвращает { id, worker_id, worker, brigadier_id }. Только свои назначения в день.
+        const myAssigned = assigned.filter((a: any) => {
+          const brigId = a.brigadier_id ?? a.brigadier?.id;
+          return brigId == null || Number(brigId) === Number(myBrigadierId);
+        });
+        const workersList = myAssigned.map((a: any) => {
+          const worker = a.worker ?? a.user ?? {};
+          const workerId = a.worker_id ?? worker.id ?? a.user_id ?? a.id;
+          const w = workersById.get(workerId);
+          return {
+            id: workerId,
+            assignment_id: a.id,
+            first_name: worker.first_name ?? w?.first_name ?? '',
+            last_name: worker.last_name ?? w?.last_name ?? '',
+            second_name: worker.second_name ?? w?.second_name ?? '',
+          };
+        });
+        setDayAssignedWorkers(workersList);
       } catch (e) {
         console.error('Error loading assignments:', e);
         if (!isCancelled) {
@@ -392,19 +489,23 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       }
 
       try {
+        const getNomenclatureId = (item: any) =>
+          item?.id ?? item?.nomenclature_id ?? item?.pivot?.nomenclature_id;
+
         const itemsWithMeta = await Promise.all(
           project.nomenclature.map(async (item: any, index: number) => {
-            if (!item?.id) return null;
+            const nomId = getNomenclatureId(item);
+            if (!nomId) return null;
 
             let lastChange: number | null = null;
             let factValue: number = 0;
 
             try {
               let response: any;
-              if (mockApiResponses?.getNomenclatureChanges?.[String(item.id)]) {
-                response = mockApiResponses.getNomenclatureChanges[String(item.id)];
+              if (mockApiResponses?.getNomenclatureChanges?.[String(nomId)]) {
+                response = mockApiResponses.getNomenclatureChanges[String(nomId)];
               } else {
-                response = await apiService.getNomenclatureChanges(project.id, item.id);
+                response = await apiService.getNomenclatureChanges(project.id, nomId);
               }
               const changesData = Array.isArray(response?.data)
                 ? response.data
@@ -427,12 +528,11 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
 
             try {
               let factsResponse: any;
-              if (mockApiResponses?.getNomenclatureFacts?.[String(item.id)]) {
-                factsResponse = mockApiResponses.getNomenclatureFacts[String(item.id)];
+              if (mockApiResponses?.getNomenclatureFacts?.[String(nomId)]) {
+                factsResponse = mockApiResponses.getNomenclatureFacts[String(nomId)];
               } else {
-                factsResponse = await apiService.getNomenclatureFacts(project.id, item.id, {
+                factsResponse = await apiService.getNomenclatureFacts(project.id, nomId, {
                   per_page: 1000,
-                  with: ['user'],
                 });
               }
 
@@ -443,9 +543,11 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                 factsData = factsResponse.data;
               } else if (Array.isArray(factsResponse)) {
                 factsData = factsResponse;
+              } else if (factsResponse?.data?.facts && Array.isArray(factsResponse.data.facts)) {
+                factsData = factsResponse.data.facts;
               }
 
-              const today = new Date().toISOString().slice(0, 10);
+              const today = getTodayLocal();
               const activeFacts = factsData.filter((fact: any) => !fact.is_deleted);
 
               // Сумма всех фактов (общая)
@@ -454,13 +556,14 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                 return sum + amount;
               }, 0);
 
-              // Сумма за день по бригадирам (user_id -> sum)
+              // Сумма за день по бригадирам (project_manager_id -> sum). API: project_manager_id, не user_id
               activeFacts
-                .filter((fact: any) => fact.fact_date === today)
+                .filter((fact: any) => normalizeFactDate(fact.fact_date) === today)
                 .forEach((fact: any) => {
-                  const uid = fact.user_id ?? fact.user?.id;
+                  const uid = fact.project_manager_id ?? fact.user_id ?? fact.user?.id;
                   if (uid != null) {
-                    factByForeman[uid] = (factByForeman[uid] || 0) + (Number(fact.amount) || 0);
+                    const key = Number(uid);
+                    factByForeman[key] = (factByForeman[key] || 0) + (Number(fact.amount) || 0);
                   }
                 });
             } catch {
@@ -472,8 +575,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
             const planValue = Number(item?.pivot?.start_amount ?? item?.plan ?? 0);
 
             return {
-              id: item.id,
-              npp: item.npp ?? item.pivot?.npp ?? index + 1,
+              id: nomId,
+              npp: item.index_number ?? item.npp ?? item.pivot?.npp ?? index + 1,
               name: item.name || '—',
               unit: item.unit || '—',
               plan: Number.isFinite(planValue) ? planValue : 0,
@@ -768,23 +871,25 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           factsData = factsResponse;
         }
 
-        // Фильтруем удаленные факты
         const activeFacts = factsData.filter((fact: any) => !fact.is_deleted);
-        
-        // Если есть факты, берем последний (самый новый по дате)
-        if (activeFacts.length > 0) {
-          // Сортируем по дате (от новых к старым)
-          activeFacts.sort((a: any, b: any) => {
-            const dateA = new Date(a.fact_date).getTime();
-            const dateB = new Date(b.fact_date).getTime();
-            return dateB - dateA;
-          });
-          
-          const latestFact = activeFacts[0];
+        const currentUser = apiService.getCurrentUser();
+        const myId = currentUser?.id;
+
+        // Ищем факт текущего бригадира за сегодня — для предзаполнения и режима редактирования
+        const todayStr = getTodayLocal();
+        const myFactToday = myId != null
+          ? activeFacts.find(
+              (f: any) =>
+                normalizeFactDate(f.fact_date) === todayStr &&
+                (f.project_manager_id ?? f.user_id) === myId
+            )
+          : null;
+
+        if (myFactToday) {
           setExistingFact({
-            id: latestFact.id,
-            amount: Number(latestFact.amount) || 0,
-            fact_date: latestFact.fact_date,
+            id: myFactToday.id,
+            amount: Number(myFactToday.amount) || 0,
+            fact_date: myFactToday.fact_date,
           });
         }
       } catch (error) {
@@ -804,8 +909,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     if (!selectedNomenclature || !project?.id) return;
 
     try {
-      // Если есть существующий факт для этой даты, обновляем его
-      if (existingFact && existingFact.fact_date === date) {
+      // Если есть существующий факт для этой даты (от текущего бригадира), обновляем его
+      if (existingFact && normalizeFactDate(existingFact.fact_date) === normalizeFactDate(date)) {
         await apiService.updateNomenclatureFact(
           project.id,
           selectedNomenclature.id,
@@ -829,10 +934,16 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
             factsData = factsResponse;
           }
 
-          // Ищем факт для выбранной даты
-          const factForDate = factsData.find((fact: any) => 
-            !fact.is_deleted && fact.fact_date === date
-          );
+          // Ищем факт текущего бригадира для выбранной даты — если есть, редактируем
+          const currentUser = apiService.getCurrentUser();
+          const factForDate = currentUser?.id != null
+            ? factsData.find(
+                (fact: any) =>
+                  !fact.is_deleted &&
+                  normalizeFactDate(fact.fact_date) === normalizeFactDate(date) &&
+                  (fact.project_manager_id ?? fact.user_id) === currentUser.id
+              )
+            : null;
 
           if (factForDate) {
             // Обновляем существующий факт
@@ -865,10 +976,12 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       
       await loadSpecification();
       await onRefresh?.();
+      // Модалка закроется через onClose() после успешного возврата из onSave
       handleCloseFactModal();
     } catch (error) {
       console.error('Error saving fact:', error);
-      // Можно добавить уведомление об ошибке
+      const msg = error instanceof Error ? error.message : 'Не удалось сохранить факт. Попробуйте позже.';
+      throw new Error(msg);
     }
   };
 
@@ -883,17 +996,23 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     setIsSpecificationLoading(true);
 
     try {
+      const getNomenclatureIdFromItem = (item: any) =>
+        item?.id ?? item?.nomenclature_id ?? item?.pivot?.nomenclature_id;
+
       const itemsWithMeta = await Promise.all(
-        project.nomenclature.map(async (item: any) => {
+        project.nomenclature.map(async (item: any, index: number) => {
+          const nomId = getNomenclatureIdFromItem(item);
+          if (!nomId) return null;
+
           let lastChange: number | null = null;
           let factValue: number = 0;
 
           try {
             let response: any;
-            if (mockApiResponses?.getNomenclatureChanges?.[String(item.id)]) {
-              response = mockApiResponses.getNomenclatureChanges[String(item.id)];
+            if (mockApiResponses?.getNomenclatureChanges?.[String(nomId)]) {
+              response = mockApiResponses.getNomenclatureChanges[String(nomId)];
             } else {
-              response = await apiService.getNomenclatureChanges(project.id, item.id);
+              response = await apiService.getNomenclatureChanges(project.id, nomId);
             }
             const changesData = Array.isArray(response?.data)
               ? response.data
@@ -916,12 +1035,11 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
 
           try {
             let factsResponse: any;
-            if (mockApiResponses?.getNomenclatureFacts?.[String(item.id)]) {
-              factsResponse = mockApiResponses.getNomenclatureFacts[String(item.id)];
+            if (mockApiResponses?.getNomenclatureFacts?.[String(nomId)]) {
+              factsResponse = mockApiResponses.getNomenclatureFacts[String(nomId)];
             } else {
-              factsResponse = await apiService.getNomenclatureFacts(project.id, item.id, {
+              factsResponse = await apiService.getNomenclatureFacts(project.id, nomId, {
                 per_page: 1000,
-                with: ['user'],
               });
             }
 
@@ -932,9 +1050,11 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
               factsData = factsResponse.data;
             } else if (Array.isArray(factsResponse)) {
               factsData = factsResponse;
+            } else if (factsResponse?.data?.facts && Array.isArray(factsResponse.data.facts)) {
+              factsData = factsResponse.data.facts;
             }
 
-            const today = new Date().toISOString().slice(0, 10);
+            const today = getTodayLocal();
             const activeFacts = factsData.filter((fact: any) => !fact.is_deleted);
 
             factValue = activeFacts.reduce((sum: number, fact: any) => {
@@ -942,12 +1062,14 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
               return sum + amount;
             }, 0);
 
+            // API: project_manager_id (бригадир), не user_id
             activeFacts
-              .filter((fact: any) => fact.fact_date === today)
+              .filter((fact: any) => normalizeFactDate(fact.fact_date) === today)
               .forEach((fact: any) => {
-                const uid = fact.user_id ?? fact.user?.id;
+                const uid = fact.project_manager_id ?? fact.user_id ?? fact.user?.id;
                 if (uid != null) {
-                  factByForeman[uid] = (factByForeman[uid] || 0) + (Number(fact.amount) || 0);
+                  const key = Number(uid);
+                  factByForeman[key] = (factByForeman[key] || 0) + (Number(fact.amount) || 0);
                 }
               });
           } catch {
@@ -958,8 +1080,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           const planValue = Number(item?.pivot?.start_amount ?? item?.plan ?? 0);
 
           return {
-            id: item.id,
-            npp: item.npp ?? item.pivot?.npp,
+            id: nomId,
+            npp: item.index_number ?? item.npp ?? item.pivot?.npp ?? index + 1,
             name: item.name || '—',
             unit: item.unit || '—',
             plan: Number.isFinite(planValue) ? planValue : 0,
@@ -972,7 +1094,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
         })
       );
 
-      setSpecificationItems(itemsWithMeta);
+      const validItems = itemsWithMeta.filter((it): it is SpecificationItem => it !== null);
+      setSpecificationItems(validItems);
     } catch (error) {
       console.error('Error loading specification:', error);
       setSpecificationItems([]);
@@ -1044,22 +1167,30 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     const ln = emp.last_name || '';
     const fi = emp.first_name ? `${emp.first_name.charAt(0)}.` : '';
     const si = emp.second_name ? `${emp.second_name.charAt(0)}.` : '';
-    return `${ln} ${fi}${si}`.trim() || '—';
+    const name = `${ln} ${fi}${si}`.trim();
+    return name || (emp.id ? `Рабочий #${emp.id}` : '—');
   };
 
   const handleAddEmployees = async (workerIds: number[]) => {
+    const toAdd = workersWithBusy
+      .filter((w) => workerIds.includes(w.id))
+      .map((w) => ({
+        id: w.id,
+        first_name: w.first_name,
+        second_name: w.second_name,
+        last_name: w.last_name,
+      }));
     if (!mockApiResponses) {
       for (const id of workerIds) {
-        await apiService.addAssignment(id, assignmentDate);
+        const res = await apiService.addAssignment(id, assignmentDate);
+        const created = res?.data ?? res;
+        const assignmentId = created?.id ?? created?.data?.id;
+        const added = toAdd.find((w) => w.id === id);
+        if (added && assignmentId != null) {
+          (added as any).assignment_id = assignmentId;
+        }
       }
     }
-    const workersList = workersWithBusy.filter((w) => workerIds.includes(w.id));
-    const toAdd = workersList.map((w) => ({
-      id: w.id,
-      first_name: w.first_name,
-      second_name: w.second_name,
-      last_name: w.last_name,
-    }));
     setDayAssignedWorkers((prev) => {
       const existingIds = new Set(prev.map((p: any) => p.id));
       const newOnes = toAdd.filter((w) => !existingIds.has(w.id));
@@ -1071,9 +1202,17 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   const handleRemoveEmployee = async () => {
     if (!removeConfirmEmployee) return;
     if (!mockApiResponses) {
-      await apiService.deleteAssignment(removeConfirmEmployee.id, assignmentDate);
+      // Бэкенд ожидает worker_id в URL (по аналогии с add), не assignment_id
+      const deleteId = removeConfirmEmployee.id;
+      await apiService.deleteAssignment(deleteId, assignmentDate);
     }
-    setDayAssignedWorkers((prev) => prev.filter((p: any) => p.id !== removeConfirmEmployee.id));
+    setDayAssignedWorkers((prev) =>
+      prev.filter((p: any) =>
+        (removeConfirmEmployee.assignment_id != null
+          ? p.assignment_id !== removeConfirmEmployee.assignment_id
+          : p.id !== removeConfirmEmployee.id)
+      )
+    );
     setRemoveConfirmEmployee(null);
     await onRefresh?.();
   };
@@ -1122,18 +1261,12 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
             bValue = Number(b.changes) || 0;
             break;
           case 'fact':
-            aValue = Number(a.fact) || 0;
-            bValue = Number(b.fact) || 0;
+            aValue = getMyFactValue(a);
+            bValue = getMyFactValue(b);
             break;
           case 'total':
-            aValue =
-              foremen.length > 0
-                ? foremen.reduce((s: number, f: any) => s + (Number(a.factByForeman?.[f.id]) || 0), 0)
-                : Number(a.fact) || 0;
-            bValue =
-              foremen.length > 0
-                ? foremen.reduce((s: number, f: any) => s + (Number(b.factByForeman?.[f.id]) || 0), 0)
-                : Number(b.fact) || 0;
+            aValue = getTotalFactValue(a);
+            bValue = getTotalFactValue(b);
             break;
           default:
             return 0;
@@ -1151,7 +1284,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       });
     }
     return sorted;
-  }, [specificationItems, specificationSortField, specificationSortDirection, foremen]);
+  }, [specificationItems, specificationSortField, specificationSortDirection, foremen, currentForeman]);
 
   // Функция сортировки для фиксации работ
   const handleTrackingSort = (field: string | null) => {
@@ -1164,8 +1297,17 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   };
 
   // Сортировка фиксации работ
+  // Бригадир видит только своих назначенных на сегодня + себя для ввода часов
   const sortedTrackingItems = useMemo(() => {
-    const sorted = [...trackingItems];
+    const currentUser = apiService.getCurrentUser();
+    const isBrigadier = (currentUser?.role || currentUser?.position) === 'Бригадир';
+    let items = [...trackingItems];
+    if (isBrigadier && currentUser?.id != null) {
+      const myAssignedIds = new Set(dayAssignedWorkers.map((w: any) => w.id));
+      myAssignedIds.add(currentUser.id); // бригадир может вносить часы и себе
+      items = items.filter((item) => myAssignedIds.has(item.employeeId ?? item.id));
+    }
+    const sorted = items;
     if (trackingSortField) {
       sorted.sort((a, b) => {
         let aValue: any;
@@ -1212,7 +1354,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       });
     }
     return sorted;
-  }, [trackingItems, trackingSortField, trackingSortDirection]);
+  }, [trackingItems, trackingSortField, trackingSortDirection, dayAssignedWorkers]);
 
   const handleSaveHours = async (_hours: number, _date: string, _isAbsent: boolean, _reason?: string) => {
     // API вызов теперь выполняется в AddHoursModal
@@ -1381,12 +1523,16 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                 </div>
                 <div className="mobile-project-detail__employees-chips">
                   {dayAssignedWorkers.map((emp: any) => (
-                    <div key={emp.id} className="mobile-project-detail__employees-chip">
+                    <div key={emp.assignment_id ?? emp.id} className="mobile-project-detail__employees-chip">
                       <span>{formatWorkerNameShort(emp)}</span>
                       <button
                         type="button"
                         className="mobile-project-detail__employees-chip-remove"
-                        onClick={() => setRemoveConfirmEmployee({ id: emp.id, name: formatWorkerNameShort(emp) })}
+                        onClick={() => setRemoveConfirmEmployee({
+                          id: emp.id,
+                          assignment_id: emp.assignment_id,
+                          name: formatWorkerNameShort(emp),
+                        })}
                         aria-label="Удалить"
                       >
                         ×
@@ -1489,11 +1635,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
 
                     <div className="mobile-project-detail__specification-body">
                       {sortedSpecificationItems.map((item, index) => {
-                        // Итого = сумма затраченных материалов всеми бригадирами на проекте
-                        const totalFact =
-                          foremen.length > 0
-                            ? foremen.reduce((sum: number, f: any) => sum + (Number(item.factByForeman?.[f.id]) || 0), 0)
-                            : Number(item.fact) || 0;
+                        const myFact = getMyFactValue(item);
+                        const totalFact = getTotalFactValue(item);
                         return (
                         <div key={item.id} className="mobile-project-detail__specification-row">
                           <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--npp">
@@ -1512,16 +1655,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                             <span>{formatNumber(item.changes, '0')}</span>
                           </div>
                           <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--number mobile-project-detail__specification-col--fact">
-                            <span>
-                              {currentForeman
-                                ? formatNumber(item.factByForeman?.[currentForeman.id] ?? 0, '0')
-                                : foremen.length > 0
-                                  ? formatNumber(
-                                      foremen.reduce((sum: number, f: any) => sum + (Number(item.factByForeman?.[f.id]) || 0), 0),
-                                      '0'
-                                    )
-                                  : formatNumber(item.fact, '0')}
-                            </span>
+                            <span>{formatNumber(myFact, '0')}</span>
                           </div>
                           <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--number">
                             <span>{formatNumber(totalFact, '0')}</span>

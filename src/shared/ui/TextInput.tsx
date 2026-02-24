@@ -9,6 +9,7 @@ type TextInputProps = {
   onChange: (v: string) => void;
   type?: string;
   placeholder?: string;
+  disabled?: boolean;
   rightIcon?: React.ReactNode;
   className?: string;
   showPasswordToggle?: boolean;
@@ -23,6 +24,7 @@ export const TextInput: React.FC<TextInputProps> = ({
   onChange,
   type = 'text',
   placeholder,
+  disabled,
   rightIcon,
   className,
   showPasswordToggle = false,
@@ -61,6 +63,7 @@ export const TextInput: React.FC<TextInputProps> = ({
           onChange={(e) => onChange(e.target.value)}
           type={type}
           placeholder={placeholder}
+          disabled={disabled}
           style={fieldStyle ? { 
             height: '20px', 
             maxHeight: '20px',

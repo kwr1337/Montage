@@ -6,7 +6,7 @@ import './add-fact-modal.scss';
 type AddFactModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (quantity: number, date: string) => void;
+  onSave: (quantity: number, date: string) => void | Promise<void>;
   nomenclature: {
     id: number;
     name: string;
@@ -30,6 +30,13 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
   const [quantity, setQuantity] = useState<number>(existingFact?.amount || 0);
   const [date, setDate] = useState<string>(existingFact?.fact_date || new Date().toISOString().split('T')[0]);
   const [quantityInput, setQuantityInput] = useState<string>(String(Math.floor(existingFact?.amount || 0)));
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Сбрасываем ошибку при открытии
+  useEffect(() => {
+    if (isOpen) setError(null);
+  }, [isOpen]);
 
   // Обновляем состояние при изменении existingFact
   useEffect(() => {
@@ -73,11 +80,20 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
     setQuantityInput(String(intValue));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const parsed = quantityInput === '' ? 0 : parseInt(quantityInput, 10);
     const finalQuantity = isNaN(parsed) || parsed < 0 ? 0 : Math.floor(parsed);
-    onSave(finalQuantity, date);
-    onClose();
+    setError(null);
+    setIsSaving(true);
+    try {
+      await onSave(finalQuantity, date);
+      onClose();
+    } catch (e) {
+      console.error('Error saving fact:', e);
+      setError(e instanceof Error ? e.message : 'Не удалось сохранить. Попробуйте позже.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -106,6 +122,7 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
           </button>
         </div>
 
+        <div className="add-fact-modal__scroll">
         <div className="add-fact-modal__content">
           <div className="add-fact-modal__info">
             <div className="add-fact-modal__field">
@@ -177,11 +194,19 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
           </div>
         </div>
 
+        {error && (
+          <div className="add-fact-modal__error" role="alert">
+            {error}
+          </div>
+        )}
+        </div>
+
         <div className="add-fact-modal__actions">
           <button
             type="button"
             className="add-fact-modal__btn add-fact-modal__btn--cancel"
             onClick={onClose}
+            disabled={isSaving}
           >
             Отмена
           </button>
@@ -189,8 +214,9 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
             type="button"
             className="add-fact-modal__btn add-fact-modal__btn--save"
             onClick={handleSave}
+            disabled={isSaving}
           >
-            Сохранить
+            {isSaving ? 'Сохранение…' : 'Сохранить'}
           </button>
         </div>
       </div>

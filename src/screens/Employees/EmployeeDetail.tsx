@@ -158,6 +158,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
     'Главный инженер проекта',
     'Бухгалтер',
     'Бригадир',
+    'Рабочий',
     'Сметчик'
   ];
   const scheduleOptions = ['5/2', '2/2'];
@@ -610,7 +611,9 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
         return;
       }
 
-      if (!formData.password.trim()) {
+      // Пароль не требуется для роли «Рабочий» — сервер сгенерирует случайный
+      const isWorker = formData.position === 'Рабочий';
+      if (!isWorker && !formData.password.trim()) {
         alert('Пожалуйста, заполните пароль сотрудника');
         return;
       }
@@ -642,7 +645,8 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
 
       setIsSaving(true);
       try {
-        const payload = {
+        const isWorker = formData.position === 'Рабочий';
+        const payload: Record<string, unknown> = {
           first_name: trimmedFirstName,
           second_name: formData.second_name.trim(),
           last_name: trimmedLastName,
@@ -650,7 +654,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
           gender: formData.gender,
           email: trimmedEmail,
           phone: trimmedPhone,
-          password: formData.password,
+          ...(!isWorker && formData.password.trim() ? { password: formData.password } : {}),
           role: formData.position && formData.position !== 'Не выбрано' ? formData.position : 'user',
           is_employee: true,
           is_system_admin: false,
@@ -984,7 +988,12 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
                         key={option}
                         className={`employee-detail__dropdown-option ${(formData.position === option) || (!formData.position && option === 'Не выбрано') ? 'employee-detail__dropdown-option--selected' : ''}`}
                         onClick={() => {
-                          setFormData({ ...formData, position: option === 'Не выбрано' ? '' : option });
+                          const newPosition = option === 'Не выбрано' ? '' : option;
+                          setFormData({
+                            ...formData,
+                            position: newPosition,
+                            ...(newPosition === 'Рабочий' ? { password: '' } : {}),
+                          });
                           setIsPositionDropdownOpen(false);
                         }}
                       >
@@ -1047,16 +1056,23 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
                 )}
               </div>
               <div className="employee-detail__password-field">
-                <label className="employee-detail__field-label">Пароль</label>
+                <label className="employee-detail__field-label">
+                  Пароль
+                  {formData.position === 'Рабочий' && (
+                    <span className="employee-detail__field-hint"> (для рабочих генерируется автоматически)</span>
+                  )}
+                </label>
                 <TextInput
                   value={formData.password}
                   onChange={(v) => setFormData({ ...formData, password: v })}
                   type={isPasswordVisible ? 'text' : 'password'}
-                  showPasswordToggle={true}
+                  showPasswordToggle={formData.position !== 'Рабочий'}
                   isPasswordVisible={isPasswordVisible}
                   onTogglePassword={() => setIsPasswordVisible(!isPasswordVisible)}
                   className="employee-detail__password-input"
                   fieldStyle={{ height: '32px', minHeight: '32px', maxHeight: '32px', padding: '6px 12px', lineHeight: '20px', boxSizing: 'border-box', overflow: 'hidden', display: 'flex', alignItems: 'center' }}
+                  placeholder={formData.position === 'Рабочий' ? 'Не требуется' : undefined}
+                  disabled={formData.position === 'Рабочий'}
                 />
               </div>
             </div>

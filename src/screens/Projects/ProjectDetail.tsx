@@ -525,7 +525,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
 
               return {
                 id: item.id,
-                npp: item.npp ?? item.pivot?.npp ?? index + 1,
+                npp: item.index_number ?? item.npp ?? item.pivot?.npp ?? index + 1,
                 name: item.name,
                 status: item.is_deleted ? `Удалён\n${new Date(item.deleted_at).toLocaleDateString('ru-RU')}` : 'Активен',
                 unit: item.unit || '',
@@ -627,9 +627,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         rate_per_hour: emp.pivot?.rate_per_hour || emp.rate_per_hour || 0,
       }));
 
+      const foremenIdsHeader = (localProject.employees || [])
+        .filter((emp: any) => emp.role === 'Бригадир')
+        .map((emp: any) => emp.id);
+      const pmHeader = foremenIdsHeader.length > 0
+        ? foremenIdsHeader
+        : (localProject.project_managers ?? (localProject.project_manager_id ? [localProject.project_manager_id] : []));
       const updateData: any = {
         name: trimmedName,
-        project_manager_id: localProject.project_manager_id || null,
+        project_managers: pmHeader,
         start_date: formData.startDate,
         end_date: formData.endDate,
         budget: formData.budget ? parseFloat(formData.budget.toString()) : null,
@@ -688,7 +694,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
 
     const statusForSave = isEditingHeader ? editedStatus : getEditableStatusValue(localProject.status);
     const currentUser = apiService.getCurrentUser();
-    const effectiveProjectManagerId = localProject.project_manager_id ?? currentUser?.id ?? null;
+    const foremenIds = (localProject.employees || [])
+      .filter((emp: any) => emp.role === 'Бригадир')
+      .map((emp: any) => emp.id);
+    const projectManagers = foremenIds.length > 0
+      ? foremenIds
+      : (localProject.project_managers ?? (localProject.project_manager_id ? [localProject.project_manager_id] : (currentUser?.id ? [currentUser.id] : [])));
 
     const currentEmployees = localProject.employees || [];
     const employeeObjects = currentEmployees.map((emp: any) => ({
@@ -713,7 +724,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
 
     const basePayload: any = {
       name: trimmedName,
-      project_manager_id: effectiveProjectManagerId,
+      project_managers: projectManagers,
       start_date: formData.startDate || null,
       end_date: formData.endDate || null,
       budget: budgetValue,
@@ -780,7 +791,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         ...localProject,
         name: trimmedName,
         status: statusForSave,
-        project_manager_id: effectiveProjectManagerId,
+        project_managers: projectManagers,
       };
       setLocalProject(optimisticUpdate);
       if (onProjectUpdate) {
@@ -1165,9 +1176,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         }
       ];
 
+      // Ответственные бригадиры = все бригадиры в проекте (для фильтра в мобильной версии)
+      const foremenIds = optimisticEmployees
+        .filter((emp: any) => emp.role === 'Бригадир')
+        .map((emp: any) => emp.id);
+
       // Отправляем PATCH запрос для обновления проекта на сервере
       await apiService.updateProject(localProject.id, {
-        employee: employeeArray
+        employee: employeeArray,
+        project_managers: foremenIds.length > 0 ? foremenIds : localProject.project_managers,
       });
 
       // После успешного PATCH делаем GET запрос для синхронизации с сервером
@@ -1383,9 +1400,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         }
       });
 
+      // Ответственные бригадиры = только активные (без end_working_date)
+      const foremenIds = optimisticEmployees
+        .filter((emp: any) => emp.role === 'Бригадир' && !emp.pivot?.end_working_date)
+        .map((emp: any) => emp.id);
+
       // Отправляем PATCH запрос для обновления проекта на сервере
       await apiService.updateProject(localProject.id, {
-        employee: employeeArray
+        employee: employeeArray,
+        project_managers: foremenIds.length > 0 ? foremenIds : localProject.project_managers,
       });
 
       // После успешного PATCH делаем GET запрос для синхронизации с сервером
@@ -2122,9 +2145,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
               <span className="projects__detail-budget-label">Остаток</span>
               <div className="projects__detail-budget-value">
                 {(() => {
-                  const allocated = localProject.budget || 0;
+                  const allocated = localProject?.budget || 0;
                   const spent = trackingItems.reduce((sum, item) => sum + (item.totalSum || 0), 0);
-                  const remaining = allocated - spent;
+                  const remaining = Math.max(0, allocated - spent);
                   return `${remaining.toLocaleString('ru-RU')} ₽`;
                 })()}
               </div>

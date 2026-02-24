@@ -536,9 +536,7 @@ export const EmployeesScreen: React.FC = () => {
           }}
           onCreate={async (createdEmployee) => {
             if (!createdEmployee || !createdEmployee.id) {
-              setIsCreatingEmployee(false);
-              setDraftEmployee(null);
-              navigateToEmployee(null);
+              exitCreationToList();
               return;
             }
 
@@ -548,36 +546,19 @@ export const EmployeesScreen: React.FC = () => {
               return [createdEmployee, ...filtered];
             });
 
-            setIsCreatingEmployee(false);
-            setDraftEmployee(null);
-            const numericId = Number(createdEmployee.id);
-            setSelectedEmployeeId(numericId);
-            setNavigationHistory((prevHistory) => {
-              const updated = [...prevHistory];
-              if (updated.length === 0) {
-                const initialHistory: EmployeeHistoryEntry[] = [null, numericId];
-                setHistoryIndex(initialHistory.length - 1);
-                return initialHistory;
-              }
-              const targetIndex = Math.min(historyIndex, updated.length - 1);
-              updated[targetIndex] = numericId;
-              setHistoryIndex(targetIndex);
-              return updated;
-            });
-            localStorage.setItem('selectedEmployeeId', numericId.toString());
+            // Сразу возвращаемся к таблице — пользователь видит обновлённый список
+            exitCreationToList();
 
-            // Перезагружаем список сотрудников с сервера для синхронизации
+            // Перезагружаем список с сервера для синхронизации
             try {
               const response = await apiService.getUsers();
-              const employeesData = response && response.data 
+              const employeesData = response && response.data
                 ? (Array.isArray(response.data) ? response.data : [response.data])
                 : (Array.isArray(response) ? response : []);
-              
               const filteredEmployees = employeesData.filter((user: any) => user.is_employee === true);
               setEmployees(filteredEmployees);
             } catch (error) {
               console.error('Error refreshing employees list:', error);
-              // В случае ошибки оставляем оптимистично добавленного сотрудника
             }
           }}
           isNew={isCreatingEmployee}

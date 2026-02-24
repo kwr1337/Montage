@@ -159,7 +159,12 @@ class ApiService {
   async getProjects(
     page: number = 1,
     perPage: number = 11,
-    options?: { with?: string[]; noPagination?: boolean }
+    options?: {
+      with?: string[];
+      noPagination?: boolean;
+      filter?: { manager_id?: number[]; project_managers?: number[] };
+      my?: boolean;
+    }
   ): Promise<any> {
     const params = new URLSearchParams();
     if (!options?.noPagination) {
@@ -169,6 +174,16 @@ class ApiService {
     if (options?.with?.length) {
       options.with.forEach((rel) => params.append('with[]', rel));
     }
+    // filter[manager_id][] вызывает 500 на бэкенде — не используем. Пробуем filter[project_managers][] и filter[manager_id]=id
+    if (options?.filter?.project_managers?.length) {
+      options.filter.project_managers.forEach((id) => params.append('filter[project_managers][]', String(id)));
+    }
+    if (options?.filter?.manager_id?.length) {
+      params.set('filter[manager_id]', options.filter.manager_id.join(',')); // формат filter[manager_id]=21
+    }
+    if (options?.my) {
+      params.set('my', '1');
+    }
     const query = params.toString();
     const response = await this.request<any>(`/projects${query ? `?${query}` : ''}`, {
       method: 'GET',
@@ -177,7 +192,7 @@ class ApiService {
   }
 
   async getProjectById(projectId: number): Promise<any> {
-    const response = await this.request<any>(`/projects/${projectId}`, {
+    const response = await this.request<any>(`/projects/${projectId}?with[]=nomenclature&with[]=employees`, {
       method: 'GET',
     });
     return response;
@@ -190,46 +205,36 @@ class ApiService {
     return response;
   }
 
-  /** Назначения рабочих на день (для бригадира) */
-  async getAssignments(assignmentDate: string): Promise<any> {
-    const response = await this.request<any>(`/assignments?assignment_date=${assignmentDate}`, {
-      method: 'GET',
-    });
-    return response;
+  /** Назначения рабочих на день. all=1 — все бригадиры (для проверки занятости) */
+  async getAssignments(assignmentDate: string, options?: { all?: boolean }): Promise<any> {
+    let url = `/assignments?assignment_date=${assignmentDate}`;
+    if (options?.all) url += '&all=1';
+    return this.request<any>(url, { method: 'GET' });
   }
 
   /** Рабочие с информацией о занятости (кто кем назначен) */
   async getAssignmentsWorkers(assignmentDate: string): Promise<any> {
-    const response = await this.request<any>(`/assignments/workers?assignment_date=${assignmentDate}`, {
+    return this.request<any>(`/assignments/workers?assignment_date=${assignmentDate}`, {
       method: 'GET',
     });
-    return response;
   }
 
-  /** Добавить рабочего на день */
+  /** Добавить рабочего на день (по док-ции: worker_id, assignment_date) */
   async addAssignment(workerId: number, assignmentDate: string): Promise<any> {
-    const response = await this.request<any>('/assignments/add', {
+    return this.request<any>('/assignments/add', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify({ worker_id: workerId, assignment_date: assignmentDate }),
     });
-    return response;
   }
 
-  /** Удалить рабочего с дня */
-  async deleteAssignment(workerId: number, assignmentDate: string): Promise<any> {
-    const response = await this.request<any>(`/assignments/delete/${workerId}`, {
+  /** Удалить назначение: id в URL — assignment_id или worker_id (бэкенд может поддерживать оба) */
+  async deleteAssignment(id: number, assignmentDate: string): Promise<any> {
+    return this.request<any>(`/assignments/delete/${id}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify({ assignment_date: assignmentDate }),
     });
-    return response;
   }
 
   async getUserById(userId: number): Promise<any> {
@@ -597,6 +602,7 @@ class ApiService {
   // Создать выплату
   async createPayment(data: {
     user_id: number;
+    project_id?: number | null;
     first_payment_date?: string | null;
     first_payment_amount?: number | null;
     first_payment_type?: string | null;
@@ -622,6 +628,7 @@ class ApiService {
   // Редактировать выплату
   async updatePayment(paymentId: number, data: {
     user_id?: number;
+    project_id?: number | null;
     first_payment_date?: string | null;
     first_payment_amount?: number | null;
     first_payment_type?: string | null;

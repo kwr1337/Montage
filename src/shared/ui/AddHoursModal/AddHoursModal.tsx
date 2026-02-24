@@ -104,6 +104,26 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
     return !isAbsent && hours !== 8;
   };
 
+  // Корректировка возможна только в течение дня; редактирование только с 6:00 до 21:00
+  const canEditByTime = (): boolean => {
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    const currentMinutes = hour * 60 + minute;
+    const startMinutes = 6 * 60;   // 6:00
+    const endMinutes = 21 * 60;   // 21:00
+    return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+  };
+
+  // Только текущий день; вчера редактировать нельзя
+  const isToday = (d: Date): boolean => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dNorm = new Date(d);
+    dNorm.setHours(0, 0, 0, 0);
+    return dNorm.getTime() === today.getTime();
+  };
+
   const handleSave = async () => {
     // Проверяем, что выбранная дата не в будущем
     const today = new Date();
@@ -113,6 +133,16 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
     
     if (selectedDateNormalized > today) {
       setError('Нельзя фиксировать часы за будущие даты');
+      return;
+    }
+
+    if (!isToday(selectedDate)) {
+      setError('Редактирование возможно только за текущий день. Вчерашний день редактировать нельзя.');
+      return;
+    }
+
+    if (!canEditByTime()) {
+      setError('Корректировка часов возможна только с 6:00 до 21:00');
       return;
     }
     
@@ -313,6 +343,11 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
             </div>
           )}
 
+          {!canEditByTime() && (
+            <div className="add-hours-modal__error add-hours-modal__error--info">
+              Корректировка возможна только с 6:00 до 21:00
+            </div>
+          )}
           {error && (
             <div className="add-hours-modal__error">
               {error}
@@ -333,7 +368,7 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
             type="button"
             className="add-hours-modal__btn add-hours-modal__btn--save"
             onClick={handleSave}
-            disabled={isSaving}
+            disabled={isSaving || !canEditByTime()}
           >
             {isSaving ? 'Сохранение...' : 'Сохранить'}
           </button>

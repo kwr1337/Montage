@@ -159,10 +159,40 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
       try {
         let data: ProjectListItem[] = [];
 
+        const currentUser = apiService.getCurrentUser();
+        const userRole = (currentUser?.role || currentUser?.position || '').toString();
+        const isBrigadier = userRole === 'Бригадир';
+        const managerId = currentUser?.id ? Number(currentUser.id) : null;
+        const filterByManagerId = managerId != null ? { filter: { manager_id: [managerId] } } : {};
+        const filterByProjectManagers = managerId != null ? { filter: { project_managers: [managerId] } } : {};
+        const myOpts = isBrigadier ? { my: true as const } : {};
         const attempts: Array<() => Promise<any>> = [
+          // 1) filter[project_managers][]=id
+          ...(isBrigadier && managerId != null
+            ? [
+                () => apiService.getProjects(1, 100, { with: ['employees', 'logs'], ...filterByProjectManagers }),
+                () => apiService.getProjects(1, 100, { with: ['logs'], ...filterByProjectManagers }),
+            ]
+            : []),
+          // 2) filter[manager_id]=id (НЕ []= — вызывает 500)
+          ...(isBrigadier && managerId != null
+            ? [
+                () => apiService.getProjects(1, 100, { with: ['employees', 'logs'], ...filterByManagerId }),
+                () => apiService.getProjects(1, 100, { with: ['logs'], ...filterByManagerId }),
+            ]
+            : []),
+          // 3) my=1
+          ...(isBrigadier
+            ? [
+                () => apiService.getProjects(1, 100, { with: ['employees', 'logs'], ...myOpts }),
+                () => apiService.getProjects(1, 100, { with: ['logs'], ...myOpts }),
+                () => apiService.getProjects(1, 100, myOpts),
+              ]
+            : []),
+          // 4) без фильтра (бэкенд может сам фильтровать по JWT)
           () => apiService.getProjects(1, 100, { with: ['employees', 'logs'] }),
           () => apiService.getProjects(1, 100, { with: ['logs'] }),
-          () => apiService.getProjects(1, 100),
+          () => apiService.getProjects(1, 100, { page: 1, per_page: 100 }),
           () => apiService.getProjects(1, 100, { noPagination: true, with: ['logs'] }),
         ];
 
