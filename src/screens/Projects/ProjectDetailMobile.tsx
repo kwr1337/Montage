@@ -115,15 +115,6 @@ const getForemanFullName = (project?: any) => {
   return [last_name, first_name, second_name].filter(Boolean).join(' ') || 'Не назначен';
 };
 
-const formatForemanName = (employee: any) => {
-  if (!employee) {
-    return 'Не назначен';
-  }
-
-  const { last_name, first_name, second_name } = employee;
-  return [last_name, first_name, second_name].filter(Boolean).join(' ') || 'Не назначен';
-};
-
 const getSpecificationStatusMeta = (item: any) => {
   if (item?.is_deleted) {
     const date = item?.deleted_at ? new Date(item.deleted_at).toLocaleDateString('ru-RU') : null;
@@ -1137,11 +1128,11 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           case 'total':
             aValue =
               foremen.length > 0
-                ? foremen.reduce((s, f) => s + (Number(a.factByForeman?.[f.id]) || 0), 0)
+                ? foremen.reduce((s: number, f: any) => s + (Number(a.factByForeman?.[f.id]) || 0), 0)
                 : Number(a.fact) || 0;
             bValue =
               foremen.length > 0
-                ? foremen.reduce((s, f) => s + (Number(b.factByForeman?.[f.id]) || 0), 0)
+                ? foremen.reduce((s: number, f: any) => s + (Number(b.factByForeman?.[f.id]) || 0), 0)
                 : Number(b.fact) || 0;
             break;
           default:
@@ -1501,7 +1492,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                         // Итого = сумма затраченных материалов всеми бригадирами на проекте
                         const totalFact =
                           foremen.length > 0
-                            ? foremen.reduce((sum, f) => sum + (Number(item.factByForeman?.[f.id]) || 0), 0)
+                            ? foremen.reduce((sum: number, f: any) => sum + (Number(item.factByForeman?.[f.id]) || 0), 0)
                             : Number(item.fact) || 0;
                         return (
                         <div key={item.id} className="mobile-project-detail__specification-row">
@@ -1526,7 +1517,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                                 ? formatNumber(item.factByForeman?.[currentForeman.id] ?? 0, '0')
                                 : foremen.length > 0
                                   ? formatNumber(
-                                      foremen.reduce((sum, f) => sum + (Number(item.factByForeman?.[f.id]) || 0), 0),
+                                      foremen.reduce((sum: number, f: any) => sum + (Number(item.factByForeman?.[f.id]) || 0), 0),
                                       '0'
                                     )
                                   : formatNumber(item.fact, '0')}
