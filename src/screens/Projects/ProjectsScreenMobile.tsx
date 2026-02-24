@@ -192,7 +192,7 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
           // 4) без фильтра (бэкенд может сам фильтровать по JWT)
           () => apiService.getProjects(1, 100, { with: ['employees', 'logs'] }),
           () => apiService.getProjects(1, 100, { with: ['logs'] }),
-          () => apiService.getProjects(1, 100, { page: 1, per_page: 100 }),
+          () => apiService.getProjects(1, 100),
           () => apiService.getProjects(1, 100, { noPagination: true, with: ['logs'] }),
         ];
 
