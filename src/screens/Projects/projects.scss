@@ -1651,17 +1651,16 @@
     flex-direction: column;
     flex: 1;
     min-height: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: auto;
     -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
   }
 
   &__specification-table-inner {
     display: flex;
     flex-direction: column;
     min-width: 900px;
-    flex: 1;
-    min-height: 0;
+    flex-shrink: 0;
   }
   
   &__specification-header-groups {
@@ -1672,14 +1671,11 @@
   &__specification-header {
     flex-shrink: 0;
     background: #ffffff;
+    border-bottom: 2px solid #e8ecf1;
   }
   
   &__specification-table-body {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
+    flex-shrink: 0;
   }
 
   &__specification-header-groups {
@@ -1710,7 +1706,7 @@
     // Номенклатура
     &:nth-child(3) {
       flex: 1;
-      // min-width: 200px;
+      min-width: 0;
     }
 
     // Статус
@@ -1779,7 +1775,7 @@
 
     &:nth-child(3) {
       flex: 1;
-      min-width: 200px;
+      min-width: 0;
     }
 
     &:nth-child(4) {

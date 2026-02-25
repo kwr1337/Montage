@@ -130,16 +130,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   const endDateInputRef = React.useRef<HTMLInputElement>(null);
   const datesContainerRef = React.useRef<HTMLDivElement>(null);
   const specificationTableRef = React.useRef<HTMLDivElement>(null);
-  const specificationTableBodyRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (activeTab === 'specification') {
-      if (specificationTableRef.current) {
-        specificationTableRef.current.scrollLeft = 0;
-      }
-      if (specificationTableBodyRef.current) {
-        specificationTableBodyRef.current.scrollTop = 0;
-      }
+    if (activeTab === 'specification' && specificationTableRef.current) {
+      specificationTableRef.current.scrollTop = 0;
+      specificationTableRef.current.scrollLeft = 0;
     }
   }, [activeTab]);
 
@@ -2520,7 +2515,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                 </div>
 
                 {/* Строки таблицы */}
-                <div ref={specificationTableBodyRef} className="projects__specification-table-body">
+                <div className="projects__specification-table-body">
                 {paginatedItems.map((item, index) => (
                   <div 
                     key={item.id} 
