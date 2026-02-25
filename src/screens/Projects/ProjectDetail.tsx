@@ -807,7 +807,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
 
         setLocalProject(createdProject);
         setEditedProjectName(createdProject.name || '');
-        setEditedStatus(getEditableStatusValue(createdProject.status));
+        setEditedStatus(getEditableStatusValue(createdProject.status as string | null | undefined));
         setIsEditingHeader(false);
         setFormData(prev => ({
           ...prev,
