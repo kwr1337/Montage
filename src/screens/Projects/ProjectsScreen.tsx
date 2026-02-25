@@ -784,8 +784,10 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     return hasArchived ? 'Убрать из архива' : 'Перенести в архив';
   };
 
+  const isDetailView = selectedProject && !(selectedProject.is_archived === 1 || selectedProject.is_archived === true) && !isLoadingProject;
+
   return (
-    <div className="projects">
+    <div className={`projects ${isDetailView ? 'projects--detail-view' : ''}`}>
       <PageHeader
         categoryIcon={!selectedProject ? menuIconGrey : undefined}
         categoryLabel={!selectedProject ? "Проекты" : undefined}
@@ -1167,6 +1169,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
           <div className="projects__loading">Загрузка проекта...</div>
         </div>
       ) : selectedProject && !(selectedProject.is_archived === 1 || selectedProject.is_archived === true) ? (
+        <div className="projects__detail-wrapper">
         <ProjectDetail 
           project={selectedProject} 
           onBack={() => {
@@ -1201,6 +1204,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
           }}
           isNew={isCreatingProject}
         />
+        </div>
       ) : (
         <div className="projects__content">
           <div className="projects__empty">Проект не найден</div>

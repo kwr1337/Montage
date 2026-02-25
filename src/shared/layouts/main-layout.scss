@@ -9,9 +9,15 @@
 
   &__content {
     flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow-y: auto;
+
+    /* Убираем лишний вертикальный скролл при просмотре карточки проекта */
+    &:has(.projects--detail-view) {
+      overflow-y: hidden !important;
+    }
   }
 }
 
