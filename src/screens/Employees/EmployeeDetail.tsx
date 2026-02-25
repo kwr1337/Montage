@@ -159,6 +159,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
     'Бухгалтер',
     'Бригадир',
     'Рабочий',
+    'Инженер ПТО',
     'Сметчик'
   ];
   const scheduleOptions = ['5/2', '2/2'];
