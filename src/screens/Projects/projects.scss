@@ -1645,20 +1645,41 @@
       max-height: calc(100vh - 470px);
     }
   }
+
+  &__specification-table-scroll {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  &__specification-table-inner {
+    display: flex;
+    flex-direction: column;
+    min-width: 900px;
+    flex: 1;
+    min-height: 0;
+  }
   
   &__specification-header-groups {
     flex-shrink: 0;
+    background: #ffffff;
   }
   
   &__specification-header {
     flex-shrink: 0;
+    background: #ffffff;
   }
   
   &__specification-table-body {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
-    min-height: 0;
+    -webkit-overflow-scrolling: touch;
   }
 
   &__specification-header-groups {
@@ -1934,10 +1955,16 @@
 
     &:nth-child(3) {
       flex: 1;
-      // min-width: 200px;
-      white-space: nowrap;
+      min-width: 0;
       overflow: hidden;
+      white-space: nowrap;
       text-overflow: ellipsis;
+
+      span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
     }
 
     &:nth-child(4) {

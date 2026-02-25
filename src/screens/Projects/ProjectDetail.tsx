@@ -129,7 +129,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   const startDateInputRef = React.useRef<HTMLInputElement>(null);
   const endDateInputRef = React.useRef<HTMLInputElement>(null);
   const datesContainerRef = React.useRef<HTMLDivElement>(null);
-  
+  const specificationTableRef = React.useRef<HTMLDivElement>(null);
+  const specificationTableBodyRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (activeTab === 'specification') {
+      if (specificationTableRef.current) {
+        specificationTableRef.current.scrollLeft = 0;
+      }
+      if (specificationTableBodyRef.current) {
+        specificationTableBodyRef.current.scrollTop = 0;
+      }
+    }
+  }, [activeTab]);
+
   const getEditableStatusValue = (status: string | null | undefined) => {
     if (status && EDITABLE_PROJECT_STATUS_VALUES.includes(status)) {
       return status;
@@ -2371,6 +2384,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
 
               {/* Таблица спецификации */}
               <div className="projects__specification-table">
+                <div ref={specificationTableRef} className="projects__specification-table-scroll">
+                <div className="projects__specification-table-inner">
                 {/* Группированный заголовок */}
                 <div className="projects__specification-header-groups">
                   <div className="projects__specification-header-group"></div>
@@ -2505,7 +2520,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                 </div>
 
                 {/* Строки таблицы */}
-                <div className="projects__specification-table-body">
+                <div ref={specificationTableBodyRef} className="projects__specification-table-body">
                 {paginatedItems.map((item, index) => (
                   <div 
                     key={item.id} 
@@ -2552,6 +2567,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                     </div>
                   </div>
                 ))}
+                </div>
+                </div>
                 </div>
               </div>
 
