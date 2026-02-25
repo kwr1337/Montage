@@ -405,7 +405,20 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
               };
             });
         }
-        if (!isCancelled) setWorkersWithBusy(workers);
+
+        // В мобильной версии — только рабочие, добавленные в проект
+        const projectEmployeeIds = new Set<number>();
+        if (project?.employees && Array.isArray(project.employees)) {
+          project.employees
+            .filter((emp: any) => !emp.pivot?.end_working_date)
+            .forEach((emp: any) => {
+              const eid = emp.id ?? emp.user_id;
+              if (eid != null) projectEmployeeIds.add(Number(eid));
+            });
+        }
+        const filteredWorkers = workers.filter((w) => projectEmployeeIds.has(w.id));
+
+        if (!isCancelled) setWorkersWithBusy(filteredWorkers);
 
         // Обогащаем именами: workers + getUsers (assignments/workers может не включать уже назначенных)
         const workersById = new Map(workers.map((w) => [w.id, w]));
@@ -460,7 +473,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
 
     loadAssignments();
     return () => { isCancelled = true; };
-  }, [activeTab, assignmentDate, isAddEmployeesModalOpen, mockApiResponses]);
+  }, [activeTab, assignmentDate, isAddEmployeesModalOpen, mockApiResponses, project?.employees]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -694,29 +707,14 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     try {
       const employees = project?.employees || [];
       const activeEmployees = employees.filter((emp: any) => !emp.pivot?.end_working_date);
-      const projectEmployeeIds = new Set(activeEmployees.map((e: any) => e.id));
-
-      // Добавляем рабочих из dayAssignedWorkers, которых ещё нет в project.employees
-      // (бригадир мог добавить их через СОТРУДНИКИ, но проект ещё не обновился)
-      const fromAssignments = dayAssignedWorkers
-        .filter((w: any) => !projectEmployeeIds.has(w.id))
-        .map((w: any) => ({
-          id: w.id,
-          first_name: w.first_name,
-          last_name: w.last_name,
-          second_name: w.second_name,
-          pivot: { rate_per_hour: 0, end_working_date: null },
-        }));
-
-      const employeesToTrack = [...activeEmployees, ...fromAssignments];
 
       // Получаем текущую дату для проверки невыставленных часов
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      // Загружаем work_reports для всех сотрудников (из проекта + назначенных на день)
+      // Загружаем work_reports для всех активных сотрудников
       const trackingData = await Promise.all(
-        employeesToTrack.map(async (emp: any) => {
+        activeEmployees.map(async (emp: any) => {
           try {
             const response = await apiService.getWorkReports(project.id, emp.id, {
               per_page: 1000,
@@ -840,7 +838,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     } catch (error) {
       console.error('Error loading tracking items:', error);
     }
-  }, [project?.id, project?.employees, dayAssignedWorkers]);
+  }, [project?.id, project?.employees]);
 
   useEffect(() => {
     if (activeTab !== 'tracking' || !project?.id) {
