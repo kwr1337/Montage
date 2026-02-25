@@ -92,6 +92,25 @@ const getForemanName = (project: ProjectListItem) => {
   return `${lastName} ${firstInitial}${secondInitial}`.trim() || 'Не назначен';
 };
 
+const isCurrentUserInProject = (project: ProjectListItem, currentUserId: number | string | undefined | null): boolean => {
+  if (currentUserId == null) return false;
+  if (!project.employees || project.employees.length === 0) return false;
+
+  const activeEmployees = project.employees.filter((emp: any) => !emp.pivot?.end_working_date);
+  return activeEmployees.some((emp: any) => {
+    const empId = emp.id ?? emp.user_id;
+    return empId != null && String(empId) === String(currentUserId);
+  });
+};
+
+const formatUserNameShort = (user: any) => {
+  if (!user) return '';
+  const lastName = user.last_name || '';
+  const firstInitial = user.first_name ? `${user.first_name.charAt(0)}.` : '';
+  const secondInitial = user.second_name ? `${user.second_name.charAt(0)}.` : '';
+  return `${lastName} ${firstInitial}${secondInitial}`.trim() || '';
+};
+
 const getActiveEmployeesCount = (project: ProjectListItem) => {
   if (!project.employees || project.employees.length === 0) {
     return 0;
@@ -116,6 +135,9 @@ const extractProjectsFromResponse = (response: any): ProjectListItem[] => {
 };
 
 export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLogout }) => {
+  const currentUser = apiService.getCurrentUser();
+  const currentUserId = currentUser?.id;
+
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -247,12 +269,15 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
     return projects.filter((project) => {
       const matchesId = project.id?.toString().includes(query);
       const matchesName = project.name?.toLowerCase().includes(query);
-      const foremanName = getForemanName(project).toLowerCase();
+      const foremanName = (isCurrentUserInProject(project, currentUserId)
+        ? formatUserNameShort(currentUser)
+        : getForemanName(project)
+      ).toLowerCase();
       const matchesForeman = foremanName.includes(query);
 
       return matchesId || matchesName || matchesForeman;
     });
-  }, [projects, search]);
+  }, [projects, search, currentUserId, currentUser]);
 
   // Функция обработки сортировки
   const handleSort = (field: string | null) => {
@@ -286,8 +311,8 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
             bValue = b.start_date ? new Date(b.start_date).getTime() : 0;
             break;
           case 'foreman':
-            aValue = getForemanName(a).toLowerCase();
-            bValue = getForemanName(b).toLowerCase();
+            aValue = (isCurrentUserInProject(a, currentUserId) ? formatUserNameShort(currentUser) : getForemanName(a)).toLowerCase();
+            bValue = (isCurrentUserInProject(b, currentUserId) ? formatUserNameShort(currentUser) : getForemanName(b)).toLowerCase();
             break;
           case 'employees':
             aValue = getActiveEmployeesCount(a);
@@ -309,7 +334,7 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
       });
     }
     return sorted;
-  }, [filteredProjects, sortField, sortDirection]);
+  }, [filteredProjects, sortField, sortDirection, currentUserId, currentUser]);
 
   const handleOpenProject = async (projectId: number) => {
     setSelectedProjectId(projectId);
@@ -498,7 +523,11 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
                         </div>
                       </td>
                       <td>
-                        <span className="mobile-projects__cell-foreman">{getForemanName(project)}</span>
+                        <span className="mobile-projects__cell-foreman">
+                          {isCurrentUserInProject(project, currentUserId)
+                            ? formatUserNameShort(currentUser) || getForemanName(project)
+                            : getForemanName(project)}
+                        </span>
                       </td>
                       <td>
                         <span className="mobile-projects__cell-employees">
