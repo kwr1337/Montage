@@ -694,14 +694,29 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     try {
       const employees = project?.employees || [];
       const activeEmployees = employees.filter((emp: any) => !emp.pivot?.end_working_date);
+      const projectEmployeeIds = new Set(activeEmployees.map((e: any) => e.id));
+
+      // Добавляем рабочих из dayAssignedWorkers, которых ещё нет в project.employees
+      // (бригадир мог добавить их через СОТРУДНИКИ, но проект ещё не обновился)
+      const fromAssignments = dayAssignedWorkers
+        .filter((w: any) => !projectEmployeeIds.has(w.id))
+        .map((w: any) => ({
+          id: w.id,
+          first_name: w.first_name,
+          last_name: w.last_name,
+          second_name: w.second_name,
+          pivot: { rate_per_hour: 0, end_working_date: null },
+        }));
+
+      const employeesToTrack = [...activeEmployees, ...fromAssignments];
 
       // Получаем текущую дату для проверки невыставленных часов
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      // Загружаем work_reports для всех активных сотрудников
+      // Загружаем work_reports для всех сотрудников (из проекта + назначенных на день)
       const trackingData = await Promise.all(
-        activeEmployees.map(async (emp: any) => {
+        employeesToTrack.map(async (emp: any) => {
           try {
             const response = await apiService.getWorkReports(project.id, emp.id, {
               per_page: 1000,
@@ -825,7 +840,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     } catch (error) {
       console.error('Error loading tracking items:', error);
     }
-  }, [project?.id, project?.employees]);
+  }, [project?.id, project?.employees, dayAssignedWorkers]);
 
   useEffect(() => {
     if (activeTab !== 'tracking' || !project?.id) {
