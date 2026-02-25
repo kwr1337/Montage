@@ -177,6 +177,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       setEditedStatus(getEditableStatusValue(project.status));
     }
   }, [isNewProject, project.name, project.status]);
+
   
   // Функция для форматирования имени пользователя
   const formatUserName = (user: any) => {
@@ -252,7 +253,42 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
 
   // Обновляем данные для фиксации работ при изменении сотрудников проекта
   useEffect(() => {
-    if (localProject.employees && Array.isArray(localProject.employees) && localProject.id) {
+    if (localProject.employees && Array.isArray(localProject.employees)) {
+      if (!localProject.id) {
+        // Новый проект: формируем trackingItems локально без API (work_reports не существуют)
+        const employeesWithoutGIP = localProject.employees.filter((emp: any) => !isGIP(emp));
+        const formattedEmployees = employeesWithoutGIP.map((employee: any) => {
+          const startWorkingDate = employee.pivot?.start_working_date || null;
+          const endWorkingDate = employee.pivot?.end_working_date || null;
+          const daysInProject = calculateDaysInProject(startWorkingDate, endWorkingDate);
+          const status = endWorkingDate ? 'Удалён' :
+            (employee.employee_status === 'active' ? 'Работает' : employee.is_dismissed ? 'Уволен' : 'Неизвестно');
+          const rate = employee.pivot?.rate_per_hour || employee.rate_per_hour || 0;
+          return {
+            id: employee.id,
+            name: `${employee.last_name} ${employee.first_name.charAt(0)}. ${employee.second_name.charAt(0)}.`,
+            role: employee.role || 'Не указана',
+            status,
+            deletionDate: endWorkingDate ? new Date(endWorkingDate).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }) : null,
+            startDate: startWorkingDate ? new Date(startWorkingDate).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Не указана',
+            days: daysInProject,
+            hours: 0,
+            lastHours: 0,
+            lastReport: null,
+            rate,
+            lastSum: 0,
+            totalSum: 0
+          };
+        });
+        const sorted = formattedEmployees.sort((a: any, b: any) => {
+          const aDel = a.status === 'Удалён';
+          const bDel = b.status === 'Удалён';
+          return aDel === bDel ? 0 : aDel ? 1 : -1;
+        });
+        setTrackingItems(sorted);
+        setTrackingCurrentPage(1);
+        return;
+      }
       const loadTrackingData = async () => {
         const employeesWithoutGIP = localProject.employees.filter((emp: any) => !isGIP(emp));
         const formattedEmployees = await Promise.all(
@@ -697,9 +733,19 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     const foremenIds = (localProject.employees || [])
       .filter((emp: any) => emp.role === 'Бригадир')
       .map((emp: any) => emp.id);
-    const projectManagers = foremenIds.length > 0
-      ? foremenIds
-      : (localProject.project_managers ?? (localProject.project_manager_id ? [localProject.project_manager_id] : (currentUser?.id ? [currentUser.id] : [])));
+    let projectManagers: number[];
+    if (isNewProject) {
+      projectManagers = foremenIds;
+    } else {
+      projectManagers = foremenIds.length > 0
+        ? foremenIds
+        : (localProject.project_managers ?? (localProject.project_manager_id ? [localProject.project_manager_id] : (currentUser?.id ? [currentUser.id] : [])));
+      if (projectManagers.length === 0 && currentUser?.id) projectManagers = [currentUser.id];
+    }
+    if (projectManagers.length === 0) {
+      alert('Добавьте хотя бы одного бригадира через вкладку «Фиксация работ» (кнопка «Добавить»).');
+      return;
+    }
 
     const currentEmployees = localProject.employees || [];
     const employeeObjects = currentEmployees.map((emp: any) => ({
@@ -737,16 +783,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     if (isNewProject) {
       try {
         const defaultStartDate = formData.startDate || new Date().toISOString().split('T')[0];
-        const employeesForRequest = employeeObjects.length > 0
-          ? employeeObjects
-          : (currentUser
-            ? [{
-                id: currentUser.id,
-                start_working_date: defaultStartDate,
-                end_working_date: null,
-                rate_per_hour: currentUser.rate_per_hour || 0,
-              }]
-            : []);
+        const employeesForRequest = projectManagers.map((id: number) => {
+          const emp = allEmployees.find((e: any) => e.id === id);
+          return {
+            id,
+            start_working_date: defaultStartDate,
+            end_working_date: null,
+            rate_per_hour: emp?.rate_per_hour ?? 0,
+          };
+        });
 
         const createPayload = {
           ...basePayload,
@@ -754,10 +799,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         };
 
         const response = await apiService.createProject(createPayload);
-        const createdProject = response?.data ?? response;
+        const createdProject = (response?.data ?? response?.project ?? response) as Record<string, unknown>;
 
-        if (!createdProject) {
-          throw new Error('Empty response when creating project');
+        if (!createdProject || (typeof createdProject === 'object' && !('id' in createdProject))) {
+          throw new Error('Пустой или некорректный ответ сервера при создании проекта');
         }
 
         setLocalProject(createdProject);
@@ -775,9 +820,25 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         if (onProjectCreate) {
           onProjectCreate(createdProject);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error creating project:', error);
-        alert('Не удалось создать проект. Проверьте заполненные данные и попробуйте еще раз.');
+        let message = 'Не удалось создать проект. Проверьте заполненные данные и попробуйте еще раз.';
+        try {
+          const errMsg = error?.message || '';
+          const bodyMatch = errMsg.match(/body:\s*(.+)$/);
+          if (bodyMatch) {
+            const body = JSON.parse(bodyMatch[1].trim());
+            if (body?.error) message = body.error;
+            else if (body?.message) message = body.message;
+            else if (body?.errors && typeof body.errors === 'object') {
+              const errParts = Object.entries(body.errors).flatMap(([k, v]) =>
+                Array.isArray(v) ? v.map((e: unknown) => `${k}: ${e}`) : [`${k}: ${v}`]
+              );
+              if (errParts.length) message = errParts.join('\n');
+            }
+          }
+        } catch (_) {}
+        alert(message);
       }
 
       return;
@@ -1078,85 +1139,70 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   };
 
   const handleAddTracking = async (data: { employeeId: number; employeeName: string; rate: number; startDate: string }) => {
+    const currentEmployees = localProject.employees || [];
+
+    // Находим информацию о новом сотруднике из списка всех сотрудников
+    const newEmployeeData = allEmployees.find((emp: any) => emp.id === data.employeeId);
+
+    if (!newEmployeeData) {
+      console.error('Employee not found in allEmployees list');
+      return;
+    }
+
+    // Уже есть в проекте — не дублируем
+    if (currentEmployees.some((e: any) => e.id === data.employeeId)) return;
+
+    const optimisticEmployee = {
+      ...newEmployeeData,
+      pivot: {
+        start_working_date: data.startDate,
+        end_working_date: null,
+        rate_per_hour: data.rate
+      }
+    };
+
+    const optimisticEmployees = [...currentEmployees, optimisticEmployee];
+    const optimisticProject = { ...localProject, employees: optimisticEmployees };
+
+    const formattedEmployees = optimisticEmployees.map((employee: any) => {
+      const startWorkingDate = employee.pivot?.start_working_date || null;
+      const endWorkingDate = employee.pivot?.end_working_date || null;
+      const daysInProject = calculateDaysInProject(startWorkingDate, endWorkingDate);
+      return {
+        id: employee.id,
+        name: `${employee.last_name} ${employee.first_name.charAt(0)}. ${employee.second_name.charAt(0)}.`,
+        role: employee.role || 'Не указана',
+        status: employee.employee_status === 'active' ? 'Работает' :
+                employee.is_dismissed ? 'Уволен' : 'Неизвестно',
+        startDate: startWorkingDate ?
+          new Date(startWorkingDate).toLocaleDateString('ru-RU', {
+            day: 'numeric', month: 'short', year: 'numeric'
+          }) : 'Не указана',
+        days: daysInProject,
+        hours: 0,
+        lastHours: 0,
+        rate: employee.pivot?.rate_per_hour || employee.rate_per_hour || 0,
+        lastSum: 0,
+        totalSum: 0
+      };
+    });
+
+    const sortedEmployees = formattedEmployees.sort((a: any, b: any) => {
+      const aIsDeleted = a.status === 'Удалён';
+      const bIsDeleted = b.status === 'Удалён';
+      if (aIsDeleted === bIsDeleted) return 0;
+      return aIsDeleted ? 1 : -1;
+    });
+
+    setLocalProject(optimisticProject);
+    setTrackingItems(sortedEmployees);
+
+    if (onProjectUpdate) onProjectUpdate(optimisticProject);
+
+    // Для нового проекта — только локальное обновление, API не вызываем
     if (!localProject.id) return;
 
     try {
-      // Получаем текущий список сотрудников проекта
-      const currentEmployees = localProject.employees || [];
-      
-      // Находим информацию о новом сотруднике из списка всех сотрудников
-      const newEmployeeData = allEmployees.find((emp: any) => emp.id === data.employeeId);
-      
-      if (!newEmployeeData) {
-        console.error('Employee not found in allEmployees list');
-        return;
-      }
-
-      // ОПТИМИСТИЧНОЕ ОБНОВЛЕНИЕ: Сначала добавляем сотрудника локально
-      const optimisticEmployee = {
-        ...newEmployeeData,
-        pivot: {
-          start_working_date: data.startDate,
-          end_working_date: null,
-          rate_per_hour: data.rate
-        }
-      };
-
-      const optimisticEmployees = [...currentEmployees, optimisticEmployee];
-      const optimisticProject = {
-        ...localProject,
-        employees: optimisticEmployees
-      };
-
-      // Обновляем localProject оптимистично - таблица обновится сразу
-      setLocalProject(optimisticProject);
-      
-      // Обновляем trackingItems оптимистично
-      const formattedEmployees = optimisticEmployees.map((employee: any) => {
-        const startWorkingDate = employee.pivot?.start_working_date || null;
-        const endWorkingDate = employee.pivot?.end_working_date || null;
-        const daysInProject = calculateDaysInProject(startWorkingDate, endWorkingDate);
-        
-        return {
-          id: employee.id,
-          name: `${employee.last_name} ${employee.first_name.charAt(0)}. ${employee.second_name.charAt(0)}.`,
-          role: employee.role || 'Не указана',
-          status: employee.employee_status === 'active' ? 'Работает' :
-                  employee.is_dismissed ? 'Уволен' : 'Неизвестно',
-          startDate: startWorkingDate ?
-                    new Date(startWorkingDate).toLocaleDateString('ru-RU', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric'
-                    }) : 'Не указана',
-          days: daysInProject,
-          hours: 0,
-          lastHours: 0,
-          rate: employee.pivot?.rate_per_hour || employee.rate_per_hour || 0,
-          lastSum: 0,
-          totalSum: 0
-        };
-      });
-          
-          // Сортируем: сначала активные, затем удаленные
-          const sortedEmployees = formattedEmployees.sort((a: any, b: any) => {
-            const aIsDeleted = a.status === 'Удалён';
-            const bIsDeleted = b.status === 'Удалён';
-            
-            if (aIsDeleted === bIsDeleted) {
-              return 0;
-            }
-            
-            return aIsDeleted ? 1 : -1;
-          });
-          
-          setTrackingItems(sortedEmployees);
-      
-      // Обновляем данные в родительском компоненте
-      if (onProjectUpdate) {
-        onProjectUpdate(optimisticProject);
-      }
-
       // Формируем массив employee для PATCH запроса согласно документации:
       // { id, start_working_date, end_working_date: null, rate_per_hour }
       const employeeArray = [
@@ -2241,7 +2287,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                       <input
                         type="text"
                         className="projects__form-input projects__form-input--editable"
-                        value="Нет бригадиров в проекте"
+                        value=""
                         readOnly
                       />
                     )}

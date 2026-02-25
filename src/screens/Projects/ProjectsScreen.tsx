@@ -511,19 +511,22 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
   const isBrigadier = (currentUser?.role || currentUser?.position) === 'Бригадир';
   const getProjectsFilter = isBrigadier && currentUser?.id ? { filter: { manager_id: [currentUser.id] } } : undefined;
 
-  const createEmptyProjectDraft = () => ({
-    id: null,
-    name: '',
-    status: 'Новый',
-    start_date: '',
-    end_date: '',
-    address: '',
-    description: '',
-    budget: '',
-    project_managers: currentUser?.id ? [currentUser.id] : [] as number[],
-    employees: [],
-    nomenclature: [],
-  });
+  const createEmptyProjectDraft = () => {
+    const isBrigadier = (currentUser?.role || currentUser?.position) === 'Бригадир';
+    return {
+      id: null,
+      name: '',
+      status: 'Новый',
+      start_date: '',
+      end_date: '',
+      address: '',
+      description: '',
+      budget: '',
+      project_managers: isBrigadier && currentUser?.id ? [currentUser.id] : [] as number[],
+      employees: [],
+      nomenclature: [],
+    };
+  };
 
   const startProjectCreation = () => {
     const draftProject = createEmptyProjectDraft();

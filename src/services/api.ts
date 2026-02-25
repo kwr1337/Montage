@@ -271,18 +271,15 @@ class ApiService {
   }
 
   async createProject(data: any): Promise<any> {
-    try {
-      const response = await this.request<any>('/projects', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-      return response;
-    } catch (error) {
-      throw error;
-    }
+    const response = await this.request<any>('/projects', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return response;
   }
 
   async updateProject(projectId: number, data: any): Promise<any> {

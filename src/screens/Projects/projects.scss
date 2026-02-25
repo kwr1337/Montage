@@ -1492,6 +1492,8 @@
   }
 
   &__form-field--foremen {
+    position: relative;
+
     .projects__form-foremen-fields {
       display: flex;
       flex-direction: column;
@@ -1530,6 +1532,11 @@
       &:hover {
         background: transparent;
       }
+    }
+
+    &--selected {
+      background: #e8f4ff;
+      color: #2787f5;
     }
 
     &:first-child {

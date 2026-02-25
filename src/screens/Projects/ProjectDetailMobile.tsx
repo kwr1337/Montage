@@ -614,7 +614,12 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     };
   }, [project?.id, project?.nomenclature, mockApiResponses]);
 
-  // Загружаем и рассчитываем потраченную сумму из work_reports
+  const isGIP = (emp: any) => {
+    const role = (emp?.role || emp?.position || '').toLowerCase();
+    return role.includes('гип') || role === 'главный инженер проекта';
+  };
+
+  // Загружаем и рассчитываем потраченную сумму из work_reports (за всё время, включая удалённых)
   useEffect(() => {
     if (!project?.id) return;
 
@@ -623,11 +628,11 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     const loadSpent = async () => {
       try {
         const employees = project?.employees || [];
-        const activeEmployees = employees.filter((emp: any) => !emp.pivot?.end_working_date);
+        const employeesForSpent = employees.filter((emp: any) => !isGIP(emp));
 
-        // Загружаем work_reports для всех активных сотрудников и суммируем
+        // Загружаем work_reports для ВСЕХ сотрудников (включая удалённых) — за всё время
         const totalSpent = await Promise.all(
-          activeEmployees.map(async (emp: any) => {
+          employeesForSpent.map(async (emp: any) => {
             try {
               const response = await apiService.getWorkReports(project.id, emp.id, {
                 per_page: 1000,
@@ -1386,14 +1391,14 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       }
     }
     
-    // Пересчитываем потраченную сумму
+    // Пересчитываем потраченную сумму (за всё время, включая удалённых)
     if (project?.id) {
       try {
         const employees = project?.employees || [];
-        const activeEmployees = employees.filter((emp: any) => !emp.pivot?.end_working_date);
+        const employeesForSpent = employees.filter((emp: any) => !isGIP(emp));
 
         const totalSpent = await Promise.all(
-          activeEmployees.map(async (emp: any) => {
+          employeesForSpent.map(async (emp: any) => {
             try {
               const response = await apiService.getWorkReports(project.id, emp.id, {
                 per_page: 1000,
