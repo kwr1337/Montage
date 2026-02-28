@@ -486,15 +486,17 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
                   <th 
                     onClick={() => handleSort('foreman')}
                     style={{ cursor: 'pointer' }}
+                    title="Ответственный бригадир"
                   >
-                    <span>Ответственный бригадир</span>
+                    <span>Бригадир</span>
                     <img src={upDownTableFilter} alt="" aria-hidden="true" />
                   </th>
                   <th 
                     onClick={() => handleSort('employees')}
                     style={{ cursor: 'pointer' }}
+                    title="Сотрудников в проекте"
                   >
-                    <span>Сотрудников в проекте</span>
+                    <span>Сотр. в проекте</span>
                     <img src={upDownTableFilter} alt="" aria-hidden="true" />
                   </th>
                   <th aria-label="Действия" />
