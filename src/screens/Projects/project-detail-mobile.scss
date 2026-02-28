@@ -109,10 +109,16 @@
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    overflow: hidden;
+    width: 100%;
+  }
+
+  &__general-scroll {
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
-    width: 100%;
   }
 
   &__budget {

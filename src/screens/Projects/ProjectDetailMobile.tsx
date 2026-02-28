@@ -1505,7 +1505,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       ) : (
         <div className="mobile-project-detail__content">
           {activeTab === 'general' && (
-            <>
+            <div className="mobile-project-detail__general-scroll">
               <section className="mobile-project-detail__budget">
                 <div className="mobile-project-detail__budget-header">
                   <span className="mobile-project-detail__section-label">ФОТ</span>
@@ -1562,7 +1562,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                   </div>
                 )}
               </section>
-            </>
+            </div>
           )}
 
           {activeTab === 'specification' && (
