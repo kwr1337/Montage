@@ -210,12 +210,6 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
     return '';
   };
 
-  const formatCurrency = (value: string) => {
-    const num = value.replace(/\s/g, '').replace(/₽/g, '');
-    if (!num) return '';
-    return `${parseInt(num, 10).toLocaleString('ru-RU')} ₽`;
-  };
-
   /** Форматирование числа для инпута: только цифры с пробелами (₽ выносится в суффикс) */
   const formatCurrencyInput = (value: string) => {
     const num = value.replace(/\s/g, '').replace(/₽/g, '');
