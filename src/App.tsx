@@ -17,7 +17,7 @@ import './screens/Reports/reports.scss';
 import './screens/Salary/salary.scss';
 
 // 1280 — мобильная версия на планшетах в горизонтальной ориентации (1024px и меньше)
-const MOBILE_WIDTH_THRESHOLD = 1280;
+const MOBILE_WIDTH_THRESHOLD = 1024;
 const MOBILE_HEIGHT_THRESHOLD = 600;
 
 const getIsMobileViewport = () => {

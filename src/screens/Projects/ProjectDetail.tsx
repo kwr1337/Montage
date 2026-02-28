@@ -2441,6 +2441,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
 
               {/* Таблица спецификации */}
               <div className="projects__specification-table">
+                {/* Заголовок — снаружи скролла, как в фиксации */}
                 <div ref={specificationTableRef} className="projects__specification-table-scroll">
                 <div className="projects__specification-table-inner">
                 {/* Группированный заголовок */}
@@ -2576,7 +2577,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                   </div>
                 </div>
 
-                {/* Строки таблицы */}
+                {/* Строки — только они прокручиваются вертикально */}
+                <div className="projects__specification-table-body-scroll">
                 <div className="projects__specification-table-body">
                 {paginatedItems.map((item, index) => (
                   <div 
@@ -2633,19 +2635,18 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                 </div>
                 </div>
                 </div>
+                </div>
               </div>
 
               {/* Кнопки внизу с пагинацией */}
               <div className="projects__specification-bottom-actions" style={{ flexShrink: 0 }}>
                 {/* Пагинация слева */}
                 <div className="projects__specification-pagination">
-                  {sortedSpecificationItems.length > itemsPerPage && (
-                    <Pagination
-                      currentPage={currentPage}
-                      totalPages={totalPages}
-                      onPageChange={handlePageChange}
-                    />
-                  )}
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={Math.max(1, totalPages)}
+                    onPageChange={handlePageChange}
+                  />
                 </div>
                 
               </div>
