@@ -224,7 +224,6 @@
     margin-right: 16px;
     background: #ffffff;
     border-radius: 16px;
-    overflow-x: auto;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     flex: 1 1 auto;
@@ -233,7 +232,7 @@
 
   &__table {
     width: 100%;
-    min-width: 600px;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 13px;
 

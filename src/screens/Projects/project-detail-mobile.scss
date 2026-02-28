@@ -403,18 +403,14 @@
   &__specification-table-wrapper {
     flex: 1;
     width: 100%;
-    max-width: 100%;
     min-width: 0;
-    overflow-x: auto;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    /* Изолируем прокрутку таблицы — страница не скроллится по горизонтали */
-    overscroll-behavior-x: contain;
   }
 
   &__specification-table {
-    width: max-content;
-    min-width: 560px;
+    width: 100%;
+    min-width: 0;
     background: #ffffff;
     display: flex;
     flex-direction: column;
@@ -438,8 +434,8 @@
     flex-shrink: 0;
 
     &:nth-child(1) {
-      flex: 0 0 36px;
-      min-width: 36px;
+      flex: 0 0 32px;
+      min-width: 32px;
     }
 
     &:nth-child(2) {
@@ -449,18 +445,18 @@
     }
 
     &:nth-child(3) {
-      flex: 0 0 50px;
-      min-width: 50px;
+      flex: 0 0 40px;
+      min-width: 40px;
     }
 
     &:nth-child(4), &:nth-child(5), &:nth-child(6), &:nth-child(7) {
-      flex: 0 0 48px;
-      min-width: 48px;
+      flex: 0 0 40px;
+      min-width: 40px;
     }
 
     &:nth-child(8) {
-      flex: 0 0 90px;
-      min-width: 90px;
+      flex: 0 0 80px;
+      min-width: 80px;
     }
   }
 
@@ -490,8 +486,8 @@
     }
 
     &:nth-child(1) {
-      flex: 0 0 36px;
-      min-width: 36px;
+      flex: 0 0 32px;
+      min-width: 32px;
       justify-content: center;
     }
 
@@ -502,19 +498,19 @@
     }
 
     &:nth-child(3) {
-      flex: 0 0 50px;
-      min-width: 50px;
+      flex: 0 0 40px;
+      min-width: 40px;
     }
 
     &:nth-child(4), &:nth-child(5), &:nth-child(6), &:nth-child(7) {
-      flex: 0 0 48px;
-      min-width: 48px;
+      flex: 0 0 40px;
+      min-width: 40px;
       justify-content: center;
     }
 
     &:nth-child(8) {
-      flex: 0 0 90px;
-      min-width: 90px;
+      flex: 0 0 80px;
+      min-width: 80px;
       justify-content: center;
     }
   }
@@ -557,8 +553,8 @@
     -moz-osx-font-smoothing: grayscale;
 
     &:nth-child(1) {
-      flex: 0 0 36px;
-      min-width: 36px;
+      flex: 0 0 32px;
+      min-width: 32px;
       font-weight: 500;
       justify-content: center;
       background: #f5f6f8;
@@ -567,9 +563,8 @@
     }
 
     &:nth-child(2) {
-      flex: 1 1 0;
+      flex: 1;
       min-width: 0;
-      max-width: 140px;
       padding: 5px 3px;
       font-weight: 400;
 
@@ -586,19 +581,19 @@
     }
 
     &:nth-child(3) {
-      flex: 0 0 50px;
-      min-width: 50px;
+      flex: 0 0 40px;
+      min-width: 40px;
     }
 
     &:nth-child(4), &:nth-child(5), &:nth-child(6), &:nth-child(7) {
-      flex: 0 0 48px;
-      min-width: 48px;
+      flex: 0 0 40px;
+      min-width: 40px;
       justify-content: center;
     }
 
     &:nth-child(8) {
-      flex: 0 0 90px;
-      min-width: 90px;
+      flex: 0 0 80px;
+      min-width: 80px;
       justify-content: center;
     }
   }
@@ -844,17 +839,14 @@
   &__tracking-table-wrapper {
     flex: 1;
     width: 100%;
-    max-width: 100%;
     min-width: 0;
-    overflow-x: auto;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    overscroll-behavior-x: contain;
   }
 
   &__tracking-table {
     width: 100%;
-    min-width: 620px;
+    min-width: 0;
     border: 1px solid #eceff5;
     background: #ffffff;
     display: flex;
@@ -886,41 +878,43 @@
     }
 
     &:nth-child(1) {
+      flex: 0 0 36px;
+      min-width: 36px;
+      justify-content: center;
+    }
+
+    &:nth-child(2) {
+      flex: 1;
+      min-width: 0;
+      justify-content: flex-start;
+    }
+
+    &:nth-child(3) {
+      flex: 0 0 60px;
+      min-width: 60px;
+    }
+
+    &:nth-child(4) {
       flex: 0 0 50px;
       min-width: 50px;
       justify-content: center;
     }
 
-    &:nth-child(2) {
-      flex: 0 0 259px;
-      min-width: 211px;
-    }
-
-    &:nth-child(3) {
-      flex: 0 0 94px;
-      min-width: 94px;
-    }
-
-    &:nth-child(4) {
-      flex: 0 0 90px;
-      min-width: 106px;
-    }
-
     &:nth-child(5) {
-      flex: 0 0 120px;
-      min-width: 98px;
+      flex: 0 0 70px;
+      min-width: 70px;
       justify-content: center;
     }
 
     &:nth-child(6) {
-      flex: 0 0 73px;
-      min-width: 73px;
+      flex: 0 0 55px;
+      min-width: 55px;
       justify-content: center;
     }
 
     &:nth-child(7) {
-      flex: 1;
-      min-width: 110px;
+      flex: 0 0 75px;
+      min-width: 75px;
       justify-content: center;
     }
   }
@@ -958,8 +952,8 @@
     -moz-osx-font-smoothing: grayscale;
 
     &:nth-child(1) {
-      flex: 0 0 50px;
-      min-width: 50px;
+      flex: 0 0 36px;
+      min-width: 36px;
       font-weight: 500;
       justify-content: center;
       background: #f5f6f8;
@@ -967,49 +961,55 @@
     }
 
     &:nth-child(2) {
-      flex: 0 0 211px;
-      min-width: 211px;
-      padding: 0 8px;
+      flex: 1;
+      min-width: 0;
+      padding: 0 6px;
       flex-direction: row;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       font-weight: 400;
+
+      span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
     }
 
     &:nth-child(3) {
-      flex: 0 0 106px;
-      min-width: 106px;
-      padding: 0 8px;
+      flex: 0 0 60px;
+      min-width: 60px;
+      padding: 0 4px;
     }
 
     &:nth-child(4) {
-      flex: 0 0 84px;
-      min-width: 84px;
-      padding: 0 8px;
+      flex: 0 0 50px;
+      min-width: 50px;
+      padding: 0 4px;
       justify-content: center;
       font-weight: 500;
     }
 
     &:nth-child(5) {
-      flex: 0 0 98px;
-      min-width: 98px;
+      flex: 0 0 70px;
+      min-width: 70px;
       justify-content: center;
-      padding: 0 8px;
+      padding: 0 4px;
     }
 
     &:nth-child(6) {
-      flex: 0 0 73px;
-      min-width: 73px;
+      flex: 0 0 55px;
+      min-width: 55px;
       justify-content: center;
-      padding: 0 8px;
+      padding: 0 4px;
       font-weight: 500;
     }
 
     &:nth-child(7) {
-      flex: 1;
-      min-width: 110px;
+      flex: 0 0 75px;
+      min-width: 75px;
       justify-content: center;
-      padding: 0 8px;
+      padding: 0 4px;
     }
   }
 
