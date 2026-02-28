@@ -18,7 +18,7 @@
 
   &__top-card {
     background: #ffffff;
-    padding: 12px;
+    padding: 8px 10px;
     border-bottom: 1px solid #dfe3eb;
     // box-shadow: 0 20px 40px rgba(22, 24, 35, 0.12);
     display: flex;
@@ -39,8 +39,8 @@
   &__action {
     border: none;
     background: rgba(39, 135, 245, 0.1);
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -48,8 +48,8 @@
     padding: 0;
 
     img {
-      width: 20px;
-      height: 20px;
+      width: 18px;
+      height: 18px;
     }
   }
 
@@ -61,7 +61,7 @@
     flex: 1;
     min-width: 0;
     margin: 0;
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 700;
     text-align: center;
     overflow: hidden;
@@ -73,9 +73,9 @@
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     border: 1px solid #dfe3eb;
-    gap: 4px;
-    padding: 4px;
-    border-radius: 20px;
+    gap: 3px;
+    padding: 3px;
+    border-radius: 16px;
     min-width: 0;
     flex-shrink: 0;
   }
@@ -83,8 +83,8 @@
   &__tab {
     border: none;
     background: transparent;
-    border-radius: 16px;
-    padding: 6px 8px;
+    border-radius: 12px;
+    padding: 5px 6px;
     font-size: 10px;
     font-weight: 600;
     color: #6b6c70;
@@ -112,7 +112,7 @@
 
   &__budget {
     background: #ffffff;
-    padding: 16px;
+    padding: 10px 12px;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -204,7 +204,7 @@
   }
 
   &__section-label {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 600;
     line-height: 20px;
     color: #2c2d2e;
@@ -229,7 +229,7 @@
 
   &__employees {
     background: #ffffff;
-    padding: 16px;
+    padding: 10px 12px;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -388,10 +388,10 @@
     background: #ffffff;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
     flex: 1;
     min-height: 0;
-    padding: 16px;
+    padding: 10px 12px;
     min-width: 0;
   }
 
@@ -406,7 +406,7 @@
 
   &__specification-table {
     width: 100%;
-    min-width: 680px;
+    min-width: 560px;
     background: #ffffff;
     display: flex;
     flex-direction: column;
@@ -414,13 +414,12 @@
 
   &__specification-header-groups {
     display: flex;
-    padding: 12px 0;
-    font-size: 11px;
+    padding: 6px 0;
+    font-size: 9px;
     font-weight: 600;
     color: #919399;
-    letter-spacing: 0.08px;
+    letter-spacing: 0.05px;
     text-transform: uppercase;
-    // background: #f5f6f8;
   }
 
   &__specification-header-group {
@@ -431,8 +430,8 @@
     flex-shrink: 0;
 
     &:nth-child(1) {
-      flex: 0 0 52px;
-      min-width: 52px;
+      flex: 0 0 36px;
+      min-width: 36px;
     }
 
     &:nth-child(2) {
@@ -442,40 +441,25 @@
     }
 
     &:nth-child(3) {
-      flex: 0 0 80px;
-      min-width: 80px;
+      flex: 0 0 50px;
+      min-width: 50px;
     }
 
-    &:nth-child(4) {
-      flex: 0 0 84px;
-      min-width: 84px;
-    }
-
-    &:nth-child(5) {
-      flex: 0 0 84px;
-      min-width: 84px;
-    }
-
-    &:nth-child(6) {
-      flex: 0 0 84px;
-      min-width: 84px;
-    }
-
-    &:nth-child(7) {
-      flex: 0 0 84px;
-      min-width: 84px;
+    &:nth-child(4), &:nth-child(5), &:nth-child(6), &:nth-child(7) {
+      flex: 0 0 48px;
+      min-width: 48px;
     }
 
     &:nth-child(8) {
-      flex: 0 0 130px;
-      min-width: 130px;
+      flex: 0 0 90px;
+      min-width: 90px;
     }
   }
 
   &__specification-header {
     display: flex;
     align-items: center;
-    padding: 6px 0;
+    padding: 4px 0;
     border-bottom: 1px solid #eceff5;
     background: #f5f6f8;
   }
@@ -483,23 +467,23 @@
   &__specification-header-col {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 11px;
+    gap: 4px;
+    font-size: 9px;
     font-weight: 600;
     color: #919399;
-    letter-spacing: 0.08px;
+    letter-spacing: 0.05px;
     text-transform: uppercase;
     flex-shrink: 0;
 
     img {
-      width: 12px;
-      height: 12px;
+      width: 10px;
+      height: 10px;
       opacity: 0.45;
     }
 
     &:nth-child(1) {
-      flex: 0 0 52px;
-      min-width: 52px;
+      flex: 0 0 36px;
+      min-width: 36px;
       justify-content: center;
     }
 
@@ -510,37 +494,19 @@
     }
 
     &:nth-child(3) {
-      flex: 0 0 80px;
-      min-width: 80px;
+      flex: 0 0 50px;
+      min-width: 50px;
     }
 
-    &:nth-child(4) {
-      flex: 0 0 84px;
-      min-width: 84px;
-      justify-content: center;
-    }
-
-    &:nth-child(5) {
-      flex: 0 0 84px;
-      min-width: 84px;
-      justify-content: center;
-    }
-
-    &:nth-child(6) {
-      flex: 0 0 84px;
-      min-width: 84px;
-      justify-content: center;
-    }
-
-    &:nth-child(7) {
-      flex: 0 0 84px;
-      min-width: 84px;
+    &:nth-child(4), &:nth-child(5), &:nth-child(6), &:nth-child(7) {
+      flex: 0 0 48px;
+      min-width: 48px;
       justify-content: center;
     }
 
     &:nth-child(8) {
-      flex: 0 0 130px;
-      min-width: 130px;
+      flex: 0 0 90px;
+      min-width: 90px;
       justify-content: center;
     }
   }
@@ -570,20 +536,20 @@
   &__specification-col {
     display: flex;
     align-items: center;
-    font-size: 13px;
+    font-size: 11px;
     color: #2c2d2e;
     flex-shrink: 0;
-    padding: 10px 4px;
-    min-height: 44px;
+    padding: 5px 3px;
+    min-height: 32px;
     box-sizing: border-box;
 
     &:nth-child(1) {
-      flex: 0 0 52px;
-      min-width: 52px;
+      flex: 0 0 36px;
+      min-width: 36px;
       font-weight: 600;
       justify-content: center;
       background: #f5f6f8;
-      padding: 10px 0;
+      padding: 5px 0;
       align-self: stretch;
     }
 
@@ -593,41 +559,23 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      padding: 10px 4px;
+      padding: 5px 3px;
     }
 
     &:nth-child(3) {
-      flex: 0 0 80px;
-      min-width: 80px;
+      flex: 0 0 50px;
+      min-width: 50px;
     }
 
-    &:nth-child(4) {
-      flex: 0 0 84px;
-      min-width: 84px;
-      justify-content: center;
-    }
-
-    &:nth-child(5) {
-      flex: 0 0 84px;
-      min-width: 84px;
-      justify-content: center;
-    }
-
-    &:nth-child(6) {
-      flex: 0 0 84px;
-      min-width: 84px;
-      justify-content: center;
-    }
-
-    &:nth-child(7) {
-      flex: 0 0 84px;
-      min-width: 84px;
+    &:nth-child(4), &:nth-child(5), &:nth-child(6), &:nth-child(7) {
+      flex: 0 0 48px;
+      min-width: 48px;
       justify-content: center;
     }
 
     &:nth-child(8) {
-      flex: 0 0 130px;
-      min-width: 130px;
+      flex: 0 0 90px;
+      min-width: 90px;
       justify-content: center;
     }
   }
@@ -638,7 +586,7 @@
     justify-content: flex-start;
     padding: 0;
     border-radius: 0;
-    font-size: 14px;
+    font-size: 11px;
     font-weight: 400;
     color: #2c2d2e;
 
@@ -655,8 +603,8 @@
   &__specification-fact-by-foreman {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    font-size: 12px;
+    gap: 1px;
+    font-size: 10px;
   }
 
   &__specification-fact-foreman-item {
@@ -678,12 +626,12 @@
     border: none;
     background: #2787f5;
     color: #ffffff;
-    font-size: 12px;
+    font-size: 10px;
     font-weight: 600;
-    letter-spacing: 0.06px;
-    border-radius: 8px;
-    padding: 0 20px;
-    height: 34px;
+    letter-spacing: 0.04px;
+    border-radius: 6px;
+    padding: 0 10px;
+    height: 26px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -881,7 +829,7 @@
 
   &__tracking-table {
     width: 100%;
-    min-width: 820px;
+    min-width: 620px;
     border: 1px solid #eceff5;
     background: #ffffff;
     display: flex;
@@ -891,7 +839,7 @@
   &__tracking-header {
     display: flex;
     align-items: center;
-    padding: 6px 0;
+    padding: 4px 0;
     border-bottom: 1px solid #eceff5;
     background: #f5f6f8;
   }
@@ -899,8 +847,8 @@
   &__tracking-header-col {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 11px;
+    gap: 4px;
+    font-size: 9px;
     font-weight: 600;
     color: #919399;
     letter-spacing: 0.08px;
@@ -976,9 +924,9 @@
   &__tracking-col {
     display: flex;
     align-items: center;
-    font-size: 14px;
+    font-size: 11px;
     color: #2c2d2e;
-    padding: 17px 0;
+    padding: 8px 0;
 
     &:nth-child(1) {
       flex: 0 0 50px;
@@ -1155,12 +1103,12 @@
     border: none;
     background: #2787f5;
     color: #ffffff;
-    font-size: 12px;
+    font-size: 10px;
     font-weight: 600;
-    letter-spacing: 0.06px;
-    border-radius: 8px;
-    padding: 0 20px;
-    height: 34px;
+    letter-spacing: 0.04px;
+    border-radius: 6px;
+    padding: 0 12px;
+    height: 26px;
     display: inline-flex;
     align-items: center;
     justify-content: center;

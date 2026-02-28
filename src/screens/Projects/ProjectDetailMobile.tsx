@@ -172,12 +172,6 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       });
     }
   }, [project, isLoading]);
-  const [isPortrait, setIsPortrait] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.innerHeight > window.innerWidth;
-    }
-    return false;
-  });
   const [isFactModalOpen, setIsFactModalOpen] = useState(false);
   const [selectedNomenclature, setSelectedNomenclature] = useState<SpecificationItem | null>(null);
   const [existingFact, setExistingFact] = useState<{ id: number; amount: number; fact_date: string } | null>(null);
@@ -282,21 +276,6 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     const namePart = project?.name ? ` · ${project.name}` : '';
     return `Проект ${idPart}${namePart}`.trim();
   }, [project?.id, project?.name]);
-
-  useEffect(() => {
-    const checkOrientation = () => {
-      setIsPortrait(window.innerHeight > window.innerWidth);
-    };
-
-    checkOrientation();
-    window.addEventListener('resize', checkOrientation);
-    window.addEventListener('orientationchange', checkOrientation);
-
-    return () => {
-      window.removeEventListener('resize', checkOrientation);
-      window.removeEventListener('orientationchange', checkOrientation);
-    };
-  }, []);
 
   // Загрузка назначений рабочих на день (вкладка СОТРУДНИКИ и для фильтрации Фиксации работ)
   useEffect(() => {
@@ -1453,16 +1432,6 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     }
     await onRefresh?.();
   };
-
-  if (isPortrait) {
-    return (
-      <div className="mobile-project-detail mobile-project-detail--portrait">
-        <div className="mobile-project-detail__orientation-message">
-          <p>Держите телефон горизонтально</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="mobile-project-detail">

@@ -147,31 +147,10 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
   const [isProjectLoading, setIsProjectLoading] = useState(false);
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [isPortrait, setIsPortrait] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.innerHeight > window.innerWidth;
-    }
-    return false;
-  });
 
   const useMockData = useMemo(() => {
     if (typeof window === 'undefined') return false;
     return new URLSearchParams(window.location.search).get('mock') === '1';
-  }, []);
-
-  useEffect(() => {
-    const checkOrientation = () => {
-      setIsPortrait(window.innerHeight > window.innerWidth);
-    };
-
-    checkOrientation();
-    window.addEventListener('resize', checkOrientation);
-    window.addEventListener('orientationchange', checkOrientation);
-
-    return () => {
-      window.removeEventListener('resize', checkOrientation);
-      window.removeEventListener('orientationchange', checkOrientation);
-    };
   }, []);
 
   const fetchProjects = React.useCallback(async () => {
@@ -388,16 +367,6 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
         isLoading={isProjectLoading}
         mockApiResponses={isMockProject ? mockData.mockApiResponses : undefined}
       />
-    );
-  }
-
-  if (isPortrait) {
-    return (
-      <div className="mobile-projects mobile-projects--portrait">
-        <div className="mobile-projects__orientation-message">
-          <p>Держите телефон горизонтально</p>
-        </div>
-      </div>
     );
   }
 
