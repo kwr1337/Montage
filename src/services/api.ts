@@ -466,6 +466,17 @@ class ApiService {
     return response;
   }
 
+  /** Получить все work-reports по проекту (если API поддерживает) — для списка сотрудников с часами */
+  async getProjectWorkReports(projectId: number, params?: { page?: number; per_page?: number }): Promise<any> {
+    let url = `/projects/${projectId}/work-reports`;
+    const search = new URLSearchParams();
+    if (params?.page) search.append('page', String(params.page));
+    if (params?.per_page) search.append('per_page', String(params.per_page));
+    const qs = search.toString();
+    if (qs) url += `?${qs}`;
+    return this.request<any>(url, { method: 'GET' });
+  }
+
   // Получить список рабочего графика сотрудника в проекте
   async getWorkReports(
     projectId: number,
@@ -562,6 +573,7 @@ class ApiService {
     per_page?: number;
     with?: string[];
     filter?: {
+      project_id?: number | number[];
       users?: number[];
       date_from?: string;
       date_to?: string;
@@ -576,6 +588,12 @@ class ApiService {
       });
     }
     if (params?.filter) {
+      if (params.filter.project_id !== undefined) {
+        const ids = Array.isArray(params.filter.project_id) ? params.filter.project_id : [params.filter.project_id];
+        ids.forEach((id) => {
+          url += `filter[project_id][]=${id}&`;
+        });
+      }
       if (params.filter.users) {
         params.filter.users.forEach((userId) => {
           url += `filter[users][]=${userId}&`;

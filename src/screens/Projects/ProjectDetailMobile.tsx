@@ -1480,7 +1480,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
               className={`mobile-project-detail__tab ${activeTab === 'general' ? 'mobile-project-detail__tab--active' : ''}`}
               onClick={() => setActiveTab('general')}
             >
-              Общая информация
+              Общая
             </button>
             <button
               type="button"
@@ -1494,7 +1494,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
               className={`mobile-project-detail__tab ${activeTab === 'tracking' ? 'mobile-project-detail__tab--active' : ''}`}
               onClick={() => setActiveTab('tracking')}
             >
-              Фиксация работ
+              Фиксация
             </button>
           </div>
         </div>

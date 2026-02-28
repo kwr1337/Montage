@@ -3,6 +3,7 @@ import { PageHeader } from '../../shared/ui/PageHeader/PageHeader';
 import { Pagination } from '../../shared/ui/Pagination/Pagination';
 import { AddPaymentModal } from '../../shared/ui/AddPaymentModal/AddPaymentModal';
 import { apiService } from '../../services/api';
+import { canAccessSalary } from '../../services/permissions';
 import zpIconGrey from '../../shared/icons/zpIconGrey.svg';
 import searchIcon from '../../shared/icons/searchIcon.svg';
 import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
@@ -13,6 +14,7 @@ import './salary.scss';
 type Payment = {
   id: number;
   user_id: number;
+  project_id?: number;
   user?: {
     id: number;
     first_name: string;
@@ -57,6 +59,7 @@ export const SalaryScreen: React.FC = () => {
   const [isAddPaymentModalOpen, setIsAddPaymentModalOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [employees, setEmployees] = useState<any[]>([]);
+  const [projects, setProjects] = useState<Array<{ id: number; name: string }>>([]);
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
@@ -87,20 +90,48 @@ export const SalaryScreen: React.FC = () => {
     loadEmployees();
   }, []);
 
+  // Загрузка проектов для выбора при добавлении выплаты
+  useEffect(() => {
+    const loadProjects = async () => {
+      try {
+        const res = await apiService.getProjects(1, 1000);
+        const list = res?.data?.data || res?.data || res;
+        const arr = Array.isArray(list) ? list : [list];
+        setProjects(arr.filter((p: any) => p?.id).map((p: any) => ({ id: p.id, name: p.name || `Проект №${p.id}` })));
+      } catch (e) {
+        console.error('Error loading projects:', e);
+      }
+    };
+    loadProjects();
+  }, []);
+
   // Функция загрузки данных о выплатах
   const loadPayments = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const filter: any = {};
+      // API требует project_id — загружаем проекты и получаем выплаты по каждому
+      let projectIds: number[] = [];
+      try {
+        const projectsRes = await apiService.getProjects(1, 1000);
+        const projectsList = projectsRes?.data?.data || projectsRes?.data || projectsRes;
+        const arr = Array.isArray(projectsList) ? projectsList : [projectsList];
+        projectIds = arr.filter((p: any) => p?.id).map((p: any) => p.id);
+      } catch (e) {
+        console.error('Error loading projects for payments:', e);
+      }
+
+      const filter: any = { project_id: projectIds };
       if (dateFrom) filter.date_from = dateFrom;
       if (dateTo) filter.date_to = dateTo;
-      
-      const response = await apiService.getPayments({
-        page: currentPage,
-        per_page: itemsPerPage,
-        with: ['user'],
-        filter: Object.keys(filter).length > 0 ? filter : undefined,
-      });
+
+      const response = projectIds.length > 0
+        ? await apiService.getPayments({
+            page: currentPage,
+            per_page: 500,
+            with: ['user'],
+            filter,
+          })
+        : { data: { data: [] } };
 
       console.log('Payments API response:', response);
 
@@ -758,13 +789,26 @@ export const SalaryScreen: React.FC = () => {
             <button 
               className="salary__add-btn" 
               onClick={() => {
+                if (!canAccessSalary(apiService.getCurrentUser())) {
+                  alert('Недостаточно прав');
+                  return;
+                }
                 setEditingPayment(null);
                 setIsAddPaymentModalOpen(true);
               }}
             >
               Добавить выплату
             </button>
-            <button className="salary__export-btn" onClick={handleExportToExcel}>
+            <button 
+              className="salary__export-btn" 
+              onClick={() => {
+                if (!canAccessSalary(apiService.getCurrentUser())) {
+                  alert('Недостаточно прав');
+                  return;
+                }
+                handleExportToExcel();
+              }}
+            >
               Экспорт XLS
             </button>
           </div>
@@ -894,9 +938,12 @@ export const SalaryScreen: React.FC = () => {
                     key={payment.id} 
                     className="salary__table-row"
                     onClick={(e) => {
-                      // Не открываем модальное окно при клике на чекбокс
                       if ((e.target as HTMLElement).closest('.salary__checkbox') || 
                           (e.target as HTMLElement).tagName === 'INPUT') {
+                        return;
+                      }
+                      if (!canAccessSalary(apiService.getCurrentUser())) {
+                        alert('Недостаточно прав');
                         return;
                       }
                       setEditingPayment(payment);
@@ -1015,9 +1062,9 @@ export const SalaryScreen: React.FC = () => {
         onSave={async (data) => {
           try {
             if (editingPayment) {
-              // Редактирование существующей выплаты
               await apiService.updatePayment(editingPayment.id, {
                 user_id: data.employeeId,
+                project_id: data.projectId,
                 first_payment_date: data.firstPayment?.date || null,
                 first_payment_amount: data.firstPayment?.amount ? parseFloat(data.firstPayment.amount.replace(/\s/g, '').replace(/₽/g, '')) : null,
                 first_payment_type: data.firstPayment?.method || null,
@@ -1030,9 +1077,9 @@ export const SalaryScreen: React.FC = () => {
                 notes: data.comment || null,
               });
             } else {
-              // Создание новой выплаты
               await apiService.createPayment({
                 user_id: data.employeeId,
+                project_id: data.projectId,
                 first_payment_date: data.firstPayment?.date || null,
                 first_payment_amount: data.firstPayment?.amount ? parseFloat(data.firstPayment.amount.replace(/\s/g, '').replace(/₽/g, '')) : null,
                 first_payment_type: data.firstPayment?.method || null,
@@ -1057,10 +1104,12 @@ export const SalaryScreen: React.FC = () => {
             alert('Ошибка при сохранении выплаты');
           }
         }}
+        projects={projects}
         employees={employees}
         editData={editingPayment ? {
           id: editingPayment.id,
           employeeId: editingPayment.user_id,
+          projectId: editingPayment.project_id,
           employeeName: editingPayment.employeeName || '',
           employeePosition: editingPayment.employeePosition || '',
           total: editingPayment.total || 0,

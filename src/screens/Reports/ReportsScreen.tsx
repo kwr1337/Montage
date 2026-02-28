@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { PageHeader } from '../../shared/ui/PageHeader/PageHeader';
 import { Pagination } from '../../shared/ui/Pagination/Pagination';
 import { apiService } from '../../services/api';
+import { canSeePaymentsReport } from '../../services/permissions';
 import otchetIconGrey from '../../shared/icons/otchetIconGrey.svg';
 import searchIcon from '../../shared/icons/searchIcon.svg';
 import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
@@ -81,14 +82,16 @@ export const ReportsScreen: React.FC = () => {
         }
       });
 
-      // Добавляем отчёт по выплатам
-      reportsList.push({
-        id: reportId++,
-        type: 'payments',
-        name: 'Отчет по выплатам',
-        format: '.xls',
-        createdAt: new Date().toISOString(),
-      });
+      // Отчёт по выплатам — только для ролей с полным доступом (ПТО и Сметчик видят только отчёт по номенклатуре)
+      if (canSeePaymentsReport(apiService.getCurrentUser())) {
+        reportsList.push({
+          id: reportId++,
+          type: 'payments',
+          name: 'Отчет по выплатам',
+          format: '.xls',
+          createdAt: new Date().toISOString(),
+        });
+      }
 
       setReports(reportsList);
     };
@@ -315,6 +318,10 @@ export const ReportsScreen: React.FC = () => {
   };
 
   const handleDownload = (report: Report) => {
+    if (report.type === 'payments' && !canSeePaymentsReport(apiService.getCurrentUser())) {
+      alert('Недостаточно прав');
+      return;
+    }
     if (report.type === 'nomenclature') {
       downloadNomenclatureReport(report);
     } else if (report.type === 'payments') {

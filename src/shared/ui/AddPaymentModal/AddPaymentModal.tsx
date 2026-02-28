@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { apiService } from '../../../services/api';
 import closeIcon from '../../icons/closeIcon.svg';
 import calendarIconGrey from '../../icons/calendarIconGrey.svg';
 import './add-payment-modal.scss';
@@ -12,6 +13,7 @@ type PaymentData = {
 type PaymentEditData = {
   id: number;
   employeeId: number;
+  projectId?: number;
   employeeName: string;
   employeePosition: string;
   total?: number;
@@ -38,12 +40,14 @@ type AddPaymentModalProps = {
   onClose: () => void;
   onSave: (data: {
     employeeId: number;
+    projectId: number;
     paymentId?: number;
     firstPayment?: PaymentData;
     secondPayment?: PaymentData;
     thirdPayment?: PaymentData;
     comment?: string;
   }) => void;
+  projects?: Array<{ id: number; name: string }>;
   employees?: Array<{
     id: number;
     name: string;
@@ -60,11 +64,17 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  projects = [],
   employees = [],
   editData = null,
 }) => {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const [displayedEmployees, setDisplayedEmployees] = useState<typeof employees>([]);
+  const [isEmployeesLoading, setIsEmployeesLoading] = useState(false);
   const [isEmployeeDropdownOpen, setIsEmployeeDropdownOpen] = useState(false);
+  const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
+  const projectDropdownRef = useRef<HTMLDivElement>(null);
   const [isMethodDropdownOpen1, setIsMethodDropdownOpen1] = useState(false);
   const [isMethodDropdownOpen2, setIsMethodDropdownOpen2] = useState(false);
   const [isMethodDropdownOpen3, setIsMethodDropdownOpen3] = useState(false);
@@ -95,6 +105,69 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
   const dateFromRef3 = useRef<HTMLInputElement>(null);
 
   const paymentMethods = ['Карта', 'Наличные'];
+
+  // Сотрудники для выбора: из проекта + те, кому бригадир выставил часы (work_reports)
+  useEffect(() => {
+    if (!selectedProjectId || !isOpen) {
+      setDisplayedEmployees([]);
+      return;
+    }
+    const load = async () => {
+      setIsEmployeesLoading(true);
+      try {
+        const projectRes = await apiService.getProjectById(selectedProjectId);
+        const project = projectRes?.data ?? projectRes;
+        const projectEmployees = project?.employees ?? [];
+        const inProjectIds = new Set((projectEmployees as any[]).map((e: any) => e.id ?? e.user_id));
+
+        // Пробуем получить work_reports по проекту (сотрудники с часами от бригадира)
+        let workReportUserIds = new Set<number>();
+        try {
+          const wrRes = await apiService.getProjectWorkReports(selectedProjectId, { per_page: 1000 });
+          const wrData = wrRes?.data?.data ?? wrRes?.data ?? wrRes;
+          const reports = Array.isArray(wrData) ? wrData : [wrData];
+          reports.forEach((r: any) => {
+            const uid = r.user_id ?? r.user?.id;
+            if (uid) workReportUserIds.add(Number(uid));
+          });
+        } catch {
+          // API может не поддерживать getProjectWorkReports — используем только project.employees
+        }
+
+        const allIds = new Set([...inProjectIds, ...workReportUserIds]);
+        const empMap = new Map(employees.map((e) => [e.id, e]));
+        const result: typeof employees = [];
+        allIds.forEach((id) => {
+          let emp = empMap.get(id);
+          if (!emp) {
+            const pe = (projectEmployees as any[]).find((e: any) => (e.id ?? e.user_id) === id);
+            if (pe) {
+              emp = {
+                id,
+                name: apiService.formatUserName(pe),
+                fullName: `${pe.last_name || ''} ${pe.first_name || ''} ${pe.second_name || ''}`.trim(),
+                user: pe.user ?? pe,
+                is_dismissed: pe.is_dismissed ?? pe.user?.is_dismissed,
+              };
+            }
+          }
+          if (emp) result.push(emp);
+        });
+        // При редактировании гарантируем, что текущий сотрудник в списке
+        if (editData?.employeeId && !result.some((e) => e.id === editData.employeeId)) {
+          const fromAll = empMap.get(editData.employeeId);
+          if (fromAll) result.push(fromAll);
+        }
+        setDisplayedEmployees(result);
+      } catch (e) {
+        console.error('Error loading employees for project:', e);
+        setDisplayedEmployees([]);
+      } finally {
+        setIsEmployeesLoading(false);
+      }
+    };
+    load();
+  }, [selectedProjectId, isOpen, employees, editData?.employeeId]);
 
   const formatDateDDMMYYYY = (dateString: string) => {
     if (!dateString) return '';
@@ -143,6 +216,13 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
     return `${parseInt(num, 10).toLocaleString('ru-RU')} ₽`;
   };
 
+  /** Форматирование числа для инпута: только цифры с пробелами (₽ выносится в суффикс) */
+  const formatCurrencyInput = (value: string) => {
+    const num = value.replace(/\s/g, '').replace(/₽/g, '');
+    if (!num) return '';
+    return parseInt(num, 10).toLocaleString('ru-RU');
+  };
+
   const handleAmountChange = (value: string, setter: (data: PaymentData) => void, current: PaymentData) => {
     const num = value.replace(/\D/g, '');
     setter({ ...current, amount: num });
@@ -150,9 +230,15 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
 
   const handleSave = () => {
     if (!selectedEmployeeId) return;
+    const projectId = editData?.projectId ?? selectedProjectId;
+    if (!projectId) {
+      alert('Выберите проект');
+      return;
+    }
 
     const data = {
       employeeId: selectedEmployeeId,
+      projectId,
       paymentId: editData?.id,
       firstPayment: firstPayment.amount && firstPayment.date ? {
         amount: firstPayment.amount,
@@ -200,6 +286,7 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
 
   const handleClose = () => {
     setSelectedEmployeeId(null);
+    setSelectedProjectId(null);
     setFirstPayment({ amount: '', date: '', method: 'Карта' });
     setSecondPayment({ amount: '', date: '', method: 'Наличные' });
     setThirdPayment({ amount: '', date: '', method: 'Наличные' });
@@ -215,6 +302,7 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
   React.useEffect(() => {
     if (editData && isOpen) {
       setSelectedEmployeeId(editData.employeeId);
+      setSelectedProjectId(editData.projectId ?? null);
       setFirstPayment({
         amount: editData.firstPayment?.amount?.toString() || '',
         date: parseDateString(editData.firstPayment?.date || ''),
@@ -243,6 +331,7 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
     } else if (!editData && isOpen) {
       // Сброс формы при открытии для создания новой выплаты
       setSelectedEmployeeId(null);
+      setSelectedProjectId(null);
       setFirstPayment({ amount: '', date: '', method: 'Карта' });
       setSecondPayment({ amount: '', date: '', method: 'Наличные' });
       setThirdPayment({ amount: '', date: '', method: 'Наличные' });
@@ -269,6 +358,9 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
   // Закрытие dropdown при клике вне
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      if (projectDropdownRef.current && !projectDropdownRef.current.contains(event.target as Node)) {
+        setIsProjectDropdownOpen(false);
+      }
       if (employeeDropdownRef.current && !employeeDropdownRef.current.contains(event.target as Node)) {
         setIsEmployeeDropdownOpen(false);
       }
@@ -292,7 +384,9 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
     };
   }, [isOpen]);
 
-  const selectedEmployee = employees.find((emp) => emp.id === selectedEmployeeId);
+  const employeeList = selectedProjectId ? displayedEmployees : employees;
+  const selectedEmployee = employeeList.find((emp) => emp.id === selectedEmployeeId)
+    ?? employees.find((emp) => emp.id === selectedEmployeeId);
 
   if (!isOpen) return null;
 
@@ -309,23 +403,69 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
         </div>
 
         <div className="add-payment-modal__content">
+          {/* Выбор проекта */}
+          {projects.length > 0 && (
+            <div className="add-payment-modal__section">
+              <h3 className="add-payment-modal__section-title">Выберите проект</h3>
+              <div className="add-payment-modal__field" ref={projectDropdownRef}>
+                <label className="add-payment-modal__label">Проект</label>
+                <div
+                  className={`add-payment-modal__dropdown-trigger ${editData ? 'add-payment-modal__dropdown-trigger--disabled' : ''}`}
+                  onClick={() => {
+                    if (!editData) setIsProjectDropdownOpen(!isProjectDropdownOpen);
+                  }}
+                >
+                  <span className={selectedProjectId ? 'add-payment-modal__dropdown-value' : 'add-payment-modal__dropdown-placeholder'}>
+                    {selectedProjectId ? (projects.find((p) => p.id === selectedProjectId)?.name || '') : 'Выберите проект'}
+                  </span>
+                  {!editData && (
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path d="M3 4.5L6 7.5L9 4.5" stroke="#919399" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+                {isProjectDropdownOpen && !editData && (
+                  <div className="add-payment-modal__dropdown">
+                    {projects.map((proj) => (
+                      <div
+                        key={proj.id}
+                        className="add-payment-modal__dropdown-option"
+                        onClick={() => {
+                          setSelectedProjectId(proj.id);
+                          setIsProjectDropdownOpen(false);
+                        }}
+                      >
+                        {proj.name}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Выбор сотрудника */}
           <div className="add-payment-modal__section">
             <h3 className="add-payment-modal__section-title">Выберите сотрудника</h3>
             <div className="add-payment-modal__field" ref={employeeDropdownRef}>
               <label className="add-payment-modal__label">Сотрудник</label>
               <div
-                className={`add-payment-modal__dropdown-trigger ${editData ? 'add-payment-modal__dropdown-trigger--disabled' : ''}`}
+                className={`add-payment-modal__dropdown-trigger ${editData || (projects.length > 0 && !selectedProjectId) || (selectedProjectId && isEmployeesLoading) ? 'add-payment-modal__dropdown-trigger--disabled' : ''}`}
                 onClick={() => {
-                  if (!editData) {
+                  if (!editData && !(projects.length > 0 && !selectedProjectId) && !(selectedProjectId && isEmployeesLoading)) {
                     setIsEmployeeDropdownOpen(!isEmployeeDropdownOpen);
                   }
                 }}
               >
                 <span className={selectedEmployee ? 'add-payment-modal__dropdown-value' : 'add-payment-modal__dropdown-placeholder'}>
-                  {selectedEmployee ? (selectedEmployee.fullName || selectedEmployee.name) : 'Выберите сотрудника'}
+                  {selectedEmployee ? (selectedEmployee.fullName || selectedEmployee.name)
+                    : projects.length > 0 && !selectedProjectId
+                      ? 'Сначала выберите проект'
+                      : selectedProjectId && isEmployeesLoading
+                        ? 'Загрузка...'
+                        : 'Выберите сотрудника'}
                 </span>
-                {!editData && (
+                {!editData && !(projects.length > 0 && !selectedProjectId) && !(selectedProjectId && isEmployeesLoading) && (
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                     <path d="M3 4.5L6 7.5L9 4.5" stroke="#919399" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
@@ -333,9 +473,8 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
               </div>
               {isEmployeeDropdownOpen && !editData && (
                 <div className="add-payment-modal__dropdown">
-                  {employees
+                  {employeeList
                     .filter((emp) => {
-                      // Исключаем уволенных сотрудников
                       const isDismissed = emp.user?.is_dismissed === true || emp.is_dismissed === true;
                       return !isDismissed;
                     })
@@ -366,13 +505,16 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
               <div className="add-payment-modal__payment-row">
                 <div className="add-payment-modal__field">
                   <label className="add-payment-modal__label">Сумма</label>
-                  <input
-                    type="text"
-                    className="add-payment-modal__input"
-                    value={firstPayment.amount ? formatCurrency(firstPayment.amount) : ''}
-                    onChange={(e) => handleAmountChange(e.target.value, setFirstPayment, firstPayment)}
-                    placeholder="0 ₽"
-                  />
+                  <div className="add-payment-modal__currency-input">
+                    <input
+                      type="text"
+                      className="add-payment-modal__input"
+                      value={firstPayment.amount ? formatCurrencyInput(firstPayment.amount) : ''}
+                      onChange={(e) => handleAmountChange(e.target.value, setFirstPayment, firstPayment)}
+                      placeholder="0"
+                    />
+                    <span className="add-payment-modal__currency-suffix">₽</span>
+                  </div>
                 </div>
                 <div className="add-payment-modal__field">
                   <label className="add-payment-modal__label">Дата выдачи</label>
@@ -439,13 +581,16 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
               <div className="add-payment-modal__payment-row">
                 <div className="add-payment-modal__field">
                   <label className="add-payment-modal__label">Сумма</label>
-                  <input
-                    type="text"
-                    className="add-payment-modal__input"
-                    value={secondPayment.amount ? formatCurrency(secondPayment.amount) : ''}
-                    onChange={(e) => handleAmountChange(e.target.value, setSecondPayment, secondPayment)}
-                    placeholder="0 ₽"
-                  />
+                  <div className="add-payment-modal__currency-input">
+                    <input
+                      type="text"
+                      className="add-payment-modal__input"
+                      value={secondPayment.amount ? formatCurrencyInput(secondPayment.amount) : ''}
+                      onChange={(e) => handleAmountChange(e.target.value, setSecondPayment, secondPayment)}
+                      placeholder="0"
+                    />
+                    <span className="add-payment-modal__currency-suffix">₽</span>
+                  </div>
                 </div>
                 <div className="add-payment-modal__field">
                   <label className="add-payment-modal__label">Дата выдачи</label>
@@ -512,25 +657,26 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
               <div className="add-payment-modal__payment-row">
                 <div className="add-payment-modal__field">
                   <label className="add-payment-modal__label">Сумма</label>
-                  <input
-                    type="text"
-                    className="add-payment-modal__input"
-                    readOnly
-                    value={(() => {
-                      // Рассчитываем остаток автоматически
-                      if (editData?.total) {
-                        const total = editData.total;
-                        const firstAmount = parseFloat(firstPayment.amount) || 0;
-                        const secondAmount = parseFloat(secondPayment.amount) || 0;
-                        const calculatedBalance = Math.max(0, total - firstAmount - secondAmount);
-                        return calculatedBalance > 0 ? formatCurrency(calculatedBalance.toString()) : '';
-                      }
-                      // Если нет editData (новая выплата), показываем пустое значение
-                      return '';
-                    })()}
-                    placeholder="0 ₽"
-                    style={{ backgroundColor: '#f5f5f5', cursor: 'not-allowed' }}
-                  />
+                  <div className="add-payment-modal__currency-input">
+                    <input
+                      type="text"
+                      className="add-payment-modal__input"
+                      readOnly
+                      value={(() => {
+                        if (editData?.total) {
+                          const total = editData.total;
+                          const firstAmount = parseFloat(firstPayment.amount) || 0;
+                          const secondAmount = parseFloat(secondPayment.amount) || 0;
+                          const calculatedBalance = Math.max(0, total - firstAmount - secondAmount);
+                          return calculatedBalance > 0 ? formatCurrencyInput(calculatedBalance.toString()) : '';
+                        }
+                        return '';
+                      })()}
+                      placeholder="0"
+                      style={{ backgroundColor: '#f5f5f5', cursor: 'not-allowed' }}
+                    />
+                    <span className="add-payment-modal__currency-suffix">₽</span>
+                  </div>
                 </div>
                 <div className="add-payment-modal__field">
                   <label className="add-payment-modal__label">Дата выдачи</label>
@@ -616,7 +762,7 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
           <button
             className="add-payment-modal__btn add-payment-modal__btn--save"
             onClick={handleSave}
-            disabled={!selectedEmployeeId}
+            disabled={!selectedEmployeeId || (projects.length > 0 && !selectedProjectId && !editData?.projectId)}
           >
             {editData ? 'Сохранить' : 'Добавить'}
           </button>

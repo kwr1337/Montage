@@ -96,7 +96,6 @@ export const EmployeesScreen: React.FC = () => {
   const itemsPerPage = 10;
   const [isCreatingEmployee, setIsCreatingEmployee] = useState(false);
   const [draftEmployee, setDraftEmployee] = useState<any | null>(null);
-  
   // Состояние для сортировки
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');

@@ -228,16 +228,23 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
 
             <div className="add-tracking-modal__field add-tracking-modal__field--small">
               <label className="add-tracking-modal__label">Введите ставку в час</label>
-              <input
-                type="text"
-                className="add-tracking-modal__input add-tracking-modal__input--rate"
-                value={formData.rate}
-                onChange={(e) => {
-                  handleInputChange('rate', e.target.value);
-                  setError(''); // Очищаем ошибку при изменении поля
-                }}
-                placeholder="950 ₽"
-              />
+              <div className="add-tracking-modal__currency-input">
+                <input
+                  type="text"
+                  className="add-tracking-modal__input add-tracking-modal__input--rate"
+                  value={formData.rate ? (parseFloat(String(formData.rate).replace(/\s/g, '').replace(',', '.')) || 0).toLocaleString('ru-RU') : ''}
+                  onChange={(e) => {
+                    let val = e.target.value.replace(/\s/g, '').replace(',', '.');
+                    val = val.replace(/[^\d.]/g, '');
+                    const parts = val.split('.');
+                    if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+                    handleInputChange('rate', val);
+                    setError('');
+                  }}
+                  placeholder="950"
+                />
+                <span className="add-tracking-modal__currency-suffix">₽</span>
+              </div>
             </div>
           </div>
           {error && (

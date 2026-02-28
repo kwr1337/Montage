@@ -7,6 +7,7 @@ import userDropdownIcon from '../../shared/icons/user-dropdown-icon.svg';
 import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
 import calendarIconGrey from '../../shared/icons/calendarIconGrey.svg';
 import { apiService } from '../../services/api';
+import { canEditEmployees } from '../../services/permissions';
 import './employee-detail.scss';
 
 type EmployeeDetailProps = {
@@ -68,42 +69,8 @@ const updateEmployeeEndDateInAllProjects = async (employeeId: number, dismissalD
 };
 
 export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack, onSave, onCreate, isNew = false }) => {
-  // Проверка прав на редактирование сотрудников
-  const canEditEmployee = () => {
-    const currentUser = apiService.getCurrentUser();
-    if (!currentUser) {
-      console.log('canEditEmployee: No current user');
-      return false;
-    }
-    
-    console.log('canEditEmployee: currentUser:', currentUser);
-    console.log('canEditEmployee: is_system_admin:', currentUser.is_system_admin);
-    console.log('canEditEmployee: role:', currentUser.role);
-    console.log('canEditEmployee: position:', currentUser.position);
-    
-    // Админы системы
-    if (currentUser.is_system_admin === true) {
-      console.log('canEditEmployee: User is system admin');
-      return true;
-    }
-    
-    // ГИП или Бухгалтер - проверяем разные варианты названия
-    const role = (currentUser.role || currentUser.position || '').toLowerCase();
-    const isGIP = role.includes('гип') || role === 'главный инженер проекта';
-    const isBuhgalter = role.includes('бухгалтер') || role === 'бухгалтер';
-    
-    console.log('canEditEmployee: role (lowercase):', role);
-    console.log('canEditEmployee: isGIP:', isGIP);
-    console.log('canEditEmployee: isBuhgalter:', isBuhgalter);
-    
-    if (isGIP || isBuhgalter) {
-      console.log('canEditEmployee: User has edit permissions');
-      return true;
-    }
-    
-    console.log('canEditEmployee: User does NOT have edit permissions');
-    return false;
-  };
+  const currentUser = apiService.getCurrentUser();
+  const canEditEmployee = canEditEmployees(currentUser);
 
   const mapWorkSchedule = (value?: string) => {
     if (!value) {
@@ -318,17 +285,30 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
         console.log('Loading salary history for employee ID:', employeeId);
         console.log('Employee object:', employee);
         
-        // Загружаем все выплаты для сотрудника с фильтрацией по датам
+        // API требует project_id — загружаем проекты
+        let projectIds: number[] = [];
+        try {
+          const projectsRes = await apiService.getProjects(1, 1000);
+          const list = projectsRes?.data?.data || projectsRes?.data || projectsRes;
+          const arr = Array.isArray(list) ? list : [list];
+          projectIds = arr.filter((p: any) => p?.id).map((p: any) => p.id);
+        } catch (e) {
+          console.error('Error loading projects for payments:', e);
+        }
+
         const filter: any = {
+          project_id: projectIds,
           users: [employeeId],
         };
         if (formData.dateFrom) filter.date_from = formData.dateFrom;
         if (formData.dateTo) filter.date_to = formData.dateTo;
-        
-        const response = await apiService.getPayments({
-          per_page: 1000,
-          filter: filter,
-        });
+
+        const response = projectIds.length > 0
+          ? await apiService.getPayments({
+              per_page: 1000,
+              filter,
+            })
+          : { data: { data: [] } };
 
         console.log('Payments API response:', response);
 
@@ -639,6 +619,11 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
         return;
       }
 
+      if (!canEditEmployee) {
+        alert('Недостаточно прав');
+        return;
+      }
+
       // Должность (position) - не обязательное поле, пропускаем проверку
 
       const employmentDateValue = formData.employment_date || new Date().toISOString().split('T')[0];
@@ -715,7 +700,8 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
     const rateValue = formData.rate_per_hour ? Number(formData.rate_per_hour) : 0;
 
     // Проверка прав перед отправкой запроса (для редактирования)
-    if (!isNew && !canEditEmployee()) {
+    if (!isNew && !canEditEmployee) {
+      alert('Недостаточно прав');
       return;
     }
 

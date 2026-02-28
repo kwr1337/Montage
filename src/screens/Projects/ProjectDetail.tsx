@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../../services/api';
+import { canDeleteProject, canEditProjectGeneralInfo, canManageProjectEmployees, canEditSpecification } from '../../services/permissions';
 import sotrudnikiVProekte from '../../shared/icons/sotrudnikiVProekte.svg';
 import editIcon from '../../shared/icons/editIcon.svg';
 import dotsIcon from '../../shared/icons/dotsIcon.svg';
@@ -125,6 +126,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   const [isSavingHeader, setIsSavingHeader] = useState(false);
   const statusDropdownRef = React.useRef<HTMLDivElement>(null);
   const isNewProject = isNew;
+
+  const currentUser = apiService.getCurrentUser();
+  const canDelete = canDeleteProject(currentUser);
+  const canEditGeneral = isNewProject || canEditProjectGeneralInfo(currentUser);
+  const canManageEmployees = canManageProjectEmployees(currentUser);
+  const canEditSpec = canEditSpecification(currentUser);
 
   const startDateInputRef = React.useRef<HTMLInputElement>(null);
   const endDateInputRef = React.useRef<HTMLInputElement>(null);
@@ -1980,7 +1987,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
               ) : (
                 !isNewProject && (
                   <>
-                    <button className="projects__detail-icon-btn" onClick={handleStartHeaderEdit}>
+                    <button 
+                      className="projects__detail-icon-btn" 
+                      onClick={() => {
+                        if (!canEditGeneral) {
+                          alert('Недостаточно прав');
+                          return;
+                        }
+                        handleStartHeaderEdit();
+                      }}
+                    >
                       <img src={editIcon} alt="Редактировать" />
                     </button>
                     <div className="projects__detail-dots-menu-wrapper">
@@ -2032,6 +2048,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                           <button 
                             className="projects__detail-dots-menu-item projects__detail-dots-menu-item--delete"
                             onClick={async () => {
+                              if (!canDelete) {
+                                alert('Недостаточно прав');
+                                setIsDotsMenuOpen(false);
+                                return;
+                              }
                               if (!localProject.id || isDeleting) return;
                               
                               const confirmMessage = `Вы уверены, что хотите удалить проект "${localProject.name}"?`;
@@ -2043,7 +2064,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                               try {
                                 await apiService.deleteProject(localProject.id);
                                 
-                                // Обновляем проект локально
                                 const updatedProject = {
                                   ...localProject,
                                   is_deleted: true
@@ -2051,12 +2071,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                                 
                                 setLocalProject(updatedProject);
                                 
-                                // Уведомляем родительский компонент об обновлении
                                 if (onProjectUpdate) {
                                   onProjectUpdate(updatedProject);
                                 }
                                 
-                                // Закрываем проект и возвращаемся к списку
                                 onBack();
                               } catch (error) {
                                 console.error('Error deleting project:', error);
@@ -2236,12 +2254,22 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                   <div 
                     ref={datesContainerRef}
                     className="projects__form-input projects__form-input--dates"
-                    onClick={handleDatesContainerClick}
+                    onClick={(e) => {
+                      if (!canEditGeneral) {
+                        alert('Недостаточно прав');
+                        return;
+                      }
+                      handleDatesContainerClick(e as React.MouseEvent<HTMLDivElement>);
+                    }}
                   >
                     <img src={calendarIconGrey} alt="Календарь" className="projects__form-input-icon" />
                     <div 
                       className="projects__date-display-wrapper"
                       onClick={(e) => {
+                        if (!canEditGeneral) {
+                          alert('Недостаточно прав');
+                          return;
+                        }
                         e.stopPropagation();
                         startDateInputRef.current?.focus();
                         startDateInputRef.current?.showPicker?.();
@@ -2253,13 +2281,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                         lang="ru"
                         className="projects__form-input--date projects__form-input--date-hidden"
                         value={formData.startDate}
-                        onChange={(e) => handleInputChange('startDate', e.target.value)}
+                        onChange={(e) => canEditGeneral && handleInputChange('startDate', e.target.value)}
                       />
                       <span className="projects__date-display">{formatDateDDMMYYYY(formData.startDate) || 'дд/мм/гггг'}</span>
                     </div>
                     <div 
                       className="projects__date-display-wrapper"
                       onClick={(e) => {
+                        if (!canEditGeneral) {
+                          alert('Недостаточно прав');
+                          return;
+                        }
                         e.stopPropagation();
                         endDateInputRef.current?.focus();
                         endDateInputRef.current?.showPicker?.();
@@ -2271,7 +2303,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                         lang="ru"
                         className="projects__form-input--date projects__form-input--date-hidden"
                         value={formData.endDate}
-                        onChange={(e) => handleInputChange('endDate', e.target.value)}
+                        onChange={(e) => canEditGeneral && handleInputChange('endDate', e.target.value)}
                       />
                       <span className="projects__date-display">{formatDateDDMMYYYY(formData.endDate) || 'дд/мм/гггг'}</span>
                     </div>
@@ -2304,35 +2336,41 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
 
                 <div className="projects__form-field">
                   <label>Выделено на ФОТ</label>
-                  <input
-                    type="text"
-                    className="projects__form-input projects__form-input--editable"
-                    value={formData.budget ? `${formData.budget} ₽` : ''}
-                    onChange={(e) => {
-                      // Убираем символ ₽, пробелы и все нечисловые символы (кроме точки для десятичных)
-                      let value = e.target.value.replace(/[₽\s]/g, '').trim();
-                      // Оставляем только цифры и одну точку для десятичных чисел
-                      value = value.replace(/[^\d.]/g, '');
-                      // Разрешаем только одну точку
-                      const parts = value.split('.');
-                      if (parts.length > 2) {
-                        value = parts[0] + '.' + parts.slice(1).join('');
-                      }
-                      handleInputChange('budget', value);
-                    }}
-                    onBlur={() => {
-                      // При потере фокуса проверяем и исправляем значение
-                      const numValue = parseFloat(formData.budget);
-                      if (!isNaN(numValue) && numValue < 0) {
-                        handleInputChange('budget', '0');
-                      }
-                    }}
-                    placeholder="Введите сумму"
-                  />
+                  <div className="projects__currency-input">
+                    <input
+                      type="text"
+                      className="projects__form-input projects__form-input--editable"
+                      value={formData.budget ? Number(formData.budget).toLocaleString('ru-RU') : ''}
+                      onChange={(e) => {
+                        if (!canEditGeneral) return;
+                        let value = e.target.value.replace(/\s/g, '').replace(',', '.');
+                        value = value.replace(/[^\d.]/g, '');
+                        const parts = value.split('.');
+                        if (parts.length > 2) {
+                          value = parts[0] + '.' + parts.slice(1).join('');
+                        }
+                        handleInputChange('budget', value);
+                      }}
+                      onFocus={(e) => {
+                        if (!canEditGeneral) {
+                          e.target.blur();
+                          alert('Недостаточно прав');
+                        }
+                      }}
+                      onBlur={() => {
+                        if (!canEditGeneral) return;
+                        const numValue = parseFloat(formData.budget);
+                        if (!isNaN(numValue) && numValue < 0) {
+                          handleInputChange('budget', '0');
+                        }
+                      }}
+                      placeholder="0"
+                    />
+                    <span className="projects__currency-suffix">₽</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Кнопки */}
               <div className="projects__detail-actions">
                 <button 
                   className="projects__detail-btn projects__detail-btn--secondary"
@@ -2342,7 +2380,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                 </button>
                 <button 
                   className="projects__detail-btn projects__detail-btn--primary"
-                  onClick={handleSave}
+                  onClick={() => {
+                    if (!canEditGeneral) {
+                      alert('Недостаточно прав');
+                      return;
+                    }
+                    handleSave();
+                  }}
                 >
                   Сохранить
                 </button>
@@ -2357,21 +2401,39 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                 <button
                   className="projects__specification-btn projects__specification-btn--delete"
                   disabled={selectedItems.size === 0}
-                  onClick={handleDeleteSelected}
+                  onClick={() => {
+                    if (!canEditSpec) {
+                      alert('Недостаточно прав');
+                      return;
+                    }
+                    handleDeleteSelected();
+                  }}
                 >
                   <img src={deleteIcon} alt="Удалить" />
                   Удалить
                 </button>
                 <button 
                   className="projects__specification-btn projects__specification-btn--add"
-                  onClick={() => setIsAddModalOpen(true)}
+                  onClick={() => {
+                    if (!canEditSpec) {
+                      alert('Недостаточно прав');
+                      return;
+                    }
+                    setIsAddModalOpen(true);
+                  }}
                 >
                   <img src={addIcon} alt="Добавить" />
                   Добавить
                 </button>
                 <button 
                   className="projects__specification-btn projects__specification-btn--import"
-                  onClick={() => setIsImportModalOpen(true)}
+                  onClick={() => {
+                    if (!canEditSpec) {
+                      alert('Недостаточно прав');
+                      return;
+                    }
+                    setIsImportModalOpen(true);
+                  }}
                 >
                   Импорт
                 </button>
@@ -2552,7 +2614,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                     <div className="projects__specification-col">
                       <button 
                         className="projects__specification-change-btn"
-                        onClick={() => handleEditNomenclature(item)}
+                        onClick={() => {
+                          if (!canEditSpec) {
+                            alert('Недостаточно прав');
+                            return;
+                          }
+                          handleEditNomenclature(item);
+                        }}
                       >
                         Изменить
                       </button>
@@ -2590,7 +2658,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
               <div className="projects__tracking-actions">
                 <button 
                   className="projects__tracking-btn projects__tracking-btn--delete"
-                  onClick={handleOpenDeleteModal}
+                  onClick={() => {
+                    if (!canManageEmployees) {
+                      alert('Недостаточно прав');
+                      return;
+                    }
+                    handleOpenDeleteModal();
+                  }}
                   disabled={selectedItems.size === 0}
                 >
                   <img src={deleteIcon} alt="Удалить" />
@@ -2598,7 +2672,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                 </button>
                 <button 
                   className="projects__tracking-btn projects__tracking-btn--add"
-                  onClick={() => setIsAddTrackingModalOpen(true)}
+                  onClick={() => {
+                    if (!canManageEmployees) {
+                      alert('Недостаточно прав');
+                      return;
+                    }
+                    setIsAddTrackingModalOpen(true);
+                  }}
                 >
                   <img src={addIcon} alt="Добавить" />
                   Добавить

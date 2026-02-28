@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
 import type { FC } from 'react';
 import { Sidebar } from '../ui/Sidebar/Sidebar';
-
-type MainLayoutProps = {
-  onLogout?: () => void;
-};
+import { apiService } from '../../services/api';
+import { canAccessEmployees, canAccessSalary } from '../../services/permissions';
 import { ProjectsScreen } from '../../screens/Projects/ProjectsScreen';
 import { DashboardScreen } from '../../screens/Dashboard/DashboardScreen';
 import { EmployeesScreen } from '../../screens/Employees/EmployeesScreen';
@@ -13,12 +11,23 @@ import { ReportsScreen } from '../../screens/Reports/ReportsScreen';
 import { SalaryScreen } from '../../screens/Salary/SalaryScreen';
 import './main-layout.scss';
 
+type MainLayoutProps = {
+  onLogout?: () => void;
+};
+
 export const MainLayout: FC<MainLayoutProps> = ({ onLogout: _onLogout }) => {
-  // Восстанавливаем activeMenuItem из localStorage при загрузке
   const [activeMenuItem, setActiveMenuItem] = useState(() => {
     const saved = localStorage.getItem('activeMenuItem');
-    // Если сохранен 'calendar', перенаправляем на 'projects'
     if (saved === 'calendar') {
+      localStorage.setItem('activeMenuItem', 'projects');
+      return 'projects';
+    }
+    const user = apiService.getCurrentUser();
+    if (saved === 'employees' && !canAccessEmployees(user)) {
+      localStorage.setItem('activeMenuItem', 'projects');
+      return 'projects';
+    }
+    if (saved === 'salary' && !canAccessSalary(user)) {
       localStorage.setItem('activeMenuItem', 'projects');
       return 'projects';
     }
@@ -43,8 +52,16 @@ export const MainLayout: FC<MainLayoutProps> = ({ onLogout: _onLogout }) => {
     }
   }, []);
 
-  // Обработчик изменения активного пункта меню с сохранением в localStorage
   const handleNavigate = (itemId: string) => {
+    const user = apiService.getCurrentUser();
+    if (itemId === 'employees' && !canAccessEmployees(user)) {
+      alert('Недостаточно прав');
+      return;
+    }
+    if (itemId === 'salary' && !canAccessSalary(user)) {
+      alert('Недостаточно прав');
+      return;
+    }
     setActiveMenuItem(itemId);
     localStorage.setItem('activeMenuItem', itemId);
     
@@ -60,6 +77,21 @@ export const MainLayout: FC<MainLayoutProps> = ({ onLogout: _onLogout }) => {
   };
 
   const renderScreen = () => {
+    const user = apiService.getCurrentUser();
+    if (activeMenuItem === 'employees' && !canAccessEmployees(user)) {
+      return (
+        <div className="main-layout__no-access">
+          <p>Недостаточно прав</p>
+        </div>
+      );
+    }
+    if (activeMenuItem === 'salary' && !canAccessSalary(user)) {
+      return (
+        <div className="main-layout__no-access">
+          <p>Недостаточно прав</p>
+        </div>
+      );
+    }
     switch (activeMenuItem) {
       case 'dashboard':
         return <DashboardScreen />;

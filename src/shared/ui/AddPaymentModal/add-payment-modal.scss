@@ -148,6 +148,29 @@
     color: #2c2d2e;
   }
 
+  &__currency-input {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+
+    .add-payment-modal__input {
+      padding-right: 28px;
+    }
+  }
+
+  &__currency-suffix {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    font-family: 'SF Pro', sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    color: #919399;
+  }
+
   &__input {
     width: 100%;
     height: 40px;

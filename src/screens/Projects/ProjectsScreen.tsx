@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { apiService } from '../../services/api';
+import { canCreateProject } from '../../services/permissions';
 import { ProjectDetail } from './ProjectDetail';
 import menuIconGrey from '../../shared/icons/menuIconGrey.svg';
 import searchIcon from '../../shared/icons/searchIcon.svg';
@@ -84,7 +86,49 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [projectSpentMap, setProjectSpentMap] = useState<Map<number, number>>(new Map());
   const [hoveredProjectId, setHoveredProjectId] = useState<number | null>(null);
-  
+  const [tooltipAnchor, setTooltipAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [tooltipEmployees, setTooltipEmployees] = useState<any[]>([]);
+  const tooltipCloseTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearCloseTimeout = React.useCallback(() => {
+    if (tooltipCloseTimeoutRef.current) {
+      clearTimeout(tooltipCloseTimeoutRef.current);
+      tooltipCloseTimeoutRef.current = null;
+    }
+  }, []);
+
+  const scheduleTooltipClose = React.useCallback(() => {
+    clearCloseTimeout();
+    tooltipCloseTimeoutRef.current = setTimeout(() => {
+      setHoveredProjectId(null);
+      setTooltipAnchor(null);
+      setTooltipEmployees([]);
+      tooltipCloseTimeoutRef.current = null;
+    }, 150);
+  }, [clearCloseTimeout]);
+
+  const updateTooltipPosition = React.useCallback((el: HTMLElement, employees: any[]) => {
+    const rect = el.getBoundingClientRect();
+    setTooltipAnchor({ x: rect.left + rect.width / 2, y: rect.top });
+    setTooltipEmployees(employees);
+  }, []);
+
+  const handleTooltipMouseEnter = React.useCallback((projectId: number, employees: any[], e: React.MouseEvent) => {
+    clearCloseTimeout();
+    setHoveredProjectId(projectId);
+    updateTooltipPosition(e.currentTarget as HTMLElement, employees);
+  }, [updateTooltipPosition, clearCloseTimeout]);
+
+  const handleTooltipMouseLeave = React.useCallback(() => {
+    scheduleTooltipClose();
+  }, [scheduleTooltipClose]);
+
+  useEffect(() => () => {
+    if (tooltipCloseTimeoutRef.current) {
+      clearTimeout(tooltipCloseTimeoutRef.current);
+    }
+  }, []);
+
   // Состояние для сортировки
   const [sortField, setSortField] = useState<string | null>(null); // null = сортировка по дате добавления (по умолчанию)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc'); // по умолчанию по убыванию
@@ -801,7 +845,13 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
         backDisabled={historyIndex === 0}
         forwardDisabled={historyIndex === navigationHistory.length - 1}
         createButtonText={!selectedProject ? "Создать" : undefined}
-        onCreate={!selectedProject ? handleStartCreateProject : undefined}
+        onCreate={!selectedProject ? () => {
+          if (!canCreateProject(apiService.getCurrentUser())) {
+            alert('Недостаточно прав');
+            return;
+          }
+          handleStartCreateProject();
+        } : undefined}
         userName="Гиламанов Т.Р."
         onLogout={onLogout}
       />
@@ -1094,28 +1144,34 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                           {activeEmployees.length > 3 && (
                             <div 
                               className="projects__employee-count"
-                              onMouseEnter={() => setHoveredProjectId(project.id)}
-                              onMouseLeave={() => setHoveredProjectId(null)}
+                              onMouseEnter={(e) => handleTooltipMouseEnter(
+                                project.id,
+                                activeEmployees.slice(3).filter((emp: any) => !emp.pivot?.end_working_date),
+                                e
+                              )}
+                              onMouseLeave={handleTooltipMouseLeave}
                               style={{ position: 'relative' }}
                             >
                               <span>+{activeEmployees.length - 3} Сотр.</span>
-                              {hoveredProjectId === project.id && (
-                                <div className="projects__employees-tooltip">
-                                  {activeEmployees
-                                    .slice(3)
-                                    .filter((emp: any) => !emp.pivot?.end_working_date)
-                                    .map((emp: any) => {
-                                      // Дополнительная проверка перед отображением
-                                      if (emp.pivot?.end_working_date) {
-                                        return null;
-                                      }
-                                      return (
-                                        <div key={emp.id} className="projects__employees-tooltip-item">
-                                          {formatUserName(emp)}
-                                        </div>
-                                      );
-                                    })}
-                                </div>
+                              {hoveredProjectId === project.id && tooltipAnchor && tooltipEmployees.length > 0 && ReactDOM.createPortal(
+                                <div 
+                                  className="projects__employees-tooltip projects__employees-tooltip--portal"
+                                  style={{
+                                    position: 'fixed',
+                                    left: tooltipAnchor.x,
+                                    bottom: typeof window !== 'undefined' ? window.innerHeight - tooltipAnchor.y + 8 : undefined,
+                                    transform: 'translateX(-50%)',
+                                  }}
+                                  onMouseEnter={clearCloseTimeout}
+                                  onMouseLeave={handleTooltipMouseLeave}
+                                >
+                                  {tooltipEmployees.map((emp: any) => (
+                                    <div key={emp.id} className="projects__employees-tooltip-item">
+                                      {formatUserName(emp)}
+                                    </div>
+                                  ))}
+                                </div>,
+                                document.body
                               )}
                             </div>
                           )}
@@ -1144,7 +1200,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                       </span>
                     </div>
                     <div className="projects__budget-spent">
-                      <span className="projects__budget-label">Потрачено:</span>
+                      <span className="projects__budget-label">Израсходовано:</span>
                       <span className="projects__budget-amount">
                         {calculateTotalSpent(project).toLocaleString('ru-RU')} ₽
                       </span>

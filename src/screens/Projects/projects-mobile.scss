@@ -2,7 +2,8 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  // padding: 20px 16px 40px;
+  width: 100%;
+  max-width: 100vw;
   background: #f3f3f5;
   font-family: 'SF Pro', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: #2c2d2e;
@@ -13,16 +14,20 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    overflow-x: hidden;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    min-width: 0;
   }
 
   &__topbar {
-    padding: 24px 24px 0px 24px;
+    padding: 16px 16px 0 16px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 10px;
+    min-width: 0;
+    flex-shrink: 0;
   }
 
   &__brand {
@@ -62,6 +67,7 @@
     width: 40px;
     height: 40px;
     border-radius: 12px;
+    flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -83,20 +89,57 @@
   }
 
   &__header {
-
     display: flex;
     align-items: center;
+    min-width: 0;
+    flex: 1;
+
     h1 {
       margin: 0;
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 700;
       line-height: 1.3;
       color: #2c2d2e;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
 
       span {
         color: #919399;
         font-weight: 600;
       }
+    }
+  }
+
+  @media (max-width: 480px), (max-height: 450px) {
+    &__topbar {
+      padding: 12px 12px 0 12px;
+    }
+
+    &__header h1 {
+      font-size: 16px;
+    }
+
+    &__table-wrapper {
+      margin-left: 12px;
+      margin-right: 12px;
+      margin-top: 8px;
+    }
+
+    th, td {
+      padding: 10px 8px;
+      font-size: 11px;
+    }
+
+    &__cell-name {
+      font-size: 12px;
+    }
+
+    &__cell-years,
+    &__cell-period,
+    &__cell-foreman,
+    &__cell-employees {
+      font-size: 11px;
     }
   }
 
@@ -173,16 +216,20 @@
 
   &__table-wrapper {
     margin-top: 12px;
+    margin-left: 16px;
+    margin-right: 16px;
     background: #ffffff;
     border-radius: 16px;
-    overflow: auto;
+    overflow-x: auto;
+    overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     flex: 1 1 auto;
+    min-width: 0;
   }
 
   &__table {
     width: 100%;
-    min-width: 100%;
+    min-width: 600px;
     border-collapse: collapse;
     font-size: 13px;
 

@@ -133,6 +133,28 @@
     color: #919399;
   }
 
+  &__currency-input {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+
+    .add-tracking-modal__input {
+      padding-right: 28px;
+    }
+  }
+
+  &__currency-suffix {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    font-size: 13px;
+    font-weight: 400;
+    color: #919399;
+  }
+
   &__input {
     padding: 0 12px;
     height: 32px;

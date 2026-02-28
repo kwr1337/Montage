@@ -19,5 +19,19 @@
       overflow-y: hidden !important;
     }
   }
+
+  &__no-access {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f3f3f5;
+
+    p {
+      margin: 0;
+      font-size: 18px;
+      color: #666;
+    }
+  }
 }
 
