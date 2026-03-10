@@ -509,7 +509,19 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
                   const periodLabel = getPeriodLabel(project.start_date, project.end_date);
 
                   return (
-                    <tr key={project.id}>
+                    <tr
+                      key={project.id}
+                      className="mobile-projects__row"
+                      onClick={() => handleOpenProject(project.id)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleOpenProject(project.id);
+                        }
+                      }}
+                    >
                       <td>
                         <span className="mobile-projects__cell-id">{project.id}</span>
                       </td>
@@ -534,7 +546,7 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
                           {employeesCount > 0 ? `${employeesCount} сотрудников` : 'Не назначены'}
                         </span>
                     </td>
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
                         className="mobile-projects__row-action"

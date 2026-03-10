@@ -393,6 +393,55 @@ class ApiService {
     return response;
   }
 
+  // Обновить start_amount (План) номенклатуры в проекте
+  async updateProjectNomenclatureStartAmount(
+    projectId: number,
+    nomenclatureId: number,
+    startAmount: number
+  ): Promise<any> {
+    const response = await this.request<any>(`/projects/${projectId}/nomenclature/${nomenclatureId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ start_amount: startAmount }),
+    });
+    return response;
+  }
+
+  // Импорт номенклатуры из файла (Postman: Импорт из файла)
+  async importNomenclatureFromFile(projectId: number, file: File): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('mode', 'import');
+    formData.append('project_id', String(projectId));
+
+    const token = localStorage.getItem('auth_token');
+    const tokenType = localStorage.getItem('token_type') || 'Bearer';
+    const url = `${this.baseURL}/nomenclature/import`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        ...(token && { Authorization: `${tokenType} ${token}` }),
+        'Accept': 'application/json',
+      },
+      body: formData,
+      redirect: 'manual', // не следовать редиректам — иначе страница может перезагрузиться
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Import failed: ${response.status} ${errorText}`);
+    }
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return response.json();
+    }
+    return { data: null, success: true };
+  }
+
   // Получить список фактических расходов номенклатуры в проекте
   async getNomenclatureFacts(projectId: number, nomenclatureId: number, options?: { page?: number; per_page?: number; with?: string[] }): Promise<any> {
     let url = `/projects/${projectId}/nomenclature/${nomenclatureId}/facts`;

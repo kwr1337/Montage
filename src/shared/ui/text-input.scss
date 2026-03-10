@@ -10,6 +10,11 @@
     margin-bottom: 4px; /* расстояние лейбл → инпут */
   }
 
+  &__label-required {
+    color: #ed0a34;
+    font-weight: 500;
+  }
+
   &__field {
     display: flex;
     align-items: center;

@@ -404,6 +404,12 @@
     font-weight: 400;
     line-height: 13px;
     color: #919399;
+
+    &--required::after {
+      content: ' *';
+      color: #ed0a34;
+      font-weight: 500;
+    }
   }
 
   &__field-hint {
@@ -498,7 +504,11 @@
     width: calc((100% - 4 * 8px) / 5);
     min-width: 0;
     max-width: calc((100% - 4 * 8px) / 5);
-    
+
+    .employee-detail__field-label {
+      white-space: nowrap;
+    }
+
     // Те же стили что и для обычных полей
     :global(.ti.ti) {
       :global(.ti__field.ti__field) {

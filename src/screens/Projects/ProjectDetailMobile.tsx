@@ -404,19 +404,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
             });
         }
 
-        // В мобильной версии — только рабочие, добавленные в проект
-        const projectEmployeeIds = new Set<number>();
-        if (project?.employees && Array.isArray(project.employees)) {
-          project.employees
-            .filter((emp: any) => !emp.pivot?.end_working_date)
-            .forEach((emp: any) => {
-              const eid = emp.id ?? emp.user_id;
-              if (eid != null) projectEmployeeIds.add(Number(eid));
-            });
-        }
-        const filteredWorkers = workers.filter((w) => projectEmployeeIds.has(w.id));
-
-        if (!isCancelled) setWorkersWithBusy(filteredWorkers);
+        // В мобильной версии — все рабочие из списка (не только добавленные в проект)
+        if (!isCancelled) setWorkersWithBusy(workers);
 
         // Обогащаем именами: workers + getUsers (assignments/workers может не включать уже назначенных)
         const workersById = new Map(workers.map((w) => [w.id, w]));
@@ -699,13 +688,25 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   }, [project?.id, project?.employees]);
 
   // Функция для загрузки trackingItems (вынесена отдельно для переиспользования)
+  // Учитываем и назначенных на сегодня (dayAssignedWorkers), чтобы только что добавленные могли вводить часы
   const loadTrackingItems = React.useCallback(async () => {
     if (!project?.id) return;
-    
-    try {
-      const employees = project?.employees || [];
-      const activeEmployees = employees.filter((emp: any) => !emp.pivot?.end_working_date);
 
+    const employees = project?.employees || [];
+    const activeFromProject = employees.filter((emp: any) => !emp.pivot?.end_working_date);
+    const projectIds = new Set(activeFromProject.map((e: any) => Number(e.id)));
+    const assignedOnly = dayAssignedWorkers.filter((w: any) => !projectIds.has(Number(w.id)));
+    const assignedAsEmps = assignedOnly.map((w: any) => ({
+      id: w.id,
+      last_name: w.last_name ?? '',
+      first_name: w.first_name ?? '',
+      second_name: w.second_name ?? '',
+      pivot: { rate_per_hour: 0, end_working_date: null },
+      rate_per_hour: 0,
+    }));
+    const activeEmployees = [...activeFromProject, ...assignedAsEmps];
+
+    try {
       // Получаем текущую дату для проверки невыставленных часов
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -836,7 +837,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     } catch (error) {
       console.error('Error loading tracking items:', error);
     }
-  }, [project?.id, project?.employees]);
+  }, [project?.id, project?.employees, dayAssignedWorkers]);
 
   useEffect(() => {
     if (activeTab !== 'tracking' || !project?.id) {
@@ -1121,20 +1122,17 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   }, [project?.id, project?.nomenclature, mockApiResponses]);
 
   const handleOpenHoursModal = async (item: any) => {
-    // Создаем объект employee для модального окна
+    const id = item?.employeeId ?? item?.id;
+    if (id == null) return;
     const employee = {
-      id: item.employeeId,
-      employeeName: item.employeeName,
-      fullName: item.fullName,
-      hourlyRate: item.hourlyRate,
+      id: Number(id),
+      employeeName: item?.employeeName ?? item?.fullName ?? '',
+      fullName: item?.fullName ?? item?.employeeName ?? '',
+      hourlyRate: Number(item?.hourlyRate) || 0,
     };
-    
     setSelectedEmployee(employee);
     setIsHoursModalOpen(true);
-    
-    // Используем reports из item (уже загружены при формировании trackingItems)
-    // Извлекаем даты из reports
-    const dates = (item.reports || []).map((report: any) => report.report_date);
+    const dates = (item?.reports || []).map((report: any) => report.report_date);
     setTrackedDates(dates);
   };
 
@@ -1867,8 +1865,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           projectId={project.id}
           employee={{
             id: selectedEmployee.id,
-            name: selectedEmployee.employeeName,
-            hourlyRate: selectedEmployee.hourlyRate,
+            name: selectedEmployee.employeeName ?? selectedEmployee.fullName ?? '',
+            hourlyRate: Number(selectedEmployee.hourlyRate) || 0,
           }}
           trackedDates={trackedDates}
           onSuccess={handleHoursSaveSuccess}

@@ -138,7 +138,7 @@ const AddNomenclatureModal: React.FC<AddNomenclatureModalProps> = ({
         <div className="add-nomenclature-modal__form">
           <div className="add-nomenclature-modal__row">
             <div className="add-nomenclature-modal__field" ref={dropdownRef}>
-              <label className="add-nomenclature-modal__label">Номенклатура</label>
+              <label className="add-nomenclature-modal__label add-nomenclature-modal__label--required">Номенклатура</label>
               <div className="add-nomenclature-modal__input-wrapper">
                 <div 
                   className="add-nomenclature-modal__dropdown-trigger"
@@ -196,7 +196,7 @@ const AddNomenclatureModal: React.FC<AddNomenclatureModalProps> = ({
           </div>
 
           <div className="add-nomenclature-modal__field">
-            <label className="add-nomenclature-modal__label">Введите кол-во</label>
+            <label className="add-nomenclature-modal__label add-nomenclature-modal__label--required">Введите кол-во</label>
             <input
               type="number"
               step="1"

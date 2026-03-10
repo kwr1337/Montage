@@ -131,6 +131,12 @@
     font-weight: 400;
     letter-spacing: 0.06px;
     color: #919399;
+
+    &--required::after {
+      content: ' *';
+      color: #ed0a34;
+      font-weight: 500;
+    }
   }
 
   &__currency-input {

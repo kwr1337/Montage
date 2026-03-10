@@ -223,10 +223,17 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
   };
 
   const handleSave = () => {
-    if (!selectedEmployeeId) return;
+    if (!selectedEmployeeId) {
+      alert('Выберите сотрудника');
+      return;
+    }
     const projectId = editData?.projectId ?? selectedProjectId;
-    if (!projectId) {
+    if (projects.length > 0 && !projectId) {
       alert('Выберите проект');
+      return;
+    }
+    if (projectId == null) {
+      alert('Не указан проект');
       return;
     }
 
@@ -402,7 +409,7 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
             <div className="add-payment-modal__section">
               <h3 className="add-payment-modal__section-title">Выберите проект</h3>
               <div className="add-payment-modal__field" ref={projectDropdownRef}>
-                <label className="add-payment-modal__label">Проект</label>
+                <label className="add-payment-modal__label add-payment-modal__label--required">Проект</label>
                 <div
                   className={`add-payment-modal__dropdown-trigger ${editData ? 'add-payment-modal__dropdown-trigger--disabled' : ''}`}
                   onClick={() => {
@@ -442,7 +449,7 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
           <div className="add-payment-modal__section">
             <h3 className="add-payment-modal__section-title">Выберите сотрудника</h3>
             <div className="add-payment-modal__field" ref={employeeDropdownRef}>
-              <label className="add-payment-modal__label">Сотрудник</label>
+              <label className="add-payment-modal__label add-payment-modal__label--required">Сотрудник</label>
               <div
                 className={`add-payment-modal__dropdown-trigger ${editData || (projects.length > 0 && !selectedProjectId) || (selectedProjectId && isEmployeesLoading) ? 'add-payment-modal__dropdown-trigger--disabled' : ''}`}
                 onClick={() => {

@@ -1066,10 +1066,28 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     setNomenclatureHistory([]);
   };
 
-  const handleImport = async (_file: File, parsedData?: any[], _matches?: string[]) => {
-    if (!localProject.id || !parsedData || parsedData.length === 0) return;
+  const handleImport = async (file: File, parsedData?: any[], _matches?: string[]) => {
+    if (!localProject.id) return;
 
     try {
+      // Сначала пробуем импорт через бэкенд — он может суммировать совпадающие материалы
+      try {
+        await apiService.importNomenclatureFromFile(localProject.id, file);
+        const updatedProject = await apiService.getProjectById(localProject.id);
+        const projectData = updatedProject?.data || updatedProject;
+        if (projectData) {
+          setLocalProject(projectData);
+          onProjectUpdate?.(projectData);
+        }
+        await onRefresh?.();
+        setIsImportModalOpen(false);
+        return;
+      } catch (backendError) {
+        // Бэкенд-импорт не сработал — используем клиентскую обработку
+      }
+
+      if (!parsedData || parsedData.length === 0) return;
+
       // Получаем список всей номенклатуры для поиска по названию
       const allNomenclatureResponse = await apiService.getNomenclature();
       const allNomenclature = Array.isArray(allNomenclatureResponse?.data) 
@@ -1121,12 +1139,23 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         });
 
         if (existingInProject) {
-          // Если номенклатура уже есть в проекте - обновляем через changes
-          await apiService.addNomenclatureChange(
-            localProject.id,
-            nomenclatureItem.id,
-            row.quantity
-          );
+          // Номенклатура уже в проекте — суммируем с Планом и обновляем start_amount
+          const currentPlan = Number(existingInProject.pivot?.start_amount) || 0;
+          const newPlan = currentPlan + (Number(row.quantity) || 0);
+          try {
+            await apiService.updateProjectNomenclatureStartAmount(
+              localProject.id,
+              nomenclatureItem.id,
+              newPlan
+            );
+          } catch {
+            // Если PATCH не поддерживается — fallback: addNomenclatureChange
+            await apiService.addNomenclatureChange(
+              localProject.id,
+              nomenclatureItem.id,
+              row.quantity
+            );
+          }
         } else {
           // Если номенклатуры нет в проекте - добавляем через add
           await apiService.addNomenclatureToProject(
@@ -1893,13 +1922,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
           <div className="projects__detail-title-row">
             <div className="projects__detail-title-wrapper">
               {isEditingHeader ? (
-                <input
-                  type="text"
-                  className="projects__detail-title-input"
-                  value={editedProjectName}
-                  onChange={(e) => setEditedProjectName(e.target.value)}
+                <>
+                  <label className="projects__detail-title-label projects__detail-title-label--required">Название проекта</label>
+                  <input
+                    type="text"
+                    className="projects__detail-title-input"
+                    value={editedProjectName}
+                    onChange={(e) => setEditedProjectName(e.target.value)}
                   placeholder="Введите название проекта"
                 />
+                </>
               ) : (
                 <h1 className="projects__detail-title">{displayProjectName || 'Без названия'}</h1>
               )}
@@ -2450,7 +2482,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                   <div className="projects__specification-header-group"></div>
                   <div className="projects__specification-header-group"></div>
                   <div className="projects__specification-header-group"></div>
-                  <div className="projects__specification-header-group"></div>
                   <div className="projects__specification-header-group">План</div>
                   <div className="projects__specification-header-group">Изменения</div>
                   <div className="projects__specification-header-group">Итого</div>
@@ -2489,26 +2520,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                     }}
                     style={{ cursor: 'pointer' }}
                   >
-                    <span>Номенклатура</span>
+                    <span>Номенкл.</span>
                     <img 
                       src={upDownTableFilter} 
                       alt="↑↓" 
                       className={`projects__sort-icon ${specificationSortField === 'name' ? 'projects__sort-icon--active' : ''}`} 
-                    />
-                  </div>
-                  <div 
-                    className="projects__specification-header-col"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSpecificationSort('status');
-                    }}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <span>Статус</span>
-                    <img 
-                      src={upDownTableFilter} 
-                      alt="↑↓" 
-                      className={`projects__sort-icon ${specificationSortField === 'status' ? 'projects__sort-icon--active' : ''}`} 
                     />
                   </div>
                   <div 
@@ -2598,11 +2614,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                     </div>
                     <div className="projects__specification-col">
                       <span>{item.name}</span>
-                    </div>
-                    <div className="projects__specification-col">
-                      <span>
-                        {item.status}
-                      </span>
                     </div>
                     <div className="projects__specification-col">
                       <span>{item.unit}</span>

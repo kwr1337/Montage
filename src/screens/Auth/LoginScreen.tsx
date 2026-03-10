@@ -43,6 +43,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         <div className="login__form">
           <TextInput
             label="Электронная почта"
+            required
             placeholder="example@mail.com"
             value={email}
             onChange={setEmail}
@@ -51,6 +52,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
           <TextInput
             label="Пароль"
+            required
             placeholder="Введите пароль"
             value={password}
             onChange={setPassword}

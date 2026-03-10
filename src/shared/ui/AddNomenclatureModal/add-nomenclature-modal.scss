@@ -93,6 +93,12 @@
   font-weight: 500;
   color: #2c2d2e;
   line-height: 1.2;
+
+  &--required::after {
+    content: ' *';
+    color: #ed0a34;
+    font-weight: 500;
+  }
 }
 
 .add-nomenclature-modal__input-wrapper {

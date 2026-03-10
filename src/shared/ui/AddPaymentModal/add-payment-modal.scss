@@ -146,6 +146,12 @@
     font-weight: 400;
     line-height: 16px;
     color: #2c2d2e;
+
+    &--required::after {
+      content: ' *';
+      color: #ed0a34;
+      font-weight: 500;
+    }
   }
 
   &__currency-input {

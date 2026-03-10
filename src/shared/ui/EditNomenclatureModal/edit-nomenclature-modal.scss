@@ -90,6 +90,12 @@
   font-weight: 500;
   color: #919399;
   line-height: 1.2;
+
+  &--required::after {
+    content: ' *';
+    color: #ed0a34;
+    font-weight: 500;
+  }
 }
 
 .edit-nomenclature-modal__input {

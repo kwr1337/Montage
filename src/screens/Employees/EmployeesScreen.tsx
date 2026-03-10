@@ -536,28 +536,40 @@ export const EmployeesScreen: React.FC = () => {
             // Данные selectedEmployeeData обновятся автоматически через employees.find в следующем рендере
           }}
           onCreate={async (createdEmployee) => {
-            if (!createdEmployee || !createdEmployee.id) {
+            // Поддержка разных форматов ответа API (data.user или data напрямую)
+            const user = createdEmployee?.user ?? createdEmployee;
+            if (!user || !user.id) {
               exitCreationToList();
               return;
             }
 
-            // Оптимистично добавляем сотрудника в список
+            const employeeToAdd = { ...user, is_employee: true };
+
+            // Оптимистично добавляем сотрудника в список (таблица обновится сразу)
             setEmployees((prev) => {
-              const filtered = prev.filter((emp) => emp.id !== createdEmployee.id);
-              return [createdEmployee, ...filtered];
+              const filtered = prev.filter((emp) => emp.id !== employeeToAdd.id);
+              return [employeeToAdd, ...filtered];
             });
 
             // Сразу возвращаемся к таблице — пользователь видит обновлённый список
             exitCreationToList();
 
-            // Перезагружаем список с сервера для синхронизации
+            // Перезагружаем список с сервера для синхронизации (в фоне)
             try {
               const response = await apiService.getUsers();
               const employeesData = response && response.data
-                ? (Array.isArray(response.data) ? response.data : [response.data])
+                ? (Array.isArray(response.data) ? response.data : (response.data?.data ? response.data.data : [response.data]))
                 : (Array.isArray(response) ? response : []);
-              const filteredEmployees = employeesData.filter((user: any) => user.is_employee === true);
-              setEmployees(filteredEmployees);
+              const arr = Array.isArray(employeesData) ? employeesData : [];
+              const filteredEmployees = arr.filter((u: any) => u.is_employee === true);
+
+              // Если новый сотрудник не пришёл с сервера — сохраняем из оптимистичного обновления
+              const hasNewEmployee = filteredEmployees.some((u: any) => u.id === employeeToAdd.id);
+              const finalList = hasNewEmployee
+                ? filteredEmployees
+                : [employeeToAdd, ...filteredEmployees.filter((u: any) => u.id !== employeeToAdd.id)];
+
+              setEmployees(finalList);
             } catch (error) {
               console.error('Error refreshing employees list:', error);
             }

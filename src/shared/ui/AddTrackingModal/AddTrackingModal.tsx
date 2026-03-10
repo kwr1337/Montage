@@ -160,7 +160,7 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
           {/* Первая строка - без отступа между полями */}
           <div className="add-tracking-modal__row add-tracking-modal__row--no-gap">
             <div className="add-tracking-modal__field add-tracking-modal__field--large">
-              <label className="add-tracking-modal__label">Выберите сотрудника</label>
+              <label className="add-tracking-modal__label add-tracking-modal__label--required">Выберите сотрудника</label>
               <div className="add-tracking-modal__field--dropdown">
                 <div
                   className="add-tracking-modal__input add-tracking-modal__input--dropdown"
@@ -202,7 +202,7 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
           {/* Вторая строка */}
           <div className="add-tracking-modal__row">
             <div className="add-tracking-modal__field add-tracking-modal__field--small">
-              <label className="add-tracking-modal__label">Дата входа в проект</label>
+              <label className="add-tracking-modal__label add-tracking-modal__label--required">Дата входа в проект</label>
               <div 
                 className="add-tracking-modal__input add-tracking-modal__input--date-field"
                 onClick={() => dateInputRef.current?.showPicker?.() || dateInputRef.current?.click()}
@@ -227,7 +227,7 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
             </div>
 
             <div className="add-tracking-modal__field add-tracking-modal__field--small">
-              <label className="add-tracking-modal__label">Введите ставку в час</label>
+              <label className="add-tracking-modal__label add-tracking-modal__label--required">Введите ставку в час</label>
               <div className="add-tracking-modal__currency-input">
                 <input
                   type="text"

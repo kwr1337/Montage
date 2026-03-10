@@ -75,7 +75,7 @@ export const ReportsScreen: React.FC = () => {
             id: reportId++,
             type: 'nomenclature',
             name: `Отчет выполнения работ по проекту (движение материала) - ${project.name || `Проект №${project.id}`}`,
-            format: '.xls',
+            format: '.xlsx',
             createdAt: project.created_at || new Date().toISOString(),
             projectId: project.id,
           });
@@ -88,7 +88,7 @@ export const ReportsScreen: React.FC = () => {
           id: reportId++,
           type: 'payments',
           name: 'Отчет по выплатам',
-          format: '.xls',
+          format: '.xlsx',
           createdAt: new Date().toISOString(),
         });
       }
@@ -258,17 +258,23 @@ export const ReportsScreen: React.FC = () => {
   const downloadPaymentsReport = async (_report: Report) => {
     setIsLoading(true);
     try {
-      // Используем dateFrom или текущую дату, но берём первый день месяца
+      // Используем dateFrom, dateTo или текущую дату
+      // Важно: парсим дату как локальную (без UTC), иначе в западных часовых поясах
+      // "2026-03-01" может стать 2026-02-28 и отчёт будет за февраль
+      let year: number;
+      let month: string;
       let periodDate: Date;
-      if (dateFrom) {
-        periodDate = new Date(dateFrom);
+      const dateStr = dateFrom || dateTo;
+      if (dateStr) {
+        const [y, m] = dateStr.split('-').map(Number);
+        year = y;
+        month = String(m).padStart(2, '0');
+        periodDate = new Date(y, m - 1, 1); // Для имени файла
       } else {
         periodDate = new Date();
+        year = periodDate.getFullYear();
+        month = String(periodDate.getMonth() + 1).padStart(2, '0');
       }
-      
-      // Форматируем как YYYY-MM-DD (первый день месяца)
-      const year = periodDate.getFullYear();
-      const month = String(periodDate.getMonth() + 1).padStart(2, '0');
       const period = `${year}-${month}-01`;
 
       const response = await apiService.getPaymentsReport({

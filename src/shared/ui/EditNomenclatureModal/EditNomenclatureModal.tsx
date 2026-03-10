@@ -57,6 +57,10 @@ const EditNomenclatureModal: React.FC<EditNomenclatureModalProps> = ({
 
   const handleSubmit = () => {
     const quantityValue = Math.floor(Number(formData.quantity)) || 0;
+    if (quantityValue < 0) {
+      alert('Введите количество не менее 0');
+      return;
+    }
     onEdit({
       nomenclature: formData.nomenclature,
       changeDate: new Date().toISOString().split('T')[0],
@@ -115,7 +119,7 @@ const EditNomenclatureModal: React.FC<EditNomenclatureModalProps> = ({
                 </div>
 
                 <div className="edit-nomenclature-modal__field">
-                  <label className="edit-nomenclature-modal__label">Введите кол-во</label>
+                  <label className="edit-nomenclature-modal__label edit-nomenclature-modal__label--required">Введите кол-во</label>
                   <input
                     type="number"
                     min={0}

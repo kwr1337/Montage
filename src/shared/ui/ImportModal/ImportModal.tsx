@@ -444,6 +444,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
         {/* Кнопка */}
         <div className="import-modal__actions">
           <button 
+            type="button"
             className="import-modal__btn import-modal__btn--import"
             onClick={handleSubmit}
             disabled={!uploadedFile || isLoading || isImporting}

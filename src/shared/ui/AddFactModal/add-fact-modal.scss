@@ -185,6 +185,12 @@
     letter-spacing: 0.06px;
     line-height: 1.3;
     text-transform: uppercase;
+
+    &--required::after {
+      content: ' *';
+      color: #ed0a34;
+      font-weight: 500;
+    }
   }
 
   &__counter {

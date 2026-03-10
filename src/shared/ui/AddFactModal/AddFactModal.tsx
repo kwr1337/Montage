@@ -156,7 +156,7 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
             </div>
 
             <div className="add-fact-modal__quantity">
-              <span className="add-fact-modal__quantity-label">введите кол-во номенклатуры</span>
+              <span className="add-fact-modal__quantity-label add-fact-modal__quantity-label--required">введите кол-во номенклатуры</span>
               <div className="add-fact-modal__counter">
                 <button
                   type="button"

@@ -10,6 +10,7 @@ type TextInputProps = {
   type?: string;
   placeholder?: string;
   disabled?: boolean;
+  required?: boolean;
   rightIcon?: React.ReactNode;
   className?: string;
   showPasswordToggle?: boolean;
@@ -31,6 +32,7 @@ export const TextInput: React.FC<TextInputProps> = ({
   onTogglePassword,
   isPasswordVisible = false,
   fieldStyle,
+  required = false,
 }) => {
   const handleIconClick = () => {
     if (showPasswordToggle && onTogglePassword) {
@@ -55,7 +57,12 @@ export const TextInput: React.FC<TextInputProps> = ({
 
   return (
     <label className={`ti ${className ?? ''}`}>
-      {label && <span className="ti__label">{label}</span>}
+      {label && (
+        <span className="ti__label">
+          {label}
+          {required && <span className="ti__label-required"> *</span>}
+        </span>
+      )}
       <span className="ti__field" style={fieldStyle}>
         <input
           className="ti__input"

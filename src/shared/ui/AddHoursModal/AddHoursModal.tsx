@@ -104,16 +104,8 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
     return !isAbsent && hours !== 8;
   };
 
-  // Корректировка возможна только в течение дня; редактирование только с 6:00 до 21:00
-  const canEditByTime = (): boolean => {
-    const now = new Date();
-    const hour = now.getHours();
-    const minute = now.getMinutes();
-    const currentMinutes = hour * 60 + minute;
-    const startMinutes = 6 * 60;   // 6:00
-    const endMinutes = 21 * 60;   // 21:00
-    return currentMinutes >= startMinutes && currentMinutes < endMinutes;
-  };
+  // Корректировка возможна только в течение дня; редактирование только с 6:00 до 21:00 (пока отключено)
+  const canEditByTime = (): boolean => true;
 
   // Только текущий день; вчера редактировать нельзя
   const isToday = (d: Date): boolean => {
@@ -141,10 +133,10 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
       return;
     }
 
-    if (!canEditByTime()) {
-      setError('Корректировка часов возможна только с 6:00 до 21:00');
-      return;
-    }
+    // if (!canEditByTime()) {
+    //   setError('Корректировка часов возможна только с 6:00 до 21:00');
+    //   return;
+    // }
     
     // Проверяем, что если часы не равны 8, то должна быть указана причина
     if (!isAbsent && hours !== 8 && !reason.trim()) {
@@ -231,13 +223,13 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
           <div className="add-hours-modal__info">
             <div className="add-hours-modal__row">
               <span className="add-hours-modal__label">Фио сотрудника</span>
-              <span className="add-hours-modal__value">{employee.name}</span>
+              <span className="add-hours-modal__value">{employee?.name ?? ''}</span>
             </div>
 
             <div className="add-hours-modal__row">
               <span className="add-hours-modal__label">Ставка в час</span>
               <span className="add-hours-modal__value">
-                {employee.hourlyRate.toLocaleString('ru-RU')} ₽
+                {(Number(employee?.hourlyRate) || 0).toLocaleString('ru-RU')} ₽
               </span>
             </div>
           </div>
@@ -256,7 +248,7 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
 
           {!isAbsent && (
             <div className="add-hours-modal__quantity">
-              <span className="add-hours-modal__quantity-label">введите кол-во часов</span>
+              <span className="add-hours-modal__quantity-label add-hours-modal__quantity-label--required">введите кол-во часов</span>
               <div className="add-hours-modal__counter">
                 <button
                   type="button"
@@ -321,7 +313,7 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
 
           {isAbsent && (
             <div className="add-hours-modal__reason">
-              <span className="add-hours-modal__reason-label">Причина отсутствия</span>
+              <span className="add-hours-modal__reason-label add-hours-modal__reason-label--required">Причина отсутствия</span>
               <textarea
                 placeholder="Укажите причину отсутствия"
                 value={reason}
@@ -333,7 +325,7 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
 
           {shouldShowReason() && (
             <div className="add-hours-modal__reason">
-              <span className="add-hours-modal__reason-label">Причина</span>
+              <span className="add-hours-modal__reason-label add-hours-modal__reason-label--required">Причина</span>
               <textarea
                 placeholder="Укажите причину отклонения от стандартных 8 часов"
                 value={reason}

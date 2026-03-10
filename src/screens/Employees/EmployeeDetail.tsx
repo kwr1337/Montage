@@ -571,70 +571,107 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
 
     const trimmedFirstName = formData.first_name.trim();
     const trimmedLastName = formData.last_name.trim();
+    const trimmedSecondName = formData.second_name.trim();
     const trimmedEmail = formData.email.trim();
     const trimmedPhone = formData.phone.trim();
 
-    // Валидация только для создания нового сотрудника
+    // Валидация для создания нового сотрудника
     if (isNew) {
-      // Обязательные поля (кроме должности)
-      if (!trimmedLastName || !trimmedFirstName) {
-        alert('Пожалуйста, заполните ФИО сотрудника');
-        return;
+      const errors: string[] = [];
+
+      // ФИО — обязательны фамилия и имя
+      if (!trimmedLastName) {
+        errors.push('Фамилия');
+      }
+      if (!trimmedFirstName) {
+        errors.push('Имя');
       }
 
+      // Email — обязательно и корректный формат
       if (!trimmedEmail) {
-        alert('Пожалуйста, заполните email сотрудника');
-        return;
+        errors.push('Email');
+      } else {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(trimmedEmail)) {
+          errors.push('Корректный формат email (например: name@mail.ru)');
+        }
       }
 
+      // Телефон — обязателен и не пустой
       if (!trimmedPhone) {
-        alert('Пожалуйста, заполните телефон сотрудника');
-        return;
+        errors.push('Номер телефона');
+      } else {
+        const phoneDigits = trimmedPhone.replace(/\D/g, '');
+        if (phoneDigits.length < 10) {
+          errors.push('Номер телефона должен содержать не менее 10 цифр');
+        }
       }
 
-      // Пароль не требуется для роли «Рабочий» — сервер сгенерирует случайный
+      // Пароль — для не-рабочих обязателен, минимум 8 символов
       const isWorker = formData.position === 'Рабочий';
-      if (!isWorker && !formData.password.trim()) {
-        alert('Пожалуйста, заполните пароль сотрудника');
-        return;
+      if (!isWorker) {
+        const password = formData.password.trim();
+        if (!password) {
+          errors.push('Пароль');
+        } else if (password.length < 8) {
+          errors.push('Пароль должен быть не менее 8 символов');
+        }
       }
 
+      // Дата рождения
       if (!formData.birth_date) {
-        alert('Пожалуйста, заполните дату рождения сотрудника');
-        return;
+        errors.push('Дата рождения');
+      } else {
+        const birthDate = new Date(formData.birth_date);
+        if (birthDate > new Date()) {
+          errors.push('Дата рождения не может быть в будущем');
+        }
       }
 
+      // Дата трудоустройства
       if (!formData.employment_date) {
-        alert('Пожалуйста, заполните дату трудоустройства сотрудника');
-        return;
+        errors.push('Дата трудоустройства');
+      } else {
+        const empDate = new Date(formData.employment_date);
+        if (empDate > new Date()) {
+          errors.push('Дата трудоустройства не может быть в будущем');
+        }
       }
 
       if (!formData.work_schedule) {
-        alert('Пожалуйста, выберите график работы сотрудника');
-        return;
+        errors.push('График работы');
       }
 
-      if (!formData.rate_per_hour || formData.rate_per_hour.trim() === '') {
-        alert('Пожалуйста, заполните ставку в час сотрудника');
-        return;
+      // Ставка в час — обязательно, положительное число
+      const rateStr = formData.rate_per_hour?.trim() ?? '';
+      if (!rateStr) {
+        errors.push('Ставка в час');
+      } else {
+        const rateValue = parseFloat(rateStr.replace(/\s/g, '').replace(',', '.'));
+        if (isNaN(rateValue) || rateValue <= 0) {
+          errors.push('Ставка в час должна быть положительным числом');
+        }
       }
 
       if (!canEditEmployee) {
-        alert('Недостаточно прав');
+        errors.push('Недостаточно прав для создания сотрудника');
+      }
+
+      if (errors.length > 0) {
+        alert('Нельзя создать сотрудника без заполнения полей:\n\n• ' + errors.join('\n• '));
         return;
       }
 
-      // Должность (position) - не обязательное поле, пропускаем проверку
-
       const employmentDateValue = formData.employment_date || new Date().toISOString().split('T')[0];
-      const rateValue = formData.rate_per_hour ? Number(formData.rate_per_hour) : 0;
+      const rateStrParsed = (formData.rate_per_hour || '').toString().replace(/\s/g, '').replace(',', '.');
+      const rateValue = parseFloat(rateStrParsed) || 0;
 
       setIsSaving(true);
       try {
         const isWorker = formData.position === 'Рабочий';
         const payload: Record<string, unknown> = {
           first_name: trimmedFirstName,
-          second_name: formData.second_name.trim(),
+          second_name: trimmedSecondName,
           last_name: trimmedLastName,
           birth_date: formData.birth_date,
           gender: formData.gender,
@@ -923,6 +960,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
             <div className="employee-detail__fields-row">
               <TextInput
                 label="Имя"
+                required={isNew}
                 value={formData.first_name}
                 onChange={(v) => setFormData({ ...formData, first_name: v })}
                 className="employee-detail__field"
@@ -930,6 +968,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
               />
               <TextInput
                 label="Фамилия"
+                required={isNew}
                 value={formData.last_name}
                 onChange={(v) => setFormData({ ...formData, last_name: v })}
                 className="employee-detail__field"
@@ -944,6 +983,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
               />
               <TextInput
                 label="Номер телефона"
+                required={isNew}
                 value={formData.phone}
                 onChange={(v) => setFormData({ ...formData, phone: v })}
                 className="employee-detail__field"
@@ -951,6 +991,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
               />
               <TextInput
                 label="Электронная почта"
+                required={isNew}
                 value={formData.email}
                 onChange={(v) => setFormData({ ...formData, email: v })}
                 className="employee-detail__field"
@@ -991,7 +1032,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
                 )}
               </div>
               <div className="employee-detail__dropdown-field" ref={scheduleDropdownRef}>
-                <label className="employee-detail__field-label">График работы</label>
+                <label className={`employee-detail__field-label ${isNew ? 'employee-detail__field-label--required' : ''}`}>График работы</label>
                 <div 
                   className="employee-detail__dropdown"
                   onClick={() => setIsScheduleDropdownOpen(!isScheduleDropdownOpen)}
@@ -1043,7 +1084,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
                 )}
               </div>
               <div className="employee-detail__password-field">
-                <label className="employee-detail__field-label">
+                <label className={`employee-detail__field-label ${isNew && formData.position !== 'Рабочий' ? 'employee-detail__field-label--required' : ''}`}>
                   Пароль
                   {formData.position === 'Рабочий' && (
                     <span className="employee-detail__field-hint"> (для рабочих генерируется автоматически)</span>
@@ -1067,7 +1108,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
             {isNew && (
               <div className="employee-detail__fields-row">
                 <div className="employee-detail__date-field">
-                  <label className="employee-detail__field-label">Дата рождения</label>
+                  <label className="employee-detail__field-label employee-detail__field-label--required">Дата рождения</label>
                   <input
                     type="date"
                     className="employee-detail__date-field-input"
@@ -1109,6 +1150,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
             <h3 className="employee-detail__finances-title">Финансы</h3>
             <TextInput
               label="Ставка, руб/час"
+              required={isNew}
               value={formData.rate_per_hour}
               onChange={(v) => setFormData({ ...formData, rate_per_hour: v })}
               className="employee-detail__rate-input"
