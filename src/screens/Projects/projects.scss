@@ -1741,12 +1741,16 @@
   &__specification-header-groups {
     flex-shrink: 0;
     background: #ffffff;
+    /* Компенсация scrollbar-gutter в body-scroll — шапка вне скролла, иначе колонки съезжают */
+    padding-right: 17px;
   }
 
   &__specification-header {
     flex-shrink: 0;
     background: #ffffff;
     border-bottom: 2px solid #e8ecf1;
+    /* Компенсация scrollbar-gutter в body-scroll — шапка вне скролла, иначе колонки съезжают */
+    padding-right: 17px;
   }
 
   &__specification-table-body {
@@ -1755,7 +1759,7 @@
 
   &__specification-header-groups {
     display: flex;
-    padding: 8px 0;
+    padding: 8px 17px 8px 0; /* 17px справа — компенсация scrollbar-gutter, иначе съезжает */
     flex-shrink: 0;
   }
 
