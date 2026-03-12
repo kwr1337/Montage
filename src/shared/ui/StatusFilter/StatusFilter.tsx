@@ -15,7 +15,6 @@ const StatusFilter: React.FC<StatusFilterProps> = ({ onStatusChange }) => {
     { label: 'Все статусы', value: 'all', color: null },
     { label: 'Новый', value: 'Новый', color: '#2787F5' },
     { label: 'В работе', value: 'В работе', color: '#FF9E00' },
-    { label: 'Завершен', value: 'Завершен', color: '#26AB69' },
     { label: 'Архив', value: 'Архив', color: '#919399' },
   ];
 

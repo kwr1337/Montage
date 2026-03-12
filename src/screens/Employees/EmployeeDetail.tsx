@@ -296,12 +296,11 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
           console.error('Error loading projects for payments:', e);
         }
 
+        // Не передаём date в API — фильтрация по датам выполняется локально
         const filter: any = {
           project_id: projectIds,
           users: [employeeId],
         };
-        if (formData.dateFrom) filter.date_from = formData.dateFrom;
-        if (formData.dateTo) filter.date_to = formData.dateTo;
 
         const response = projectIds.length > 0
           ? await apiService.getPayments({
@@ -337,45 +336,30 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
 
         console.log(`Filtered payments for employee ${employeeId}:`, paymentsData.length, paymentsData);
 
-        // Дополнительная клиентская фильтрация по датам (на случай, если API не отфильтровал)
+        // Дополнительная клиентская фильтрация по датам: включаем платёж, если хотя бы одна дата в диапазоне
         if (formData.dateFrom || formData.dateTo) {
           paymentsData = paymentsData.filter((payment: any) => {
-            // Получаем дату выплаты (используем первую доступную дату)
-            const paymentDateStr = payment.first_payment_date 
-              || payment.second_payment_date 
-              || payment.third_payment_date;
-            
-            if (!paymentDateStr) {
-              return false;
-            }
-            
-            const paymentDate = new Date(paymentDateStr);
-            if (Number.isNaN(paymentDate.getTime())) {
-              return false;
-            }
-            
-            // Сбрасываем время для корректного сравнения дат
-            const paymentDateOnly = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), paymentDate.getDate());
-            
-            // Фильтр "от даты"
-            if (formData.dateFrom) {
-              const fromDate = new Date(formData.dateFrom);
-              const fromDateOnly = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
-              if (paymentDateOnly < fromDateOnly) {
-                return false;
-              }
-            }
-            
-            // Фильтр "до даты"
-            if (formData.dateTo) {
-              const toDate = new Date(formData.dateTo);
-              const toDateOnly = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate());
-              if (paymentDateOnly > toDateOnly) {
-                return false;
-              }
-            }
-            
-            return true;
+            const dates = [
+              payment.first_payment_date,
+              payment.second_payment_date,
+              payment.third_payment_date,
+            ].filter(Boolean) as string[];
+
+            if (dates.length === 0) return false;
+
+            const fromDate = formData.dateFrom ? new Date(formData.dateFrom) : null;
+            const toDate = formData.dateTo ? new Date(formData.dateTo) : null;
+
+            const anyInRange = dates.some((dateStr) => {
+              const d = new Date(dateStr);
+              if (Number.isNaN(d.getTime())) return false;
+              const dateOnly = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+              if (fromDate && dateOnly < new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate())) return false;
+              if (toDate && dateOnly > new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate())) return false;
+              return true;
+            });
+
+            return anyInRange;
           });
         }
 
@@ -418,39 +402,59 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
               ? new Date(firstPayment.third_payment_date)
               : monthDate;
 
-            const monthStart = new Date(paymentMonthDate.getFullYear(), paymentMonthDate.getMonth(), 1);
-            const monthEnd = new Date(paymentMonthDate.getFullYear(), paymentMonthDate.getMonth() + 1, 0, 23, 59, 59);
-            
+            // Период для часов: при активном фильтре дат — период фильтра (как в Выдача ЗП), иначе — диапазон выплат
+            let monthStart: Date;
+            let monthEnd: Date;
+            if (formData.dateFrom && formData.dateTo) {
+              monthStart = new Date(formData.dateFrom);
+              monthEnd = new Date(formData.dateTo);
+            } else {
+              const allDates = payments.flatMap((p: any) => [
+                p.first_payment_date,
+                p.second_payment_date,
+                p.third_payment_date,
+              ].filter(Boolean));
+              const parsedDates = allDates.map((d: string) => new Date(d));
+              const earliest = parsedDates.length ? new Date(Math.min(...parsedDates.map((d) => d.getTime()))) : paymentMonthDate;
+              const latest = parsedDates.length ? new Date(Math.max(...parsedDates.map((d) => d.getTime()))) : paymentMonthDate;
+              monthStart = new Date(earliest.getFullYear(), earliest.getMonth(), 1);
+              monthEnd = new Date(latest.getFullYear(), latest.getMonth() + 1, 0, 23, 59, 59);
+            }
+
             const monthStartStr = monthStart.toISOString().split('T')[0];
             const monthEndStr = monthEnd.toISOString().split('T')[0];
 
-            // Загружаем часы за этот месяц
+            // Загружаем часы за этот период
             let hours = 0;
             const rate = employee.rate_per_hour || 0;
 
             try {
               // Получаем все проекты
-              const projectsResponse = await apiService.getProjects(1, 1000);
+              const projectsResponse = await apiService.getProjects(1, 1000, { with: ['employees'] });
               let projects: any[] = [];
               if (projectsResponse && projectsResponse.data) {
                 const data = projectsResponse.data.data || projectsResponse.data;
                 projects = Array.isArray(data) ? data : [data];
               }
 
-              // Находим проекты, где сотрудник участвует
-              const employeeProjects = projects.filter((project: any) => {
+              // Находим проекты, где сотрудник участвует (включая уволенных — для истории выплат)
+              let projectsToCheck = projects.filter((project: any) => {
                 if (!project.employees || !Array.isArray(project.employees)) return false;
                 return project.employees.some((emp: any) => {
                   const empId = emp.id || emp.user_id;
-                  const isCurrentUser = empId === employee.id;
-                  const isActive = !emp.pivot?.end_working_date;
-                  return isCurrentUser && isActive;
+                  return empId === employee.id;
                 });
               });
 
+              // Fallback: если сотрудника нет в project.employees (напр. уволен), используем project_id из выплаты
+              if (projectsToCheck.length === 0) {
+                const paymentProjectIds = [...new Set(payments.map((p: any) => p.project_id).filter(Boolean))];
+                projectsToCheck = projects.filter((p: any) => p.id && paymentProjectIds.includes(p.id));
+              }
+
               // Суммируем часы из всех проектов за месяц
               const allHours = await Promise.all(
-                employeeProjects.map(async (project: any) => {
+                projectsToCheck.map(async (project: any) => {
                   try {
                     const response = await apiService.getWorkReports(project.id, employee.id, {
                       per_page: 1000,
@@ -497,16 +501,33 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
             // Берем данные из первой выплаты месяца (или объединяем все выплаты)
             const payment = firstPayment;
             
-            const total = hours * rate;
-            const firstAmount = payment.first_payment_amount || 0;
-            const secondAmount = payment.second_payment_amount || 0;
+            let total = hours * rate;
+            const firstAmount = Number(payment.first_payment_amount) || 0;
+            const secondAmount = Number(payment.second_payment_amount) || 0;
+            const thirdAmount = Number(payment.third_payment_amount) || 0;
+            // Fallback: если часы не загрузились (0), но есть выплаты — считаем total как сумму выплат
+            if (total === 0 && (firstAmount > 0 || secondAmount > 0 || thirdAmount > 0)) {
+              total = firstAmount + secondAmount + thirdAmount;
+            }
             // Остаток рассчитывается автоматически: total - первая выплата - вторая выплата
             const balanceAmount = Math.max(0, total - firstAmount - secondAmount);
 
+            // Если выбран фильтр дат на один месяц — показываем месяц фильтра (чтобы совпадало с экраном Выдача ЗП)
+            let displayMonth = paymentMonthDate;
+            let displayYear = String(paymentMonthDate.getFullYear());
+            if (formData.dateFrom && formData.dateTo) {
+              const from = new Date(formData.dateFrom);
+              const to = new Date(formData.dateTo);
+              if (from.getMonth() === to.getMonth() && from.getFullYear() === to.getFullYear()) {
+                displayMonth = from;
+                displayYear = String(from.getFullYear());
+              }
+            }
+
             return {
-              month: getMonthName(paymentMonthDate),
-              year: String(paymentMonthDate.getFullYear()),
-              hours: hours,
+              month: getMonthName(displayMonth),
+              year: displayYear,
+              hours: rate > 0 && total > 0 ? Math.round((total / rate) * 100) / 100 : hours,
               rate: rate,
               total: total,
               firstPayout: {
@@ -1083,26 +1104,23 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
                   </div>
                 )}
               </div>
-              <div className="employee-detail__password-field">
-                <label className={`employee-detail__field-label ${isNew && formData.position !== 'Рабочий' ? 'employee-detail__field-label--required' : ''}`}>
-                  Пароль
-                  {formData.position === 'Рабочий' && (
-                    <span className="employee-detail__field-hint"> (для рабочих генерируется автоматически)</span>
-                  )}
-                </label>
-                <TextInput
-                  value={formData.password}
-                  onChange={(v) => setFormData({ ...formData, password: v })}
-                  type={isPasswordVisible ? 'text' : 'password'}
-                  showPasswordToggle={formData.position !== 'Рабочий'}
-                  isPasswordVisible={isPasswordVisible}
-                  onTogglePassword={() => setIsPasswordVisible(!isPasswordVisible)}
-                  className="employee-detail__password-input"
-                  fieldStyle={{ height: '32px', minHeight: '32px', maxHeight: '32px', padding: '6px 12px', lineHeight: '20px', boxSizing: 'border-box', overflow: 'hidden', display: 'flex', alignItems: 'center' }}
-                  placeholder={formData.position === 'Рабочий' ? 'Не требуется' : undefined}
-                  disabled={formData.position === 'Рабочий'}
-                />
-              </div>
+              {formData.position !== 'Рабочий' && (
+                <div className="employee-detail__password-field">
+                  <label className={`employee-detail__field-label ${isNew ? 'employee-detail__field-label--required' : ''}`}>
+                    Пароль
+                  </label>
+                  <TextInput
+                    value={formData.password}
+                    onChange={(v) => setFormData({ ...formData, password: v })}
+                    type={isPasswordVisible ? 'text' : 'password'}
+                    showPasswordToggle={true}
+                    isPasswordVisible={isPasswordVisible}
+                    onTogglePassword={() => setIsPasswordVisible(!isPasswordVisible)}
+                    className="employee-detail__password-input"
+                    fieldStyle={{ height: '32px', minHeight: '32px', maxHeight: '32px', padding: '6px 12px', lineHeight: '20px', boxSizing: 'border-box', overflow: 'hidden', display: 'flex', alignItems: 'center' }}
+                  />
+                </div>
+              )}
             </div>
 
             {isNew && (

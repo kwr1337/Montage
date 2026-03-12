@@ -10,6 +10,14 @@ type PaymentData = {
   method: string;
 };
 
+/** Парсит сумму из строки/числа, убирая пробелы (напр. "8 000" → 8000) */
+const parseAmount = (val: string | number | undefined): number => {
+  if (val == null) return 0;
+  if (typeof val === 'number' && !Number.isNaN(val)) return val;
+  const cleaned = String(val).replace(/\s/g, '');
+  return parseFloat(cleaned) || 0;
+};
+
 type PaymentEditData = {
   id: number;
   employeeId: number;
@@ -17,6 +25,8 @@ type PaymentEditData = {
   employeeName: string;
   employeePosition: string;
   total?: number;
+  hours?: number;
+  rate?: number;
   firstPayment?: {
     amount: number;
     date: string;
@@ -106,7 +116,8 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
 
   const paymentMethods = ['Карта', 'Наличные'];
 
-  // Сотрудники для выбора: из проекта + те, кому бригадир выставил часы (work_reports)
+  // Сотрудники для выбора: в проекте + те, кому бригадир уже внёс часы (work_reports)
+  // API /projects/{id}/work-reports может не существовать, поэтому проверяем work_reports по каждому сотруднику
   useEffect(() => {
     if (!selectedProjectId || !isOpen) {
       setDisplayedEmployees([]);
@@ -118,21 +129,26 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
         const projectRes = await apiService.getProjectById(selectedProjectId);
         const project = projectRes?.data ?? projectRes;
         const projectEmployees = project?.employees ?? [];
-        const inProjectIds = new Set((projectEmployees as any[]).map((e: any) => e.id ?? e.user_id));
+        const inProjectIds = new Set((projectEmployees as any[]).map((e: any) => Number(e.id ?? e.user_id)));
 
-        // Пробуем получить work_reports по проекту (сотрудники с часами от бригадира)
-        let workReportUserIds = new Set<number>();
-        try {
-          const wrRes = await apiService.getProjectWorkReports(selectedProjectId, { per_page: 1000 });
-          const wrData = wrRes?.data?.data ?? wrRes?.data ?? wrRes;
-          const reports = Array.isArray(wrData) ? wrData : [wrData];
-          reports.forEach((r: any) => {
-            const uid = r.user_id ?? r.user?.id;
-            if (uid) workReportUserIds.add(Number(uid));
-          });
-        } catch {
-          // API может не поддерживать getProjectWorkReports — используем только project.employees
-        }
+        // Сотрудники с work_reports: для каждого сотрудника проверяем наличие отчётов через API /projects/{id}/user/{userId}/work-reports
+        const workReportUserIds = new Set<number>();
+        const employeesToCheck = employees.filter(
+          (e: any) => !(e.user?.is_dismissed === true || e.is_dismissed === true) && !inProjectIds.has(e.id)
+        );
+        const checks = await Promise.all(
+          employeesToCheck.slice(0, 100).map(async (emp: any) => {
+            try {
+              const res = await apiService.getWorkReports(selectedProjectId, emp.id, { per_page: 1 });
+              const data = res?.data?.data ?? res?.data ?? res;
+              const arr = Array.isArray(data) ? data : (data ? [data] : []);
+              return arr.length > 0 ? emp.id : null;
+            } catch {
+              return null;
+            }
+          })
+        );
+        checks.forEach((id) => { if (id != null) workReportUserIds.add(id); });
 
         const allIds = new Set([...inProjectIds, ...workReportUserIds]);
         const empMap = new Map(employees.map((e) => [e.id, e]));
@@ -151,7 +167,9 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
               };
             }
           }
-          if (emp) result.push(emp);
+          if (emp && !(emp.user?.is_dismissed === true || emp.is_dismissed === true)) {
+            result.push(emp);
+          }
         });
         // При редактировании гарантируем, что текущий сотрудник в списке
         if (editData?.employeeId && !result.some((e) => e.id === editData.employeeId)) {
@@ -253,12 +271,12 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
       } : undefined,
       // Остаток рассчитываем автоматически
       thirdPayment: (() => {
-        if (editData?.total) {
+        const effectiveTotal = editData?.total || (editData?.hours != null && editData?.rate != null ? editData.hours * editData.rate : 0);
+        if (effectiveTotal > 0) {
           // Для редактирования рассчитываем остаток автоматически
-          const total = editData.total;
-          const firstAmount = parseFloat(firstPayment.amount) || 0;
-          const secondAmount = parseFloat(secondPayment.amount) || 0;
-          const calculatedBalance = Math.max(0, total - firstAmount - secondAmount);
+          const firstAmount = parseAmount(firstPayment.amount);
+          const secondAmount = parseAmount(secondPayment.amount);
+          const calculatedBalance = Math.max(0, effectiveTotal - firstAmount - secondAmount);
           
           // Если остаток больше 0 и есть дата, создаем третью выплату
           if (calculatedBalance > 0 && thirdPayment.date) {
@@ -314,8 +332,8 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
         date: parseDateString(editData.secondPayment?.date || ''),
         method: editData.secondPayment?.method || 'Наличные',
       });
-      // Рассчитываем остаток автоматически
-      const total = editData.total || 0;
+      // Рассчитываем остаток автоматически (fallback: hours * rate если total не задан)
+      const total = editData.total ?? (editData.hours != null && editData.rate != null ? editData.hours * editData.rate : 0);
       const firstAmount = editData.firstPayment?.amount || 0;
       const secondAmount = editData.secondPayment?.amount || 0;
       const calculatedBalance = Math.max(0, total - firstAmount - secondAmount);
@@ -341,12 +359,12 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
   }, [editData, isOpen]);
 
   // Автоматический расчет остатка при изменении первой или второй выплаты
+  const effectiveTotal = editData?.total || (editData?.hours != null && editData?.rate != null ? editData.hours * editData.rate : 0);
   React.useEffect(() => {
-    if (editData?.total) {
-      const total = editData.total;
-      const firstAmount = parseFloat(firstPayment.amount) || 0;
-      const secondAmount = parseFloat(secondPayment.amount) || 0;
-      const calculatedBalance = Math.max(0, total - firstAmount - secondAmount);
+    if (effectiveTotal > 0) {
+      const firstAmount = parseAmount(firstPayment.amount);
+      const secondAmount = parseAmount(secondPayment.amount);
+      const calculatedBalance = Math.max(0, effectiveTotal - firstAmount - secondAmount);
       
       // Обновляем остаток автоматически при изменении первой или второй выплаты
       setThirdPayment(prev => ({
@@ -354,7 +372,7 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
         amount: calculatedBalance > 0 ? calculatedBalance.toString() : '',
       }));
     }
-  }, [firstPayment.amount, secondPayment.amount, editData?.total]);
+  }, [firstPayment.amount, secondPayment.amount, effectiveTotal]);
 
   // Закрытие dropdown при клике вне
   React.useEffect(() => {
@@ -664,10 +682,10 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
                       className="add-payment-modal__input"
                       readOnly
                       value={(() => {
-                        if (editData?.total) {
-                          const total = editData.total;
-                          const firstAmount = parseFloat(firstPayment.amount) || 0;
-                          const secondAmount = parseFloat(secondPayment.amount) || 0;
+                        const total = editData?.total || (editData?.hours != null && editData?.rate != null ? editData.hours * editData.rate : 0);
+                        if (total > 0) {
+                          const firstAmount = parseAmount(firstPayment.amount);
+                          const secondAmount = parseAmount(secondPayment.amount);
                           const calculatedBalance = Math.max(0, total - firstAmount - secondAmount);
                           return calculatedBalance > 0 ? formatCurrencyInput(calculatedBalance.toString()) : '';
                         }

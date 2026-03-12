@@ -77,6 +77,11 @@ export const AddEmployeesModal: React.FC<AddEmployeesModalProps> = ({
 
   if (!isOpen) return null;
 
+  const sortedWorkers = [...workers].sort((a, b) => {
+    const nameA = `${a.last_name || ''} ${a.first_name || ''} ${a.second_name || ''}`.trim().toLowerCase();
+    const nameB = `${b.last_name || ''} ${b.first_name || ''} ${b.second_name || ''}`.trim().toLowerCase();
+    return nameA.localeCompare(nameB, 'ru');
+  });
   const selectedWorkers = workers.filter((w) => selectedIds.has(w.id));
   const canAdd = selectedIds.size > 0 && !isSubmitting;
 
@@ -109,7 +114,7 @@ export const AddEmployeesModal: React.FC<AddEmployeesModalProps> = ({
         )}
 
         <div className="add-employees-modal__list">
-          {workers.map((w) => {
+          {sortedWorkers.map((w) => {
             const isBusy = !!w.busy;
             const foremanName = w.busy?.foreman_name || '';
             const isAlreadyMine = myAssignedIds.includes(w.id);

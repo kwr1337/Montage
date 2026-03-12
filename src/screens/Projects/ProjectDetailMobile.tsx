@@ -113,7 +113,9 @@ const getForemanFullName = (project?: any) => {
     return 'Не назначен';
   }
 
-  const activeEmployees = project.employees.filter((emp: any) => !emp.pivot?.end_working_date);
+  const activeEmployees = project.employees.filter(
+    (emp: any) => !emp.pivot?.end_working_date && !emp.is_dismissed
+  );
   const foreman = activeEmployees.find((emp: any) => emp.role === 'Бригадир');
 
   if (!foreman) {
@@ -202,7 +204,9 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
 
   const foremen = useMemo(() => {
     const employees = project?.employees || [];
-    const active = employees.filter((emp: any) => !emp.pivot?.end_working_date);
+    const active = employees.filter(
+      (emp: any) => !emp.pivot?.end_working_date && !emp.is_dismissed
+    );
     return active.filter((emp: any) => emp.role === 'Бригадир');
   }, [project?.employees]);
 
@@ -375,12 +379,13 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
             second_name: w.second_name,
             last_name: w.last_name,
             busy: apiBusy ?? ourBusy,
+            is_dismissed: w.is_dismissed === true,
           };
         };
         if (Array.isArray(workersData)) {
-          workers = workersData.map(parseWorker);
+          workers = workersData.map(parseWorker).filter((w: any) => !w.is_dismissed);
         } else if (workersData?.workers && Array.isArray(workersData.workers)) {
-          workers = workersData.workers.map(parseWorker);
+          workers = workersData.workers.map(parseWorker).filter((w: any) => !w.is_dismissed);
         } else {
           // Fallback: используем users если assignments/workers не вернул данные
           const usersRes = await apiService.getUsers();
@@ -418,7 +423,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
             ? usersData.data
             : [];
           usersArr.forEach((u: any) => {
-            if (u?.id != null && !workersById.has(u.id)) {
+            if (u?.id != null && !workersById.has(u.id) && !u.is_dismissed) {
               workersById.set(u.id, {
                 id: u.id,
                 first_name: u.first_name,
@@ -436,18 +441,22 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           const brigId = a.brigadier_id ?? a.brigadier?.id;
           return brigId == null || Number(brigId) === Number(myBrigadierId);
         });
-        const workersList = myAssigned.map((a: any) => {
-          const worker = a.worker ?? a.user ?? {};
-          const workerId = a.worker_id ?? worker.id ?? a.user_id ?? a.id;
-          const w = workersById.get(workerId);
-          return {
-            id: workerId,
-            assignment_id: a.id,
-            first_name: worker.first_name ?? w?.first_name ?? '',
-            last_name: worker.last_name ?? w?.last_name ?? '',
-            second_name: worker.second_name ?? w?.second_name ?? '',
-          };
-        });
+        const workersList = myAssigned
+          .map((a: any) => {
+            const worker = a.worker ?? a.user ?? {};
+            const workerId = a.worker_id ?? worker.id ?? a.user_id ?? a.id;
+            const w = workersById.get(workerId);
+            const isDismissed = worker.is_dismissed === true || (w && (w as any).is_dismissed);
+            return {
+              id: workerId,
+              assignment_id: a.id,
+              first_name: worker.first_name ?? w?.first_name ?? '',
+              last_name: worker.last_name ?? w?.last_name ?? '',
+              second_name: worker.second_name ?? w?.second_name ?? '',
+              is_dismissed: isDismissed,
+            };
+          })
+          .filter((x: any) => !x.is_dismissed);
         setDayAssignedWorkers(workersList);
       } catch (e) {
         console.error('Error loading assignments:', e);
@@ -693,7 +702,9 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     if (!project?.id) return;
 
     const employees = project?.employees || [];
-    const activeFromProject = employees.filter((emp: any) => !emp.pivot?.end_working_date);
+    const activeFromProject = employees.filter(
+      (emp: any) => !emp.pivot?.end_working_date && !emp.is_dismissed
+    );
     const projectIds = new Set(activeFromProject.map((e: any) => Number(e.id)));
     const assignedOnly = dayAssignedWorkers.filter((w: any) => !projectIds.has(Number(w.id)));
     const assignedAsEmps = assignedOnly.map((w: any) => ({
@@ -1870,6 +1881,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           }}
           trackedDates={trackedDates}
           onSuccess={handleHoursSaveSuccess}
+          enforceTimeRestriction={true}
         />
       )}
 

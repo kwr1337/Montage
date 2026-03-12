@@ -16,6 +16,8 @@ type AddHoursModalProps = {
   };
   trackedDates?: string[]; // Массив дат в формате YYYY-MM-DD, за которые уже есть фиксация
   onSuccess?: () => void; // Callback после успешного сохранения
+  /** В мобильной версии: корректировка часов возможна только с 6:00 до 21:00 */
+  enforceTimeRestriction?: boolean;
 };
 
 export const AddHoursModal: React.FC<AddHoursModalProps> = ({
@@ -26,6 +28,7 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
   employee,
   trackedDates = [],
   onSuccess,
+  enforceTimeRestriction = false,
 }) => {
   const [hours, setHours] = useState<number>(8);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -104,8 +107,13 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
     return !isAbsent && hours !== 8;
   };
 
-  // Корректировка возможна только в течение дня; редактирование только с 6:00 до 21:00 (пока отключено)
-  const canEditByTime = (): boolean => true;
+  // В мобильной версии: корректировка возможна только с 6:00 до 21:00
+  const canEditByTime = (): boolean => {
+    if (!enforceTimeRestriction) return true;
+    const now = new Date();
+    const hour = now.getHours();
+    return hour >= 6 && hour < 21;
+  };
 
   // Только текущий день; вчера редактировать нельзя
   const isToday = (d: Date): boolean => {
@@ -133,10 +141,10 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
       return;
     }
 
-    // if (!canEditByTime()) {
-    //   setError('Корректировка часов возможна только с 6:00 до 21:00');
-    //   return;
-    // }
+    if (!canEditByTime()) {
+      setError('Корректировка часов возможна только с 6:00 до 21:00');
+      return;
+    }
     
     // Проверяем, что если часы не равны 8, то должна быть указана причина
     if (!isAbsent && hours !== 8 && !reason.trim()) {

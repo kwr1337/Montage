@@ -44,8 +44,11 @@ type Payment = {
 
 export const SalaryScreen: React.FC = () => {
   const [searchValue, setSearchValue] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const now = new Date();
+  const defaultMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const defaultMonthEnd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+  const [dateFrom, setDateFrom] = useState(defaultMonthStart);
+  const [dateTo, setDateTo] = useState(defaultMonthEnd);
   // const [paymentStatus, setPaymentStatus] = useState<string>('all');
   // const paymentStatus = 'all'; // Временно отключен фильтр по статусу
   const dateFromRef = React.useRef<HTMLInputElement>(null);
@@ -120,9 +123,9 @@ export const SalaryScreen: React.FC = () => {
         console.error('Error loading projects for payments:', e);
       }
 
+      // Не передаём date_from/date_to в API — бэкенд может исключать платежи с выплатами в разных месяцах.
+      // Фильтрация по датам выполняется локально в filteredPayments.
       const filter: any = { project_id: projectIds };
-      if (dateFrom) filter.date_from = dateFrom;
-      if (dateTo) filter.date_to = dateTo;
 
       const response = projectIds.length > 0
         ? await apiService.getPayments({
@@ -229,25 +232,29 @@ export const SalaryScreen: React.FC = () => {
             // Загружаем часы для сотрудника из всех проектов
             if (userId) {
               try {
-                // Получаем все проекты
-                const projectsResponse = await apiService.getProjects(1, 1000);
+                // Получаем все проекты с сотрудниками (для истории выплат включаем уволенных)
+                const projectsResponse = await apiService.getProjects(1, 1000, { with: ['employees'] });
                 let projects: any[] = [];
                 if (projectsResponse && projectsResponse.data) {
                   const data = projectsResponse.data.data || projectsResponse.data;
                   projects = Array.isArray(data) ? data : [data];
                 }
 
-                // Находим проекты, где сотрудник участвует
-                const employeeProjects = projects.filter((project: any) => {
+                // Находим проекты, где сотрудник участвует (включая уволенных — для истории выплат)
+                let projectsToCheck = projects.filter((project: any) => {
                   if (!project.employees || !Array.isArray(project.employees)) return false;
                   return project.employees.some((emp: any) => {
                     const empId = emp.id || emp.user_id;
-                    const isCurrentUser = empId === userId;
-                    const isActive = !emp.pivot?.end_working_date;
-                    return isCurrentUser && isActive;
+                    return empId === userId;
                   });
                 });
 
+                // Fallback: если сотрудника нет в project.employees (напр. уволен), используем project_id из выплаты
+                if (projectsToCheck.length === 0 && payment.project_id) {
+                  projectsToCheck = projects.filter((p: any) => p.id === payment.project_id);
+                }
+
+                const employeeProjects = projectsToCheck;
                 console.log(`Found ${employeeProjects.length} projects for employee ${userId}`);
 
                 // Определяем месяц для подсчета часов
@@ -256,15 +263,23 @@ export const SalaryScreen: React.FC = () => {
                 let monthStart: Date;
                 let monthEnd: Date;
                 
-                // Пытаемся определить месяц из даты первой выплаты
-                if (payment.first_payment_date) {
-                  const paymentDate = new Date(payment.first_payment_date);
-                  monthStart = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), 1);
-                  monthEnd = new Date(paymentDate.getFullYear(), paymentDate.getMonth() + 1, 0, 23, 59, 59);
-                } else if (dateFrom && dateTo) {
-                  // Если есть фильтры по датам, используем их
+                // Приоритет: фильтр дат (период просмотра) → диапазон всех дат выплат → текущий месяц
+                if (dateFrom && dateTo) {
+                  // Пользователь выбрал период — используем его для учёта часов
                   monthStart = new Date(dateFrom);
                   monthEnd = new Date(dateTo);
+                } else if (payment.first_payment_date || payment.second_payment_date || payment.third_payment_date) {
+                  // Берём диапазон от самой ранней до самой поздней выплаты (охватываем все месяцы)
+                  const dates = [
+                    payment.first_payment_date,
+                    payment.second_payment_date,
+                    payment.third_payment_date,
+                  ].filter(Boolean) as string[];
+                  const parsed = dates.map((d) => new Date(d));
+                  const earliest = new Date(Math.min(...parsed.map((d) => d.getTime())));
+                  const latest = new Date(Math.max(...parsed.map((d) => d.getTime())));
+                  monthStart = new Date(earliest.getFullYear(), earliest.getMonth(), 1);
+                  monthEnd = new Date(latest.getFullYear(), latest.getMonth() + 1, 0, 23, 59, 59);
                 } else {
                   // Иначе используем текущий месяц
                   monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -331,7 +346,16 @@ export const SalaryScreen: React.FC = () => {
             const employeeName = userData ? apiService.formatUserName(userData) : '';
             const employeePosition = userData?.role || '';
             
-            console.log(`Formatted payment: name=${employeeName}, role=${employeePosition}, rate=${rate}, hours=${hours}, total=${total}`);
+            // total: часы×ставка → API total → сумма выплат (как на странице сотрудника)
+            const firstAmount = Number(payment.first_payment_amount) || 0;
+            const secondAmount = Number(payment.second_payment_amount) || 0;
+            const thirdAmount = Number(payment.third_payment_amount) || 0;
+            let effectiveTotal = total > 0 ? total : (Number(payment.total) || 0);
+            if (effectiveTotal === 0 && (firstAmount > 0 || secondAmount > 0 || thirdAmount > 0)) {
+              effectiveTotal = firstAmount + secondAmount + thirdAmount;
+            }
+
+            console.log(`Formatted payment: name=${employeeName}, role=${employeePosition}, rate=${rate}, hours=${hours}, total=${effectiveTotal}`);
 
             // Используем данные из выплаты
             return {
@@ -341,7 +365,7 @@ export const SalaryScreen: React.FC = () => {
               employeePosition: employeePosition,
               rate: rate,
               hours: hours,
-              total: total,
+              total: effectiveTotal,
             };
           })
         );
@@ -407,46 +431,30 @@ export const SalaryScreen: React.FC = () => {
     //   });
     // }
 
-    // Фильтр по дате
+    // Фильтр по дате: включаем платёж, если хотя бы одна дата выплаты попадает в диапазон
     if (dateFrom || dateTo) {
       filtered = filtered.filter((payment) => {
-        // Получаем дату выплаты (используем первую доступную дату)
-        const paymentDateStr = payment.first_payment_date 
-          || payment.second_payment_date 
-          || payment.third_payment_date;
-        
-        if (!paymentDateStr) {
-          // Если нет даты выплаты, исключаем из результатов при активном фильтре
-          return false;
-        }
-        
-        const paymentDate = new Date(paymentDateStr);
-        if (Number.isNaN(paymentDate.getTime())) {
-          return false;
-        }
-        
-        // Сбрасываем время для корректного сравнения дат
-        const paymentDateOnly = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), paymentDate.getDate());
-        
-        // Фильтр "от даты"
-        if (dateFrom) {
-          const fromDate = new Date(dateFrom);
-          const fromDateOnly = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
-          if (paymentDateOnly < fromDateOnly) {
-            return false;
-          }
-        }
-        
-        // Фильтр "до даты"
-        if (dateTo) {
-          const toDate = new Date(dateTo);
-          const toDateOnly = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate());
-          if (paymentDateOnly > toDateOnly) {
-            return false;
-          }
-        }
-        
-        return true;
+        const dates = [
+          payment.first_payment_date,
+          payment.second_payment_date,
+          payment.third_payment_date,
+        ].filter(Boolean) as string[];
+
+        if (dates.length === 0) return false;
+
+        const fromDate = dateFrom ? new Date(dateFrom) : null;
+        const toDate = dateTo ? new Date(dateTo) : null;
+
+        const anyInRange = dates.some((dateStr) => {
+          const d = new Date(dateStr);
+          if (Number.isNaN(d.getTime())) return false;
+          const dateOnly = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+          if (fromDate && dateOnly < new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate())) return false;
+          if (toDate && dateOnly > new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate())) return false;
+          return true;
+        });
+
+        return anyInRange;
       });
     }
 
@@ -1112,7 +1120,9 @@ export const SalaryScreen: React.FC = () => {
           projectId: editingPayment.project_id,
           employeeName: editingPayment.employeeName || '',
           employeePosition: editingPayment.employeePosition || '',
-          total: editingPayment.total || 0,
+          total: editingPayment.total ?? 0,
+          hours: editingPayment.hours,
+          rate: editingPayment.rate,
           firstPayment: editingPayment.first_payment_amount ? {
             amount: editingPayment.first_payment_amount,
             date: editingPayment.first_payment_date || '',

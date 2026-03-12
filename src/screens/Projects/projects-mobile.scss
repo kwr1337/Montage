@@ -282,6 +282,20 @@
       }
     }
 
+    th:first-child,
+    td:first-child {
+      width: 28px;
+      min-width: 28px;
+      max-width: 28px;
+      padding-right: 2px;
+    }
+
+    th:nth-child(2),
+    td:nth-child(2) {
+      min-width: 0;
+      padding-left: 0;
+    }
+
     th:last-child,
     td:last-child {
       text-align: right;

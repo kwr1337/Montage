@@ -13,6 +13,8 @@
     display: flex;
     flex-direction: column;
     overflow-y: auto;
+    /* Резервируем место под скроллбар — на Windows иначе layout съезжает при появлении скролла */
+    scrollbar-gutter: stable;
 
     /* Убираем лишний вертикальный скролл при просмотре карточки проекта */
     &:has(.projects--detail-view) {

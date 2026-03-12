@@ -45,27 +45,33 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
   // Фильтруем сотрудников - показываем только тех, кто еще не в проекте ИЛИ удален из проекта
   // Удаленные сотрудники (с end_working_date) должны снова появляться в списке
   // НО уволенные сотрудники (is_dismissed === true) не должны отображаться
-  const availableEmployees = employees.filter((employee: any) => {
-    // Исключаем уволенных сотрудников
-    if (employee.is_dismissed === true) {
+  const availableEmployees = employees
+    .filter((employee: any) => {
+      // Исключаем уволенных сотрудников
+      if (employee.is_dismissed === true) {
+        return false;
+      }
+      
+      const projectEmployee = projectEmployees.find((pe: any) => pe.id === employee.id);
+      
+      // Если сотрудника нет в проекте - показываем
+      if (!projectEmployee) {
+        return true;
+      }
+      
+      // Если сотрудник есть в проекте, но удален (есть end_working_date) - показываем
+      if (projectEmployee.pivot?.end_working_date) {
+        return true;
+      }
+      
+      // Если сотрудник активен в проекте (нет end_working_date) - скрываем
       return false;
-    }
-    
-    const projectEmployee = projectEmployees.find((pe: any) => pe.id === employee.id);
-    
-    // Если сотрудника нет в проекте - показываем
-    if (!projectEmployee) {
-      return true;
-    }
-    
-    // Если сотрудник есть в проекте, но удален (есть end_working_date) - показываем
-    if (projectEmployee.pivot?.end_working_date) {
-      return true;
-    }
-    
-    // Если сотрудник активен в проекте (нет end_working_date) - скрываем
-    return false;
-  });
+    })
+    .sort((a: any, b: any) => {
+      const nameA = `${a.last_name || ''} ${a.first_name || ''} ${a.second_name || ''}`.trim().toLowerCase();
+      const nameB = `${b.last_name || ''} ${b.first_name || ''} ${b.second_name || ''}`.trim().toLowerCase();
+      return nameA.localeCompare(nameB, 'ru');
+    });
 
   const handleInputChange = (field: string, value: string | number) => {
     setFormData(prev => ({

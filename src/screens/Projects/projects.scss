@@ -1734,6 +1734,8 @@
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
+    /* Резервируем место под скроллбар — на Windows он занимает ~17px и съезжает колонки относительно шапки */
+    scrollbar-gutter: stable;
   }
 
   &__specification-header-groups {
