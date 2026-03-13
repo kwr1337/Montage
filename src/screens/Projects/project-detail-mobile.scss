@@ -484,6 +484,9 @@
     letter-spacing: 0.05px;
     text-transform: uppercase;
     flex-shrink: 0;
+    /* Совпадение с padding body-col (5px 3px) — иначе текст в строках съезжает относительно заголовков */
+    padding: 0 3px;
+    box-sizing: border-box;
 
     img {
       width: 10px;
