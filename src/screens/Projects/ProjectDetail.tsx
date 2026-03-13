@@ -2520,7 +2520,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                     }}
                     style={{ cursor: 'pointer' }}
                   >
-                    <span>Номенкл.</span>
+                    <span>Номенклатура</span>
                     <img 
                       src={upDownTableFilter} 
                       alt="↑↓" 

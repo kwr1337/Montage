@@ -205,35 +205,42 @@ class ApiService {
     return response;
   }
 
-  /** Назначения рабочих на день. all=1 — все бригадиры (для проверки занятости) */
-  async getAssignments(assignmentDate: string, options?: { all?: boolean }): Promise<any> {
+  /** Назначения рабочих на день. all=1 — все бригадиры (для проверки занятости). project_id — фильтр по проекту */
+  async getAssignments(assignmentDate: string, options?: { all?: boolean; project_id?: number }): Promise<any> {
     let url = `/assignments?assignment_date=${assignmentDate}`;
     if (options?.all) url += '&all=1';
+    if (options?.project_id != null) url += `&project_id=${options.project_id}`;
     return this.request<any>(url, { method: 'GET' });
   }
 
-  /** Рабочие с информацией о занятости (кто кем назначен) */
-  async getAssignmentsWorkers(assignmentDate: string): Promise<any> {
-    return this.request<any>(`/assignments/workers?assignment_date=${assignmentDate}`, {
-      method: 'GET',
-    });
+  /** Рабочие с информацией о занятости (кто кем назначен). project_id — фильтр по проекту */
+  async getAssignmentsWorkers(assignmentDate: string, projectId?: number): Promise<any> {
+    let url = `/assignments/workers?assignment_date=${assignmentDate}`;
+    if (projectId != null) url += `&project_id=${projectId}`;
+    return this.request<any>(url, { method: 'GET' });
   }
 
-  /** Добавить рабочего на день (по док-ции: worker_id, assignment_date) */
-  async addAssignment(workerId: number, assignmentDate: string): Promise<any> {
+  /** Добавить рабочего на день в конкретный проект. project_id обязателен — без него назначается на все проекты бригадира */
+  async addAssignment(workerId: number, assignmentDate: string, projectId: number): Promise<any> {
     return this.request<any>('/assignments/add', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ worker_id: workerId, assignment_date: assignmentDate }),
+      body: JSON.stringify({
+        worker_id: workerId,
+        assignment_date: assignmentDate,
+        project_id: projectId,
+      }),
     });
   }
 
-  /** Удалить назначение: id в URL — assignment_id или worker_id (бэкенд может поддерживать оба) */
-  async deleteAssignment(id: number, assignmentDate: string): Promise<any> {
+  /** Удалить назначение: id в URL — assignment_id или worker_id. project_id — если backend поддерживает привязку к проекту */
+  async deleteAssignment(id: number, assignmentDate: string, projectId?: number): Promise<any> {
+    const body: Record<string, unknown> = { assignment_date: assignmentDate };
+    if (projectId != null) body.project_id = projectId;
     return this.request<any>(`/assignments/delete/${id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ assignment_date: assignmentDate }),
+      body: JSON.stringify(body),
     });
   }
 

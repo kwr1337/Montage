@@ -316,9 +316,13 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           assignRes = mockApiResponses.getAssignments;
           workersRes = mockApiResponses.getAssignmentsWorkers;
         } else {
+          const projectId = project?.id;
           [assignRes, workersRes] = await Promise.all([
-            apiService.getAssignments(assignmentDate, { all: true }),
-            apiService.getAssignmentsWorkers(assignmentDate),
+            apiService.getAssignments(assignmentDate, {
+              all: true,
+              ...(projectId != null && { project_id: projectId }),
+            }),
+            apiService.getAssignmentsWorkers(assignmentDate, projectId),
           ]);
         }
 
@@ -436,10 +440,13 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           // игнорируем ошибку getUsers
         }
 
-        // API возвращает { id, worker_id, worker, brigadier_id }. Только свои назначения в день.
+        // API возвращает { id, worker_id, worker, brigadier_id, project_id }. Только свои назначения в день и для текущего проекта.
+        const currentProjectId = project?.id;
         const myAssigned = assigned.filter((a: any) => {
           const brigId = a.brigadier_id ?? a.brigadier?.id;
-          return brigId == null || Number(brigId) === Number(myBrigadierId);
+          if (brigId != null && Number(brigId) !== Number(myBrigadierId)) return false;
+          if (currentProjectId != null && a.project_id != null && a.project_id !== currentProjectId) return false;
+          return true;
         });
         const workersList = myAssigned
           .map((a: any) => {
@@ -469,7 +476,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
 
     loadAssignments();
     return () => { isCancelled = true; };
-  }, [activeTab, assignmentDate, isAddEmployeesModalOpen, mockApiResponses, project?.employees]);
+  }, [activeTab, assignmentDate, isAddEmployeesModalOpen, mockApiResponses, project?.id, project?.employees]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -1197,6 +1204,11 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   };
 
   const handleAddEmployees = async (workerIds: number[]) => {
+    const projectId = project?.id;
+    if (!projectId) {
+      alert('Не выбран проект для назначения');
+      return;
+    }
     const toAdd = workersWithBusy
       .filter((w) => workerIds.includes(w.id))
       .map((w) => ({
@@ -1207,7 +1219,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       }));
     if (!mockApiResponses) {
       for (const id of workerIds) {
-        const res = await apiService.addAssignment(id, assignmentDate);
+        const res = await apiService.addAssignment(id, assignmentDate, projectId);
         const created = res?.data ?? res;
         const assignmentId = created?.id ?? created?.data?.id;
         const added = toAdd.find((w) => w.id === id);
@@ -1229,7 +1241,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     if (!mockApiResponses) {
       // Бэкенд ожидает worker_id в URL (по аналогии с add), не assignment_id
       const deleteId = removeConfirmEmployee.id;
-      await apiService.deleteAssignment(deleteId, assignmentDate);
+      await apiService.deleteAssignment(deleteId, assignmentDate, project?.id);
     }
     setDayAssignedWorkers((prev) =>
       prev.filter((p: any) =>
