@@ -817,7 +817,7 @@ export const SalaryScreen: React.FC = () => {
                 handleExportToExcel();
               }}
             >
-              Экспорт XLS
+              Экспорт XLSX
             </button>
           </div>
         </div>

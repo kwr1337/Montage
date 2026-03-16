@@ -89,6 +89,18 @@ export const canEditProjectGeneralInfo = (user: any): boolean => {
   return isSystemAdmin(user) || isGIP(user);
 };
 
+/** Можно менять статус проекта — ГИП, Инженер ПТО, Админ */
+export const canChangeProjectStatus = (user: any): boolean => {
+  if (!user) return false;
+  return isSystemAdmin(user) || isGIP(user) || isPTOEngineer(user);
+};
+
+/** Можно редактировать ФОТ (выделено на ФОТ) — ГИП, Сметчик, Админ */
+export const canEditFOT = (user: any): boolean => {
+  if (!user) return false;
+  return isSystemAdmin(user) || isGIP(user) || isEstimator(user);
+};
+
 /** Можно добавлять/удалять сотрудников в проекте (фиксация работ) — ГИП, ПТО, Админ */
 export const canManageProjectEmployees = (user: any): boolean => {
   if (!user) return false;

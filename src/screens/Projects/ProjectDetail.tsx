@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../../services/api';
-import { canDeleteProject, canEditProjectGeneralInfo, canManageProjectEmployees, canEditSpecification } from '../../services/permissions';
+import { canDeleteProject, canEditProjectGeneralInfo, canChangeProjectStatus, canEditFOT, canManageProjectEmployees, canEditSpecification } from '../../services/permissions';
 import sotrudnikiVProekte from '../../shared/icons/sotrudnikiVProekte.svg';
 import editIcon from '../../shared/icons/editIcon.svg';
 import dotsIcon from '../../shared/icons/dotsIcon.svg';
@@ -130,6 +130,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   const currentUser = apiService.getCurrentUser();
   const canDelete = canDeleteProject(currentUser);
   const canEditGeneral = isNewProject || canEditProjectGeneralInfo(currentUser);
+  const canEditHeader = isNewProject || canEditProjectGeneralInfo(currentUser) || canChangeProjectStatus(currentUser); // ПТО может менять статус
+  const canEditFOTField = canEditFOT(currentUser);
   const canManageEmployees = canManageProjectEmployees(currentUser);
   const canEditSpec = canEditSpecification(currentUser);
 
@@ -1929,7 +1931,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                     className="projects__detail-title-input"
                     value={editedProjectName}
                     onChange={(e) => setEditedProjectName(e.target.value)}
-                  placeholder="Введите название проекта"
+                    readOnly={!isNewProject && !canEditProjectGeneralInfo(currentUser)}
+                    placeholder="Введите название проекта"
                 />
                 </>
               ) : (
@@ -2022,7 +2025,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                     <button 
                       className="projects__detail-icon-btn" 
                       onClick={() => {
-                        if (!canEditGeneral) {
+                        if (!canEditHeader) {
                           alert('Недостаточно прав');
                           return;
                         }
@@ -2374,7 +2377,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                       className="projects__form-input projects__form-input--editable"
                       value={formData.budget ? Number(formData.budget).toLocaleString('ru-RU') : ''}
                       onChange={(e) => {
-                        if (!canEditGeneral) return;
+                        if (!canEditFOTField) return;
                         let value = e.target.value.replace(/\s/g, '').replace(',', '.');
                         value = value.replace(/[^\d.]/g, '');
                         const parts = value.split('.');
@@ -2384,13 +2387,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                         handleInputChange('budget', value);
                       }}
                       onFocus={(e) => {
-                        if (!canEditGeneral) {
+                        if (!canEditFOTField) {
                           e.target.blur();
                           alert('Недостаточно прав');
                         }
                       }}
                       onBlur={() => {
-                        if (!canEditGeneral) return;
+                        if (!canEditFOTField) return;
                         const numValue = parseFloat(formData.budget);
                         if (!isNaN(numValue) && numValue < 0) {
                           handleInputChange('budget', '0');
@@ -2413,7 +2416,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                 <button 
                   className="projects__detail-btn projects__detail-btn--primary"
                   onClick={() => {
-                    if (!canEditGeneral) {
+                    if (!canEditGeneral && !canEditFOTField) {
                       alert('Недостаточно прав');
                       return;
                     }
