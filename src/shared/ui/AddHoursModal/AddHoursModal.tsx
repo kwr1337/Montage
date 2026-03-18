@@ -109,10 +109,12 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
 
   // В мобильной версии: корректировка возможна только с 6:00 до 21:00
   const canEditByTime = (): boolean => {
-    if (!enforceTimeRestriction) return true;
-    const now = new Date();
-    const hour = now.getHours();
-    return hour >= 6 && hour < 21;
+    // Временно убираем проверку времени для тестирования.
+    // enforceTimeRestriction оставляем, чтобы поведение можно было быстро вернуть.
+    if (enforceTimeRestriction) {
+      return true;
+    }
+    return true;
   };
 
   // Только текущий день; вчера редактировать нельзя
