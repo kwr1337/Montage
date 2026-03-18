@@ -28,13 +28,13 @@
 
 export const isGIP = (user: { role?: string; position?: string } | null): boolean => {
   if (!user) return false;
-  const role = (user.role || user.position || '').toLowerCase();
+  const role = `${user.role || ''} ${user.position || ''}`.toLowerCase();
   return role.includes('гип') || role === 'главный инженер проекта';
 };
 
 export const isBrigadier = (user: { role?: string; position?: string } | null): boolean => {
   if (!user) return false;
-  return (user.role || user.position) === 'Бригадир';
+  return user.role === 'Бригадир' || user.position === 'Бригадир';
 };
 
 export const isSystemAdmin = (user: { is_system_admin?: boolean } | null): boolean => {
@@ -43,20 +43,20 @@ export const isSystemAdmin = (user: { is_system_admin?: boolean } | null): boole
 
 export const isBuhgalter = (user: { role?: string; position?: string } | null): boolean => {
   if (!user) return false;
-  const role = (user.role || user.position || '').toLowerCase();
+  const role = `${user.role || ''} ${user.position || ''}`.toLowerCase();
   return role.includes('бухгалтер') || role === 'бухгалтер';
 };
 
 export const isPTOEngineer = (user: { role?: string; position?: string } | null): boolean => {
   if (!user) return false;
-  const role = (user.role || user.position || '').toLowerCase();
+  const role = `${user.role || ''} ${user.position || ''}`.toLowerCase();
   return role.includes('инженер') && role.includes('пто');
 };
 
 export const isEstimator = (user: { role?: string; position?: string } | null): boolean => {
   if (!user) return false;
-  const role = (user.role || user.position || '').toLowerCase();
-  return role.includes('сметчик');
+  const role = `${user.role || ''} ${user.position || ''}`.toLowerCase();
+  return role.includes('сметчик') || role.includes('estimator');
 };
 
 /** Можно редактировать сотрудников (ГИП, Бухгалтер, Админ) */

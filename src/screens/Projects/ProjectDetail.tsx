@@ -130,7 +130,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   const currentUser = apiService.getCurrentUser();
   const canDelete = canDeleteProject(currentUser);
   const canEditGeneral = isNewProject || canEditProjectGeneralInfo(currentUser);
-  const canEditHeader = isNewProject || canEditProjectGeneralInfo(currentUser) || canChangeProjectStatus(currentUser); // ПТО может менять статус
+  const canEditHeader = isNewProject || canEditProjectGeneralInfo(currentUser) || canChangeProjectStatus(currentUser) || canEditFOT(currentUser); // ПТО — статус, Сметчик — ФОТ
   const canEditFOTField = canEditFOT(currentUser);
   const canManageEmployees = canManageProjectEmployees(currentUser);
   const canEditSpec = canEditSpecification(currentUser);
@@ -219,6 +219,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   const [trackingItems, setTrackingItems] = useState<any[]>([]);
   const [trackingSortField, setTrackingSortField] = useState<string | null>(null);
   const [trackingSortDirection, setTrackingSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [trackingRefreshTrigger, setTrackingRefreshTrigger] = useState(0);
 
   // Проверка, является ли сотрудник ГИП (не отображаем в иконках и в фиксации работ)
   const isGIP = (emp: any) => {
@@ -269,7 +270,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   };
 
   // Обновляем данные для фиксации работ при изменении сотрудников проекта
+  // Загружаем только когда открыта вкладка «Фиксация работ» — снижаем лишние запросы
   useEffect(() => {
+    if (activeTab !== 'tracking') return;
     if (localProject.employees && Array.isArray(localProject.employees)) {
       if (!localProject.id) {
         // Новый проект: формируем trackingItems локально без API (work_reports не существуют)
@@ -448,7 +451,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       setTrackingItems([]);
       setTrackingCurrentPage(1);
     }
-  }, [localProject.employees?.length, localProject.id]); // Используем длину массива для принудительного обновления
+  }, [localProject.employees?.length, localProject.id, trackingRefreshTrigger, activeTab]);
 
   // Загрузка всех сотрудников при монтировании компонента (для модального окна добавления)
   useEffect(() => {
@@ -526,7 +529,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   }, [project]);
 
   // Обновляем данные спецификации при изменении localProject.nomenclature
+  // Загружаем только когда открыта вкладка «Спецификация» — снижаем лишние запросы
   useEffect(() => {
+    if (activeTab !== 'specification') return;
     const loadNomenclatureWithChanges = async () => {
       if (localProject.nomenclature && Array.isArray(localProject.nomenclature) && localProject.id) {
         try {
@@ -600,7 +605,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     };
 
     loadNomenclatureWithChanges();
-  }, [localProject.id, localProject.nomenclature]);
+  }, [localProject.id, localProject.nomenclature, activeTab]);
 
   const handleInputChange = (field: string, value: string) => {
     // Для поля budget проверяем, что значение не отрицательное
@@ -738,6 +743,39 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
 
   const handleSave = async () => {
     const trimmedName = (isEditingHeader ? editedProjectName : localProject.name || '').trim();
+
+    // Сметчик (и другие роли без прав на "общую") может менять только ФОТ (budget).
+    // Для таких ролей отправляем PATCH только с budget, без остальных полей проекта.
+    if (!canEditGeneral && canEditFOTField) {
+      if (!localProject.id) {
+        alert('Нельзя изменить ФОТ для нового проекта до сохранения проекта');
+        return;
+      }
+
+      let budgetOnly: number | null = null;
+      if (formData.budget === '' || formData.budget == null) {
+        budgetOnly = null;
+      } else {
+        const parsedBudget = parseFloat(formData.budget.toString());
+        if (!isNaN(parsedBudget) && parsedBudget >= 0) {
+          budgetOnly = parsedBudget;
+        } else if (!isNaN(parsedBudget) && parsedBudget < 0) {
+          budgetOnly = 0;
+          setFormData(prev => ({ ...prev, budget: '0' }));
+        }
+      }
+
+      try {
+        await apiService.updateProject(localProject.id, { budget: budgetOnly });
+        const optimisticUpdate = { ...localProject, budget: budgetOnly };
+        setLocalProject(optimisticUpdate);
+        onProjectUpdate?.(optimisticUpdate);
+      } catch (error) {
+        console.error('Error updating budget:', error);
+        alert('Не удалось сохранить ФОТ. Попробуйте еще раз.');
+      }
+      return;
+    }
 
     if (!trimmedName) {
       alert('Введите название проекта');
@@ -1295,35 +1333,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
             ...serverProject,
             employees: [...serverProject.employees]
           });
-          
-          // Обновляем trackingItems с серверными данными
-          const serverFormattedEmployees = serverProject.employees.map((employee: any) => {
-            const startWorkingDate = employee.pivot?.start_working_date || null;
-            const endWorkingDate = employee.pivot?.end_working_date || null;
-            const daysInProject = calculateDaysInProject(startWorkingDate, endWorkingDate);
-            
-            return {
-              id: employee.id,
-              name: `${employee.last_name} ${employee.first_name.charAt(0)}. ${employee.second_name.charAt(0)}.`,
-              role: employee.role || 'Не указана',
-              status: employee.employee_status === 'active' ? 'Работает' :
-                      employee.is_dismissed ? 'Уволен' : 'Неизвестно',
-              startDate: startWorkingDate ?
-                        new Date(startWorkingDate).toLocaleDateString('ru-RU', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric'
-                        }) : 'Не указана',
-              days: daysInProject,
-              hours: 0,
-              lastHours: 0,
-              rate: employee.pivot?.rate_per_hour || employee.rate_per_hour || 0,
-              lastSum: 0,
-              totalSum: 0
-            };
-          });
-          setTrackingItems(serverFormattedEmployees);
-          
+          // Перезагружаем таблицу с полными данными (часы, суммы) через useEffect
+          setTrackingRefreshTrigger(prev => prev + 1);
+
           // Обновляем данные в родительском компоненте
           if (onProjectUpdate) {
             onProjectUpdate(serverProject);
@@ -1518,39 +1530,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
             ...serverProject,
             employees: [...serverProject.employees]
           });
-          
-          // Обновляем trackingItems с серверными данными
-          const serverFormattedEmployees = serverProject.employees.map((employee: any) => {
-            const startWorkingDate = employee.pivot?.start_working_date || null;
-            const endWorkingDate = employee.pivot?.end_working_date || null;
-            const daysInProject = calculateDaysInProject(startWorkingDate, endWorkingDate);
-            
-            // Определяем статус: если есть end_working_date, то "Уволен"
-            const status = endWorkingDate ? 'Уволен' : 
-                          (employee.employee_status === 'active' ? 'Работает' :
-                          employee.is_dismissed ? 'Уволен' : 'Неизвестно');
-            
-            return {
-              id: employee.id,
-              name: `${employee.last_name} ${employee.first_name.charAt(0)}. ${employee.second_name.charAt(0)}.`,
-              role: employee.role || 'Не указана',
-              status: status,
-              startDate: startWorkingDate ?
-                        new Date(startWorkingDate).toLocaleDateString('ru-RU', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric'
-                        }) : 'Не указана',
-              days: daysInProject,
-              hours: 0,
-              lastHours: 0,
-              rate: employee.pivot?.rate_per_hour || employee.rate_per_hour || 0,
-              lastSum: 0,
-              totalSum: 0
-            };
-          });
-          setTrackingItems(serverFormattedEmployees);
-          
+          setTrackingRefreshTrigger(prev => prev + 1);
+
           // Обновляем данные в родительском компоненте
           if (onProjectUpdate) {
             onProjectUpdate(serverProject);
@@ -1569,40 +1550,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         const response = await apiService.getProjectById(localProject.id);
         if (response && response.data) {
           setLocalProject(response.data);
-          
-          // Обновляем trackingItems с серверными данными
-          if (response.data.employees && Array.isArray(response.data.employees)) {
-            const rolledBackFormattedEmployees = response.data.employees.map((employee: any) => {
-              const startWorkingDate = employee.pivot?.start_working_date || null;
-              const endWorkingDate = employee.pivot?.end_working_date || null;
-              const daysInProject = calculateDaysInProject(startWorkingDate, endWorkingDate);
-              
-              const status = endWorkingDate ? 'Уволен' : 
-                            (employee.employee_status === 'active' ? 'Работает' :
-                            employee.is_dismissed ? 'Уволен' : 'Неизвестно');
-              
-              return {
-                id: employee.id,
-                name: `${employee.last_name} ${employee.first_name.charAt(0)}. ${employee.second_name.charAt(0)}.`,
-                role: employee.role || 'Не указана',
-                status: status,
-                startDate: startWorkingDate ?
-                          new Date(startWorkingDate).toLocaleDateString('ru-RU', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric'
-                          }) : 'Не указана',
-                days: daysInProject,
-                hours: 0,
-                lastHours: 0,
-                rate: employee.pivot?.rate_per_hour || employee.rate_per_hour || 0,
-                lastSum: 0,
-                totalSum: 0
-              };
-            });
-            setTrackingItems(rolledBackFormattedEmployees);
-          }
-          
+          setTrackingRefreshTrigger(prev => prev + 1);
+
           if (onProjectUpdate) {
             onProjectUpdate(response.data);
           }

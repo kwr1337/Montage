@@ -60,9 +60,10 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
     const fetchUserProfile = async () => {
       try {
         const response = await apiService.getCurrentUserProfile();
-        if (response && response.data) {
-          setCurrentUser(response.data);
-          localStorage.setItem('user', JSON.stringify(response.data));
+        const userData = response?.data ?? response;
+        if (userData && (userData.id || userData.role != null || userData.position != null)) {
+          setCurrentUser(userData);
+          localStorage.setItem('user', JSON.stringify(userData));
         }
       } catch (error) {
         // Если запрос не удался, используем данные из localStorage

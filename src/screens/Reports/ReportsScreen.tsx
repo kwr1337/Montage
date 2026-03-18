@@ -201,8 +201,19 @@ export const ReportsScreen: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const periodStart = dateFrom || new Date().toISOString().split('T')[0];
-      const periodEnd = dateTo || new Date().toISOString().split('T')[0];
+      let periodStart: string;
+      let periodEnd: string;
+      if (dateFrom && dateTo) {
+        periodStart = dateFrom;
+        periodEnd = dateTo;
+      } else {
+        // По умолчанию — период текущего месяца (1-е число — последний день)
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        periodStart = dateFrom || `${year}-${month}-01`;
+        periodEnd = dateTo || `${year}-${month}-${String(new Date(year, now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+      }
 
       const response = await apiService.getProjectNomenclatureReport(report.projectId, {
         period_start: periodStart,

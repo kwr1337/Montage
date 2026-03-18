@@ -146,7 +146,34 @@ class ApiService {
 
   getCurrentUser(): any | null {
     const user = localStorage.getItem('user');
-    return user ? JSON.parse(user) : null;
+    if (!user) return null;
+    try {
+      const parsed = JSON.parse(user);
+      // Иногда в localStorage кладут ApiResponse/обёртки вида:
+      // { success, data: user } или { success, data: { user } } или { success, data: { data: user } }
+      const unwrap = (obj: any): any | null => {
+        if (!obj || typeof obj !== 'object') return null;
+        if (obj.id != null && (obj.role != null || obj.position != null || obj.email != null)) return obj;
+        const d = obj.data;
+        if (d && typeof d === 'object') {
+          // data.user
+          if (d.user && typeof d.user === 'object') return d.user;
+          // data.data (иногда двойная обёртка)
+          if (d.data && typeof d.data === 'object') {
+            if (d.data.user && typeof d.data.user === 'object') return d.data.user;
+            return d.data;
+          }
+          return d;
+        }
+        // user в корне
+        if (obj.user && typeof obj.user === 'object') return obj.user;
+        return null;
+      };
+
+      return unwrap(parsed) ?? parsed;
+    } catch {
+      return null;
+    }
   }
 
   async getCurrentUserProfile(): Promise<any> {
@@ -205,18 +232,16 @@ class ApiService {
     return response;
   }
 
-  /** Назначения рабочих на день. all=1 — все бригадиры (для проверки занятости). project_id — фильтр по проекту */
-  async getAssignments(assignmentDate: string, options?: { all?: boolean; project_id?: number }): Promise<any> {
+  /** Назначения рабочих на день. Только свои (бригадир = авторизованный пользователь). project_id — фильтр по проекту */
+  async getAssignments(assignmentDate: string, projectId?: number): Promise<any> {
     let url = `/assignments?assignment_date=${assignmentDate}`;
-    if (options?.all) url += '&all=1';
-    if (options?.project_id != null) url += `&project_id=${options.project_id}`;
+    if (projectId != null) url += `&project_id=${projectId}`;
     return this.request<any>(url, { method: 'GET' });
   }
 
-  /** Рабочие с информацией о занятости (кто кем назначен). project_id — фильтр по проекту */
-  async getAssignmentsWorkers(assignmentDate: string, projectId?: number): Promise<any> {
-    let url = `/assignments/workers?assignment_date=${assignmentDate}`;
-    if (projectId != null) url += `&project_id=${projectId}`;
+  /** Все доступные рабочие с информацией о назначениях (assigned, brigadier_id, brigadier). Только assignment_date */
+  async getAssignmentsWorkers(assignmentDate: string): Promise<any> {
+    const url = `/assignments/workers?assignment_date=${assignmentDate}`;
     return this.request<any>(url, { method: 'GET' });
   }
 
@@ -233,14 +258,12 @@ class ApiService {
     });
   }
 
-  /** Удалить назначение: id в URL — assignment_id или worker_id. project_id — если backend поддерживает привязку к проекту */
-  async deleteAssignment(id: number, assignmentDate: string, projectId?: number): Promise<any> {
-    const body: Record<string, unknown> = { assignment_date: assignmentDate };
-    if (projectId != null) body.project_id = projectId;
-    return this.request<any>(`/assignments/delete/${id}`, {
+  /** Удалить назначение. id в URL — worker_id. Только бригадир, только своих сотрудников. Body: assignment_date */
+  async deleteAssignment(workerId: number, assignmentDate: string): Promise<any> {
+    return this.request<any>(`/assignments/delete/${workerId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ assignment_date: assignmentDate }),
     });
   }
 

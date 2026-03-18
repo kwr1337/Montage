@@ -89,6 +89,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
   const [tooltipAnchor, setTooltipAnchor] = useState<{ x: number; y: number } | null>(null);
   const [tooltipEmployees, setTooltipEmployees] = useState<any[]>([]);
   const tooltipCloseTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipProjectFetchRef = React.useRef<number | null>(null);
 
   const clearCloseTimeout = React.useCallback(() => {
     if (tooltipCloseTimeoutRef.current) {
@@ -451,6 +452,11 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
   useEffect(() => {
     const fetchProjectDetails = async () => {
       if (selectedProjectId) {
+        // Пропускаем fetch, если данные только что пришли от ProjectDetail (добавление/удаление сотрудника и т.д.)
+        if (skipProjectFetchRef.current === selectedProjectId) {
+          skipProjectFetchRef.current = null;
+          return;
+        }
         // Сначала показываем данные из локального списка (если есть) для мгновенного отображения
         const localProject = projects.find(p => p.id === selectedProjectId);
         if (localProject) {
@@ -630,9 +636,10 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
       setProjects(prevProjects => 
         prevProjects.map(p => p.id === updatedProject.id ? updatedProject : p)
       );
-      // Обновляем выбранный проект, если это он
+      // Обновляем выбранный проект, если это он (ребёнок уже загрузил полные данные — избегаем дубль GET)
       if (selectedProject && selectedProject.id === updatedProject.id) {
         setSelectedProject(updatedProject);
+        skipProjectFetchRef.current = updatedProject.id;
       }
     }
   };

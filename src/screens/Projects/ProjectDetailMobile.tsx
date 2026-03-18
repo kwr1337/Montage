@@ -300,12 +300,19 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     };
   }, []);
 
-  // Загрузка назначений рабочих на день (вкладка СОТРУДНИКИ и для фильтрации Фиксации работ)
+  // Загрузка назначений рабочих на день. Только для бригадиров — API доступен только им.
+  const currentUser = apiService.getCurrentUser();
+  const isBrigadierForAssignments = (currentUser?.role || currentUser?.position) === 'Бригадир';
+  const myBrigadierId = currentUser?.id ?? null;
+
   useEffect(() => {
     if (activeTab !== 'general' && activeTab !== 'tracking') return;
+    if (!isBrigadierForAssignments) {
+      setDayAssignedWorkers([]);
+      setWorkersWithBusy([]);
+      return;
+    }
     let isCancelled = false;
-    const currentUser = apiService.getCurrentUser();
-    const myBrigadierId = currentUser?.id ?? null;
 
     const loadAssignments = async () => {
       try {
@@ -318,17 +325,14 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
         } else {
           const projectId = project?.id;
           [assignRes, workersRes] = await Promise.all([
-            apiService.getAssignments(assignmentDate, {
-              all: true,
-              ...(projectId != null && { project_id: projectId }),
-            }),
-            apiService.getAssignmentsWorkers(assignmentDate, projectId),
+            apiService.getAssignments(assignmentDate, projectId ?? undefined),
+            apiService.getAssignmentsWorkers(assignmentDate),
           ]);
         }
 
         if (isCancelled) return;
 
-        // Нормализация назначений: { data: [...] }
+        // Нормализация назначений: API возвращает только свои
         let assigned: any[] = [];
         const assignData = assignRes?.data ?? assignRes;
         if (Array.isArray(assignData)) {
@@ -339,22 +343,19 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           assigned = assignData.assignments;
         }
 
-        // Рабочие, занятые другими бригадирами (не текущим) — по данным assignments
-        const busyByOther = new Map<number, string>();
-        assigned.forEach((a: any) => {
+        // ID рабочих, уже назначенных в текущий проект (чтобы не показывать «Занят» для них)
+        const currentProjectId = project?.id;
+        const myAssignedForProject = assigned.filter((a: any) => {
           const brigId = a.brigadier_id ?? a.brigadier?.id;
-          const workerId = a.worker_id ?? a.worker?.id;
-          if (workerId != null && brigId != null && Number(brigId) !== Number(myBrigadierId)) {
-            const brig = a.brigadier;
-            const foremanName = brig?.last_name
-              ? `${brig.last_name} ${(brig.first_name || '').charAt(0)}. ${(brig.second_name || '').charAt(0)}.`.trim()
-              : 'др. бригадиром';
-            busyByOther.set(workerId, foremanName);
-          }
+          if (brigId != null && Number(brigId) !== Number(myBrigadierId)) return false;
+          if (currentProjectId != null && a.project_id != null && a.project_id !== currentProjectId) return false;
+          return true;
         });
+        const idsInCurrentProject = new Set(
+          myAssignedForProject.map((a: any) => a.worker_id ?? a.worker?.id ?? a.user_id ?? a.id).filter(Boolean)
+        );
 
-        // Нормализация workers с busy
-        // API /assignments/workers возвращает: assigned, brigadier_id, brigadier (при занятости другим)
+        // Нормализация workers. API /assignments/workers возвращает: assigned, brigadier_id, brigadier
         let workers: WorkerWithBusy[] = [];
         const workersData = workersRes?.data ?? workersRes;
         const formatBrigadierName = (b: any) => {
@@ -367,8 +368,21 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
         const parseWorker = (w: any) => {
           const wid = w.id ?? w.user_id;
           let apiBusy: { foreman_name: string } | undefined;
-          if (w.assigned === true && w.brigadier_id != null && Number(w.brigadier_id) !== Number(myBrigadierId)) {
-            apiBusy = { foreman_name: formatBrigadierName(w.brigadier) };
+          if (w.assigned === true) {
+            // Назначен в другом проекте — не выбирать. Если в текущем — не busy (покажет isAlreadyMine)
+            if (idsInCurrentProject.has(wid)) return {
+              id: wid,
+              first_name: w.first_name,
+              second_name: w.second_name,
+              last_name: w.last_name,
+              busy: undefined,
+              is_dismissed: w.is_dismissed === true,
+            };
+            if (w.brigadier_id != null && Number(w.brigadier_id) !== Number(myBrigadierId)) {
+              apiBusy = { foreman_name: formatBrigadierName(w.brigadier) };
+            } else {
+              apiBusy = { foreman_name: 'др. проект' };
+            }
           } else if (w.busy) {
             apiBusy = { foreman_name: w.busy?.foreman_name ?? w.busy?.brigadier_name ?? (typeof w.busy === 'string' ? w.busy : 'др. бригадиром') };
           } else if (w.assigned_by) {
@@ -376,13 +390,12 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           } else if (w.assigned_to_brigadier || w.brigadier_name) {
             apiBusy = { foreman_name: w.brigadier_name ?? w.assigned_to_brigadier ?? 'др. бригадиром' };
           }
-          const ourBusy = busyByOther.has(wid) ? { foreman_name: busyByOther.get(wid)! } : undefined;
           return {
             id: wid,
             first_name: w.first_name,
             second_name: w.second_name,
             last_name: w.last_name,
-            busy: apiBusy ?? ourBusy,
+            busy: apiBusy,
             is_dismissed: w.is_dismissed === true,
           };
         };
@@ -401,16 +414,13 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
             : [];
           workers = arr
             .filter((u: any) => u.is_employee !== false && u.employee_status !== 'dismissed')
-            .map((u: any) => {
-              const ourBusy = busyByOther.has(u.id) ? { foreman_name: busyByOther.get(u.id)! } : undefined;
-              return {
-                id: u.id,
-                first_name: u.first_name,
-                second_name: u.second_name,
-                last_name: u.last_name,
-                busy: ourBusy,
-              };
-            });
+            .map((u: any) => ({
+              id: u.id,
+              first_name: u.first_name,
+              second_name: u.second_name,
+              last_name: u.last_name,
+              busy: undefined,
+            }));
         }
 
         // В мобильной версии — все рабочие из списка (не только добавленные в проект)
@@ -440,15 +450,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           // игнорируем ошибку getUsers
         }
 
-        // API возвращает { id, worker_id, worker, brigadier_id, project_id }. Только свои назначения в день и для текущего проекта.
-        const currentProjectId = project?.id;
-        const myAssigned = assigned.filter((a: any) => {
-          const brigId = a.brigadier_id ?? a.brigadier?.id;
-          if (brigId != null && Number(brigId) !== Number(myBrigadierId)) return false;
-          if (currentProjectId != null && a.project_id != null && a.project_id !== currentProjectId) return false;
-          return true;
-        });
-        const workersList = myAssigned
+        const workersList = myAssignedForProject
           .map((a: any) => {
             const worker = a.worker ?? a.user ?? {};
             const workerId = a.worker_id ?? worker.id ?? a.user_id ?? a.id;
@@ -476,7 +478,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
 
     loadAssignments();
     return () => { isCancelled = true; };
-  }, [activeTab, assignmentDate, isAddEmployeesModalOpen, mockApiResponses, project?.id, project?.employees]);
+  }, [activeTab, assignmentDate, isAddEmployeesModalOpen, isBrigadierForAssignments, mockApiResponses, project?.id, project?.employees]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -1204,6 +1206,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   };
 
   const handleAddEmployees = async (workerIds: number[]) => {
+    if (!isBrigadierForAssignments) return;
     const projectId = project?.id;
     if (!projectId) {
       alert('Не выбран проект для назначения');
@@ -1238,10 +1241,11 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
 
   const handleRemoveEmployee = async () => {
     if (!removeConfirmEmployee) return;
+    if (!isBrigadierForAssignments) return;
     if (!mockApiResponses) {
       // Бэкенд ожидает worker_id в URL (по аналогии с add), не assignment_id
       const deleteId = removeConfirmEmployee.id;
-      await apiService.deleteAssignment(deleteId, assignmentDate, project?.id);
+      await apiService.deleteAssignment(deleteId, assignmentDate);
     }
     setDayAssignedWorkers((prev) =>
       prev.filter((p: any) =>
@@ -1550,36 +1554,40 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
               <section className="mobile-project-detail__employees">
                 <div className="mobile-project-detail__employees-header">
                   <span className="mobile-project-detail__section-label">СОТРУДНИКИ</span>
-                  <button
-                    type="button"
-                    className="mobile-project-detail__employees-add"
-                    onClick={() => setIsAddEmployeesModalOpen(true)}
-                  >
-                    + Добавить
-                  </button>
+                  {isBrigadierForAssignments && (
+                    <button
+                      type="button"
+                      className="mobile-project-detail__employees-add"
+                      onClick={() => setIsAddEmployeesModalOpen(true)}
+                    >
+                      + Добавить
+                    </button>
+                  )}
                 </div>
                 <div className="mobile-project-detail__employees-chips">
                   {dayAssignedWorkers.map((emp: any) => (
                     <div key={emp.assignment_id ?? emp.id} className="mobile-project-detail__employees-chip">
                       <span>{formatWorkerNameShort(emp)}</span>
-                      <button
-                        type="button"
-                        className="mobile-project-detail__employees-chip-remove"
-                        onClick={() => setRemoveConfirmEmployee({
-                          id: emp.id,
-                          assignment_id: emp.assignment_id,
-                          name: formatWorkerNameShort(emp),
-                        })}
-                        aria-label="Удалить"
-                      >
-                        ×
-                      </button>
+                      {isBrigadierForAssignments && (
+                        <button
+                          type="button"
+                          className="mobile-project-detail__employees-chip-remove"
+                          onClick={() => setRemoveConfirmEmployee({
+                            id: emp.id,
+                            assignment_id: emp.assignment_id,
+                            name: formatWorkerNameShort(emp),
+                          })}
+                          aria-label="Удалить"
+                        >
+                          ×
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
                 {dayAssignedWorkers.length === 0 && (
                   <div className="mobile-project-detail__employees-empty">
-                    Нет сотрудников на сегодня
+                    {isBrigadierForAssignments ? 'Нет сотрудников на сегодня' : 'Назначения доступны только бригадирам'}
                   </div>
                 )}
               </section>
