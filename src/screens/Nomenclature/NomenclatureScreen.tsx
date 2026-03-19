@@ -1,6 +1,9 @@
 import React from 'react';
-import nomenclaturaIconGrey from '../../shared/icons/nomenculaturaIconGrey.svg';
+import nomenclaturaIconGreyRaw from '../../shared/icons/nomenculaturaIconGrey.svg?raw';
 import { PageHeader } from '../../shared/ui/PageHeader/PageHeader';
+import './nomenclature.scss';
+
+const nomenclaturaIconGrey = `data:image/svg+xml,${encodeURIComponent(nomenclaturaIconGreyRaw)}`;
 
 export const NomenclatureScreen: React.FC = () => {
   return (

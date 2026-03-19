@@ -1,6 +1,9 @@
 import React from 'react';
-import searchIcon from '../../icons/searchIcon.svg';
+import searchIconRaw from '../../icons/searchIcon.svg?raw';
 import './search-input.scss';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const searchIcon = toDataUrl(searchIconRaw);
 
 type SearchInputProps = {
   value: string;

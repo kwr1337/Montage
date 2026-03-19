@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import calendarIconGrey from '../../icons/calendarIconGrey.svg';
-import upDownTableFilter from '../../icons/upDownTableFilter.svg';
-import closeIcon from '../../icons/closeIcon.svg';
+import calendarIconGreyRaw from '../../icons/calendarIconGrey.svg?raw';
+import upDownTableFilterRaw from '../../icons/upDownTableFilter.svg?raw';
+import closeIconRaw from '../../icons/closeIcon.svg?raw';
 import './edit-nomenclature-modal.scss';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const calendarIconGrey = toDataUrl(calendarIconGreyRaw);
+const upDownTableFilter = toDataUrl(upDownTableFilterRaw);
+const closeIcon = toDataUrl(closeIconRaw);
 
 interface EditNomenclatureModalProps {
   isOpen: boolean;

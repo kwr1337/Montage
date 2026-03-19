@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import closeIcon from '../../icons/closeIcon.svg';
+import closeIconRaw from '../../icons/closeIcon.svg?raw';
 import './add-employees-modal.scss';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const closeIcon = toDataUrl(closeIconRaw);
 
 export type WorkerWithBusy = {
   id: number;
@@ -9,6 +12,8 @@ export type WorkerWithBusy = {
   last_name?: string;
   /** Занят другим бригадиром: { foreman_name: string } */
   busy?: { foreman_name?: string } | null;
+  /** Ставка в час (для отображения в фиксации часов) */
+  rate_per_hour?: number;
 };
 
 interface AddEmployeesModalProps {

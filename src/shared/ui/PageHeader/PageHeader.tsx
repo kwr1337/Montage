@@ -1,10 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { CategoryBadge } from '../CategoryBadge/CategoryBadge';
 import { apiService } from '../../../services/api';
-import plusIcon from '../../icons/plus-icon.svg';
-import userDropdownIcon from '../../icons/user-dropdown-icon.svg';
-import logoutIcon from '../../icons/logoutIcon.svg';
+import plusIconRaw from '../../icons/plus-icon.svg?raw';
+import userDropdownIconRaw from '../../icons/user-dropdown-icon.svg?raw';
+import logoutIconRaw from '../../icons/logoutIcon.svg?raw';
 import './page-header.scss';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const plusIcon = toDataUrl(plusIconRaw);
+const userDropdownIcon = toDataUrl(userDropdownIconRaw);
+const logoutIcon = toDataUrl(logoutIconRaw);
 
 type PageHeaderProps = {
   // Левая часть
@@ -52,30 +58,25 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   onLogout,
   className,
 }) => {
+  const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const fetchUserProfile = async () => {
-      try {
-        const response = await apiService.getCurrentUserProfile();
-        const userData = response?.data ?? response;
-        if (userData && (userData.id || userData.role != null || userData.position != null)) {
-          setCurrentUser(userData);
-          localStorage.setItem('user', JSON.stringify(userData));
-        }
-      } catch (error) {
-        // Если запрос не удался, используем данные из localStorage
-        const user = apiService.getCurrentUser();
-        if (user) {
-          setCurrentUser(user);
-        }
-      }
-    };
-
+    const user = apiService.getCurrentUser();
+    if (user) {
+      setCurrentUser(user);
+    }
     if (apiService.isAuthenticated()) {
-      fetchUserProfile();
+      apiService.getCurrentUserProfile()
+        .then(response => {
+          const userData = response?.data ?? response;
+          if (userData && (userData.id || userData.role != null || userData.position != null)) {
+            setCurrentUser(userData);
+          }
+        })
+        .catch(() => {});
     }
   }, []);
 
@@ -144,28 +145,20 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
 
   const handleLogout = async () => {
     try {
-      // Вызываем API logout если есть функция
       if (onLogout) {
         await onLogout();
       }
-      
-      // Удаляем все данные из localStorage
       localStorage.removeItem('auth_token');
       localStorage.removeItem('token_type');
       localStorage.removeItem('user');
-      
-      // Закрываем дропдаун
       setIsUserDropdownOpen(false);
-      
-      // Перезагружаем страницу для выхода
-      window.location.reload();
+      navigate('/login');
     } catch (error) {
       console.error('Logout error:', error);
-      // Даже если произошла ошибка, очищаем localStorage и перезагружаем
       localStorage.removeItem('auth_token');
       localStorage.removeItem('token_type');
       localStorage.removeItem('user');
-      window.location.reload();
+      navigate('/login');
     }
   };
   return (

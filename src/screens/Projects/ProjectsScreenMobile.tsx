@@ -1,10 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { apiService } from '../../services/api';
 import { mockData } from '../../mocks/mobile-project-mock';
-import menuIconGrey from '../../shared/icons/menuIconGrey.svg';
-import editMobIcon from '../../shared/icons/editMob.svg';
-import exitMobIcon from '../../shared/icons/exitMob.svg';
-import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
+import menuIconGreyRaw from '../../shared/icons/menuIconGrey.svg?raw';
+import editMobIconRaw from '../../shared/icons/editMob.svg?raw';
+import exitMobIconRaw from '../../shared/icons/exitMob.svg?raw';
+import upDownTableFilterRaw from '../../shared/icons/upDownTableFilter.svg?raw';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const menuIconGrey = toDataUrl(menuIconGreyRaw);
+const editMobIcon = toDataUrl(editMobIconRaw);
+const exitMobIcon = toDataUrl(exitMobIconRaw);
+const upDownTableFilter = toDataUrl(upDownTableFilterRaw);
 import { ProjectDetailMobile } from './ProjectDetailMobile';
 import './projects-mobile.scss';
 
@@ -183,56 +189,18 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
         const userRole = (currentUser?.role || currentUser?.position || '').toString();
         const isBrigadier = userRole === 'Бригадир';
         const managerId = currentUser?.id ? Number(currentUser.id) : null;
-        const filterByManagerId = managerId != null ? { filter: { manager_id: [managerId] } } : {};
-        const filterByProjectManagers = managerId != null ? { filter: { project_managers: [managerId] } } : {};
-        const myOpts = isBrigadier ? { my: true as const } : {};
-        const attempts: Array<() => Promise<any>> = [
-          // 1) filter[project_managers][]=id
-          ...(isBrigadier && managerId != null
-            ? [
-                () => apiService.getProjects(1, 100, { with: ['employees', 'logs'], ...filterByProjectManagers }),
-                () => apiService.getProjects(1, 100, { with: ['logs'], ...filterByProjectManagers }),
-            ]
-            : []),
-          // 2) filter[manager_id]=id (НЕ []= — вызывает 500)
-          ...(isBrigadier && managerId != null
-            ? [
-                () => apiService.getProjects(1, 100, { with: ['employees', 'logs'], ...filterByManagerId }),
-                () => apiService.getProjects(1, 100, { with: ['logs'], ...filterByManagerId }),
-            ]
-            : []),
-          // 3) my=1
-          ...(isBrigadier
-            ? [
-                () => apiService.getProjects(1, 100, { with: ['employees', 'logs'], ...myOpts }),
-                () => apiService.getProjects(1, 100, { with: ['logs'], ...myOpts }),
-                () => apiService.getProjects(1, 100, myOpts),
-              ]
-            : []),
-          // 4) без фильтра (бэкенд может сам фильтровать по JWT)
-          () => apiService.getProjects(1, 100, { with: ['employees', 'logs'] }),
-          () => apiService.getProjects(1, 100, { with: ['logs'] }),
-          () => apiService.getProjects(1, 100),
-          () => apiService.getProjects(1, 100, { noPagination: true, with: ['logs'] }),
-        ];
 
-        for (const fetchFn of attempts) {
-          const response = await fetchFn();
-          data = extractProjectsFromResponse(response);
-          if (data.length > 0) break;
+        const primaryFilter: Record<string, any> = { with: ['employees', 'logs'] };
+        if (isBrigadier && managerId != null) {
+          primaryFilter.filter = { project_managers: [managerId] };
         }
 
+        const response = await apiService.getProjects(1, 100, primaryFilter);
+        data = extractProjectsFromResponse(response);
+
         if (data.length === 0) {
-          try {
-            const meResponse = await apiService.getCurrentUserProfile();
-            const meData = meResponse?.data ?? meResponse;
-            const projectsFromMe = meData?.projects ?? meData?.user?.projects;
-            if (Array.isArray(projectsFromMe) && projectsFromMe.length > 0) {
-              data = projectsFromMe;
-            }
-          } catch {
-            // /auth/me может не возвращать проекты
-          }
+          const fallbackResponse = await apiService.getProjects(1, 100, { with: ['employees', 'logs'] });
+          data = extractProjectsFromResponse(fallbackResponse);
         }
 
         let filteredData = data.filter((project) => {

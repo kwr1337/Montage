@@ -4,10 +4,16 @@ import { Pagination } from '../../shared/ui/Pagination/Pagination';
 import { AddPaymentModal } from '../../shared/ui/AddPaymentModal/AddPaymentModal';
 import { apiService } from '../../services/api';
 import { canAccessSalary } from '../../services/permissions';
-import zpIconGrey from '../../shared/icons/zpIconGrey.svg';
-import searchIcon from '../../shared/icons/searchIcon.svg';
-import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
-import calendarIconGrey from '../../shared/icons/calendarIconGrey.svg';
+import zpIconGreyRaw from '../../shared/icons/zpIconGrey.svg?raw';
+import searchIconRaw from '../../shared/icons/searchIcon.svg?raw';
+import upDownTableFilterRaw from '../../shared/icons/upDownTableFilter.svg?raw';
+import calendarIconGreyRaw from '../../shared/icons/calendarIconGrey.svg?raw';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const zpIconGrey = toDataUrl(zpIconGreyRaw);
+const searchIcon = toDataUrl(searchIconRaw);
+const upDownTableFilter = toDataUrl(upDownTableFilterRaw);
+const calendarIconGrey = toDataUrl(calendarIconGreyRaw);
 import * as XLSX from 'xlsx';
 import './salary.scss';
 
@@ -112,16 +118,31 @@ export const SalaryScreen: React.FC = () => {
   const loadPayments = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      // API требует project_id — загружаем проекты и получаем выплаты по каждому
+      let allProjectsList: any[] = [];
       let projectIds: number[] = [];
       try {
-        const projectsRes = await apiService.getProjects(1, 1000);
+        const projectsRes = await apiService.getProjects(1, 1000, { with: ['employees'] });
         const projectsList = projectsRes?.data?.data || projectsRes?.data || projectsRes;
-        const arr = Array.isArray(projectsList) ? projectsList : [projectsList];
-        projectIds = arr.filter((p: any) => p?.id).map((p: any) => p.id);
+        allProjectsList = Array.isArray(projectsList) ? projectsList : [projectsList];
+        allProjectsList = allProjectsList.filter((p: any) => p?.id);
+        projectIds = allProjectsList.map((p: any) => p.id);
       } catch (e) {
         console.error('Error loading projects for payments:', e);
       }
+
+      let allUsersList: any[] = [];
+      try {
+        const usersResponse = await apiService.getUsers();
+        const users = usersResponse && usersResponse.data
+          ? (Array.isArray(usersResponse.data) ? usersResponse.data : [usersResponse.data])
+          : (Array.isArray(usersResponse) ? usersResponse : []);
+        allUsersList = users;
+      } catch (e) {
+        console.error('Error loading users for payments:', e);
+      }
+      const usersById = new Map(allUsersList.map((u: any) => [u.id, u]));
+
+      const workReportsCache = new Map<string, any[]>();
 
       // Не передаём date_from/date_to в API — бэкенд может исключать платежи с выплатами в разных месяцах.
       // Фильтрация по датам выполняется локально в filteredPayments.
@@ -136,7 +157,6 @@ export const SalaryScreen: React.FC = () => {
           })
         : { data: { data: [] } };
 
-      console.log('Payments API response:', response);
 
       let paymentsData: Payment[] = [];
       if (response) {
@@ -154,7 +174,6 @@ export const SalaryScreen: React.FC = () => {
         }
       }
 
-      console.log('Parsed payments data:', paymentsData);
 
         // Группируем выплаты по сотрудникам И месяцам
         // Каждая выплата за отдельный месяц должна быть отдельной строкой
@@ -197,51 +216,20 @@ export const SalaryScreen: React.FC = () => {
           }
         });
 
-        console.log(`Grouped ${paymentsData.length} payments into ${paymentsByEmployeeAndMonth.size} employee-month combinations`);
-
-        // Форматируем данные для отображения - одна строка на сотрудника-месяц
+        // Форматируем данные для отображения — одна строка на сотрудника-месяц
         const formattedPayments = await Promise.all(
           Array.from(paymentsByEmployeeAndMonth.values()).map(async (payment) => {
             const userId = payment.user_id;
             
-            // Проверяем разные варианты структуры данных пользователя
-            const user = payment.user;
-            
-            // Если user не загружен, но есть user_id, загружаем пользователя отдельно
-            let userData: any = user;
-            if (!userData && userId) {
-              try {
-                const usersResponse = await apiService.getUsers();
-                const users = usersResponse && usersResponse.data 
-                  ? (Array.isArray(usersResponse.data) ? usersResponse.data : [usersResponse.data])
-                  : (Array.isArray(usersResponse) ? usersResponse : []);
-                userData = users.find((u: any) => u.id === userId);
-              } catch (error) {
-                console.error('Error loading user:', error);
-              }
-            }
-            
-            console.log('Payment data:', payment);
-            console.log('User data:', userData);
-            console.log('User ID:', userId);
+            const userData: any = payment.user || usersById.get(userId) || null;
             
             let hours = 0;
             let total = 0;
             const rate = userData?.rate_per_hour || 0;
 
-            // Загружаем часы для сотрудника из всех проектов
             if (userId) {
               try {
-                // Получаем все проекты с сотрудниками (для истории выплат включаем уволенных)
-                const projectsResponse = await apiService.getProjects(1, 1000, { with: ['employees'] });
-                let projects: any[] = [];
-                if (projectsResponse && projectsResponse.data) {
-                  const data = projectsResponse.data.data || projectsResponse.data;
-                  projects = Array.isArray(data) ? data : [data];
-                }
-
-                // Находим проекты, где сотрудник участвует (включая уволенных — для истории выплат)
-                let projectsToCheck = projects.filter((project: any) => {
+                let projectsToCheck = allProjectsList.filter((project: any) => {
                   if (!project.employees || !Array.isArray(project.employees)) return false;
                   return project.employees.some((emp: any) => {
                     const empId = emp.id || emp.user_id;
@@ -249,13 +237,11 @@ export const SalaryScreen: React.FC = () => {
                   });
                 });
 
-                // Fallback: если сотрудника нет в project.employees (напр. уволен), используем project_id из выплаты
                 if (projectsToCheck.length === 0 && payment.project_id) {
-                  projectsToCheck = projects.filter((p: any) => p.id === payment.project_id);
+                  projectsToCheck = allProjectsList.filter((p: any) => p.id === payment.project_id);
                 }
 
                 const employeeProjects = projectsToCheck;
-                console.log(`Found ${employeeProjects.length} projects for employee ${userId}`);
 
                 // Определяем месяц для подсчета часов
                 // Используем месяц из первой выплаты, если она есть, иначе текущий месяц
@@ -289,45 +275,45 @@ export const SalaryScreen: React.FC = () => {
                 const monthStartStr = monthStart.toISOString().split('T')[0];
                 const monthEndStr = monthEnd.toISOString().split('T')[0];
                 
-                console.log(`Employee ${userId}: Calculating hours for period: ${monthStartStr} to ${monthEndStr} (based on first payment date: ${payment.first_payment_date || 'none'})`);
 
                 // Суммируем часы из всех проектов сотрудника за выбранный месяц
                 const allHours = await Promise.all(
                   employeeProjects.map(async (project: any) => {
                     try {
-                      const response = await apiService.getWorkReports(project.id, userId, {
-                        per_page: 1000,
-                        filter: {
-                          date_from: monthStartStr,
-                          date_to: monthEndStr,
-                        },
-                      });
-                      
-                      let reports: any[] = [];
-                      if (response?.data?.data && Array.isArray(response.data.data)) {
-                        reports = response.data.data;
-                      } else if (response?.data && Array.isArray(response.data)) {
-                        reports = response.data;
-                      } else if (Array.isArray(response)) {
-                        reports = response;
+                      const cacheKey = `${project.id}:${userId}:${monthStartStr}:${monthEndStr}`;
+                      let reports: any[];
+                      if (workReportsCache.has(cacheKey)) {
+                        reports = workReportsCache.get(cacheKey)!;
+                      } else {
+                        const response = await apiService.getWorkReports(project.id, userId, {
+                          per_page: 1000,
+                          filter: {
+                            date_from: monthStartStr,
+                            date_to: monthEndStr,
+                          },
+                        });
+                        reports = [];
+                        if (response?.data?.data && Array.isArray(response.data.data)) {
+                          reports = response.data.data;
+                        } else if (response?.data && Array.isArray(response.data)) {
+                          reports = response.data;
+                        } else if (Array.isArray(response)) {
+                          reports = response;
+                        }
+                        workReportsCache.set(cacheKey, reports);
                       }
-                      
-                      // Фильтруем отчеты по месяцу (на случай, если API не отфильтровал)
+
                       const monthReports = reports.filter((report) => {
                         if (!report.report_date) return false;
                         const reportDate = new Date(report.report_date);
                         return reportDate >= monthStart && reportDate <= monthEnd;
                       });
-                      
-                      // Суммируем часы только за выбранный месяц
-                      const projectHours = monthReports.reduce((sum, report) => {
+
+                      return monthReports.reduce((sum, report) => {
                         const hoursWorked = Number(report.hours_worked) || 0;
                         const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
                         return sum + (isAbsent ? 0 : hoursWorked);
                       }, 0);
-                      
-                      console.log(`Project ${project.id}: ${projectHours} hours for period ${monthStartStr} - ${monthEndStr}`);
-                      return projectHours;
                     } catch (error) {
                       console.error(`Error loading work reports for employee ${userId} in project ${project.id}:`, error);
                       return 0;
@@ -337,7 +323,6 @@ export const SalaryScreen: React.FC = () => {
 
                 hours = allHours.reduce((sum, h) => sum + h, 0);
                 total = hours * rate;
-                console.log(`Total hours for employee ${userId}: ${hours}, total: ${total}`);
               } catch (error) {
                 console.error(`Error loading hours for employee ${userId}:`, error);
               }
@@ -354,8 +339,6 @@ export const SalaryScreen: React.FC = () => {
             if (effectiveTotal === 0 && (firstAmount > 0 || secondAmount > 0 || thirdAmount > 0)) {
               effectiveTotal = firstAmount + secondAmount + thirdAmount;
             }
-
-            console.log(`Formatted payment: name=${employeeName}, role=${employeePosition}, rate=${rate}, hours=${hours}, total=${effectiveTotal}`);
 
             // Используем данные из выплаты
             return {

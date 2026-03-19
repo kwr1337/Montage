@@ -1,12 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { apiService } from '../../services/api';
 import { canCreateProject } from '../../services/permissions';
 import { ProjectDetail } from './ProjectDetail';
-import menuIconGrey from '../../shared/icons/menuIconGrey.svg';
-import searchIcon from '../../shared/icons/searchIcon.svg';
-import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
-import brigadirIcon from '../../shared/icons/brigadirIcon.svg';
+import menuIconGreyRaw from '../../shared/icons/menuIconGrey.svg?raw';
+import searchIconRaw from '../../shared/icons/searchIcon.svg?raw';
+import upDownTableFilterRaw from '../../shared/icons/upDownTableFilter.svg?raw';
+import brigadirIconRaw from '../../shared/icons/brigadirIcon.svg?raw';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const menuIconGrey = toDataUrl(menuIconGreyRaw);
+const searchIcon = toDataUrl(searchIconRaw);
+const upDownTableFilter = toDataUrl(upDownTableFilterRaw);
+const brigadirIcon = toDataUrl(brigadirIconRaw);
 import { PageHeader } from '../../shared/ui/PageHeader/PageHeader';
 import StatusFilter from '../../shared/ui/StatusFilter/StatusFilter';
 import { Pagination } from '../../shared/ui/Pagination/Pagination';
@@ -51,40 +58,36 @@ type ProjectsScreenProps = {
 type ProjectHistoryEntry = number | 'new' | null;
 
 export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
+  const navigate = useNavigate();
+  const params = useParams();
+
+  const selectedProjectId: number | null = params['*']
+    ? (() => {
+        const seg = params['*'].split('/')[0];
+        if (seg === 'new') return null;
+        const parsed = parseInt(seg, 10);
+        return isNaN(parsed) ? null : parsed;
+      })()
+    : null;
+
+  const isCreatingFromUrl = params['*'] === 'new';
+
   const [searchValue, setSearchValue] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [projects, setProjects] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedProjectIds, setSelectedProjectIds] = useState<Set<number>>(new Set());
   const [isArchiving, setIsArchiving] = useState(false);
-  // Восстанавливаем selectedProjectId из localStorage при загрузке
-  // При перезагрузке страницы восстанавливаем из sessionStorage (если есть)
-  // При переключении вкладок localStorage будет очищен, поэтому карточка не откроется
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(() => {
-    // Сначала проверяем sessionStorage (для перезагрузки страницы)
-    const savedFromSession = sessionStorage.getItem('savedProjectId');
-    if (savedFromSession) {
-      return parseInt(savedFromSession, 10);
-    }
-    // Затем проверяем localStorage (для обычной навигации)
-    const saved = localStorage.getItem('selectedProjectId');
-    return saved ? parseInt(saved, 10) : null;
-  });
   const [navigationHistory, setNavigationHistory] = useState<ProjectHistoryEntry[]>(() => {
-    const savedFromSession = sessionStorage.getItem('savedProjectId');
-    const savedId = savedFromSession ? parseInt(savedFromSession, 10) : (localStorage.getItem('selectedProjectId') ? parseInt(localStorage.getItem('selectedProjectId')!, 10) : null);
-    return savedId ? [null, savedId] : [null];
+    return selectedProjectId ? [null, selectedProjectId] : [null];
   });
   const [historyIndex, setHistoryIndex] = useState(() => {
-    const savedFromSession = sessionStorage.getItem('savedProjectId');
-    const saved = savedFromSession || localStorage.getItem('selectedProjectId');
-    return saved ? 1 : 0;
+    return selectedProjectId ? 1 : 0;
   });
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const itemsPerPage = 11;
-  const [isCreatingProject, setIsCreatingProject] = useState(false);
-  const [projectSpentMap, setProjectSpentMap] = useState<Map<number, number>>(new Map());
+  const [isCreatingProject, setIsCreatingProject] = useState(isCreatingFromUrl);
   const [hoveredProjectId, setHoveredProjectId] = useState<number | null>(null);
   const [tooltipAnchor, setTooltipAnchor] = useState<{ x: number; y: number } | null>(null);
   const [tooltipEmployees, setTooltipEmployees] = useState<any[]>([]);
@@ -134,79 +137,8 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
   const [sortField, setSortField] = useState<string | null>(null); // null = сортировка по дате добавления (по умолчанию)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc'); // по умолчанию по убыванию
 
-  // Функция для расчета суммы израсходованных средств проекта
-  // На основе суммы колонки "Сумма (всего)" из таблицы фиксации работ
   const calculateTotalSpent = (project: any): number => {
-    // Используем кэшированное значение, если оно есть
-    if (projectSpentMap.has(project.id)) {
-      return projectSpentMap.get(project.id) || 0;
-    }
-    
-    // Если данных еще нет, возвращаем 0 (данные загрузятся асинхронно)
-    return 0;
-  };
-
-  // Функция для загрузки израсходованных сумм для всех проектов
-  const loadProjectsSpent = async (projectsList: any[]) => {
-    const spentMap = new Map<number, number>();
-    
-    await Promise.all(
-      projectsList.map(async (project) => {
-        if (!project.id || !project.employees || !Array.isArray(project.employees)) {
-          spentMap.set(project.id, 0);
-          return;
-        }
-        
-        try {
-          // Загружаем work_reports для всех сотрудников проекта и суммируем
-          const totalSpent = await Promise.all(
-            project.employees
-              .filter((emp: any) => !emp.pivot?.end_working_date) // Только активные
-              .map(async (emp: any) => {
-                try {
-                  const response = await apiService.getWorkReports(project.id, emp.id, {
-                    per_page: 1000,
-                  });
-                  
-                  let reports: any[] = [];
-                  if (response?.data?.data && Array.isArray(response.data.data)) {
-                    reports = response.data.data;
-                  } else if (response?.data && Array.isArray(response.data)) {
-                    reports = response.data;
-                  } else if (Array.isArray(response)) {
-                    reports = response;
-                  }
-                  
-                  // Суммируем часы
-                  const totalHours = reports.reduce((sum, report) => {
-                    const hoursWorked = Number(report.hours_worked) || 0;
-                    const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
-                    return sum + (isAbsent ? 0 : hoursWorked);
-                  }, 0);
-                  
-                  // Получаем ставку
-                  const rate = emp.pivot?.rate_per_hour || emp.rate_per_hour || emp.pivot?.hourly_rate || 0;
-                  
-                  // Рассчитываем сумму для сотрудника
-                  return totalHours * rate;
-                } catch (error) {
-                  console.error(`Error loading work reports for employee ${emp.id} in project ${project.id}:`, error);
-                  return 0;
-                }
-              })
-          );
-          
-          // Суммируем все суммы сотрудников
-          const projectTotalSpent = totalSpent.reduce((sum, employeeSpent) => sum + employeeSpent, 0);
-          spentMap.set(project.id, projectTotalSpent);
-        } catch (error) {
-          console.error(`Error loading spent for project ${project.id}:`, error);
-          spentMap.set(project.id, 0);
-        }
-      })
-    );
-    
-    setProjectSpentMap(spentMap);
+    return Number(project.budget_spent) || 0;
   };
 
   useEffect(() => {
@@ -215,18 +147,13 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
       try {
         const response = await apiService.getProjects(currentPage, itemsPerPage, getProjectsFilter);
         
-        // Проверяем разные варианты структуры ответа
-        let projectsList: any[] = [];
         if (Array.isArray(response)) {
-          projectsList = response;
           setProjects(response);
           // Если массив без мета-данных, используем локальную пагинацию
           setTotalPages(1);
         } else if (response && response.data) {
           if (Array.isArray(response.data)) {
-            projectsList = response.data;
             setProjects(response.data);
-            // Проверяем наличие информации о пагинации
             // Laravel pagination format
             if (response.last_page) {
               setTotalPages(response.last_page);
@@ -247,10 +174,6 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
           setTotalPages(1);
         }
         
-        // Загружаем израсходованные суммы для всех проектов
-        if (projectsList.length > 0) {
-          loadProjectsSpent(projectsList);
-        }
       } catch (error) {
         console.error('Error fetching projects:', error);
         setProjects([]);
@@ -502,16 +425,13 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     setHistoryIndex(newHistory.length - 1);
     if (projectId === 'new') {
       startProjectCreation();
+      navigate('/projects/new');
+    } else if (typeof projectId === 'number' && projectId) {
+      setIsCreatingProject(false);
+      navigate(`/projects/${projectId}`);
     } else {
       setIsCreatingProject(false);
-      setSelectedProjectId(projectId ?? null);
-    }
-    
-    // Сохраняем selectedProjectId в localStorage
-    if (typeof projectId === 'number' && projectId) {
-      localStorage.setItem('selectedProjectId', projectId.toString());
-    } else {
-      localStorage.removeItem('selectedProjectId');
+      navigate('/projects');
     }
   };
 
@@ -523,15 +443,14 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
 
       if (prevEntry === 'new') {
         startProjectCreation();
+        navigate('/projects/new');
       } else if (typeof prevEntry === 'number' && prevEntry) {
         setIsCreatingProject(false);
-        setSelectedProjectId(prevEntry);
-        localStorage.setItem('selectedProjectId', prevEntry.toString());
+        navigate(`/projects/${prevEntry}`);
       } else {
         setIsCreatingProject(false);
         setSelectedProject(null);
-        setSelectedProjectId(null);
-        localStorage.removeItem('selectedProjectId');
+        navigate('/projects');
       }
     }
   };
@@ -544,15 +463,14 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
 
       if (nextEntry === 'new') {
         startProjectCreation();
+        navigate('/projects/new');
       } else if (typeof nextEntry === 'number' && nextEntry) {
         setIsCreatingProject(false);
-        setSelectedProjectId(nextEntry);
-        localStorage.setItem('selectedProjectId', nextEntry.toString());
+        navigate(`/projects/${nextEntry}`);
       } else {
         setIsCreatingProject(false);
         setSelectedProject(null);
-        setSelectedProjectId(null);
-        localStorage.removeItem('selectedProjectId');
+        navigate('/projects');
       }
     }
   };
@@ -582,10 +500,16 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     const draftProject = createEmptyProjectDraft();
     setIsCreatingProject(true);
     setSelectedProject(draftProject);
-    setSelectedProjectId(null);
     setIsLoadingProject(false);
-    localStorage.removeItem('selectedProjectId');
   };
+
+  useEffect(() => {
+    if (isCreatingFromUrl && !isCreatingProject) {
+      startProjectCreation();
+    } else if (!isCreatingFromUrl && isCreatingProject) {
+      setIsCreatingProject(false);
+    }
+  }, [isCreatingFromUrl]);
 
   const handleStartCreateProject = () => {
     const newHistory = navigationHistory.slice(0, historyIndex + 1);
@@ -593,6 +517,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     setNavigationHistory(newHistory);
     setHistoryIndex(newHistory.length - 1);
     startProjectCreation();
+    navigate('/projects/new');
   };
 
   const handleProjectUpdate = async (updatedProject: any) => {
@@ -601,13 +526,10 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
       try {
         const response = await apiService.getProjects(currentPage, itemsPerPage, getProjectsFilter);
         
-        let projectsList: any[] = [];
         if (Array.isArray(response)) {
-          projectsList = response;
           setProjects(response);
         } else if (response && response.data) {
           if (Array.isArray(response.data)) {
-            projectsList = response.data;
             setProjects(response.data);
             if (response.last_page) {
               setTotalPages(response.last_page);
@@ -618,11 +540,6 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
               setTotalPages(response.pagination.total_pages || 1);
             }
           }
-        }
-        
-        // Загружаем израсходованные суммы для всех проектов
-        if (projectsList.length > 0) {
-          loadProjectsSpent(projectsList);
         }
       } catch (error) {
         console.error('Error refreshing projects after delete:', error);
@@ -756,13 +673,10 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
       try {
         const response = await apiService.getProjects(currentPage, itemsPerPage, getProjectsFilter);
         
-        let projectsList: any[] = [];
         if (Array.isArray(response)) {
-          projectsList = response;
           setProjects(response);
         } else if (response && response.data) {
           if (Array.isArray(response.data)) {
-            projectsList = response.data;
             setProjects(response.data);
             if (response.last_page) {
               setTotalPages(response.last_page);
@@ -773,11 +687,6 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
               setTotalPages(response.pagination.total_pages || 1);
             }
           }
-        }
-        
-        // Загружаем израсходованные суммы для всех проектов
-        if (projectsList.length > 0) {
-          loadProjectsSpent(projectsList);
         }
       } catch (error) {
         console.error('Error refreshing projects after archive/unarchive:', error);
@@ -801,8 +710,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
       if (selectedProject && selectedProjectIds.has(selectedProject.id)) {
         const isCurrentlyArchived = selectedProject.is_archived === 1 || selectedProject.is_archived === true || selectedProject.status === 'Архив';
         if (!isCurrentlyArchived) {
-          setSelectedProjectId(null);
-          localStorage.removeItem('selectedProjectId');
+          navigate('/projects');
         }
       }
       
@@ -1238,8 +1146,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
           onBack={() => {
             setIsCreatingProject(false);
             setSelectedProject(null);
-            setSelectedProjectId(null);
-            localStorage.removeItem('selectedProjectId');
+            navigate('/projects');
           }}
           onProjectUpdate={handleProjectUpdate}
           onRefresh={handleRefreshProject}
@@ -1247,12 +1154,11 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
             setProjects(prev => [createdProject, ...prev]);
             setIsCreatingProject(false);
             setSelectedProject(createdProject);
-            setSelectedProjectId(createdProject.id);
             setIsLoadingProject(false);
             setNavigationHistory(prevHistory => {
               const updated = [...prevHistory];
               if (updated.length === 0) {
-                const result = [null, createdProject.id];
+                const result = [null, createdProject.id] as ProjectHistoryEntry[];
                 setHistoryIndex(result.length - 1);
                 return result;
               }
@@ -1262,7 +1168,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
               return updated;
             });
             if (createdProject?.id) {
-              localStorage.setItem('selectedProjectId', createdProject.id.toString());
+              navigate(`/projects/${createdProject.id}`, { replace: true });
             }
           }}
           isNew={isCreatingProject}

@@ -1,13 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { apiService } from '../../services/api';
-import sotrudnikiIconGrey from '../../shared/icons/sotrudnikiIconGrey.svg';
+import sotrudnikiIconGreyRaw from '../../shared/icons/sotrudnikiIconGrey.svg?raw';
 import { PageHeader } from '../../shared/ui/PageHeader/PageHeader';
-import searchIcon from '../../shared/icons/searchIcon.svg';
+import searchIconRaw from '../../shared/icons/searchIcon.svg?raw';
 import { Pagination } from '../../shared/ui/Pagination/Pagination';
-import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
-import userDropdownIcon from '../../shared/icons/user-dropdown-icon.svg';
+import upDownTableFilterRaw from '../../shared/icons/upDownTableFilter.svg?raw';
+import userDropdownIconRaw from '../../shared/icons/user-dropdown-icon.svg?raw';
 import { EmployeeDetail } from './EmployeeDetail';
 import './employees.scss';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const sotrudnikiIconGrey = toDataUrl(sotrudnikiIconGreyRaw);
+const searchIcon = toDataUrl(searchIconRaw);
+const upDownTableFilter = toDataUrl(upDownTableFilterRaw);
+const userDropdownIcon = toDataUrl(userDropdownIconRaw);
 
 type EmployeeHistoryEntry = number | 'new' | null;
 
@@ -63,28 +70,25 @@ const updateEmployeeEndDateInAllProjects = async (employeeId: number, dismissalD
 };
 
 export const EmployeesScreen: React.FC = () => {
-  // Состояние для выбранного сотрудника
-  // При перезагрузке страницы восстанавливаем из sessionStorage (если есть)
-  // При переключении вкладок localStorage будет очищен, поэтому карточка не откроется
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(() => {
-    // Сначала проверяем sessionStorage (для перезагрузки страницы)
-    const savedFromSession = sessionStorage.getItem('savedEmployeeId');
-    if (savedFromSession) {
-      return parseInt(savedFromSession, 10);
-    }
-    // Затем проверяем localStorage (для обычной навигации)
-    const saved = localStorage.getItem('selectedEmployeeId');
-    return saved ? parseInt(saved, 10) : null;
-  });
+  const navigate = useNavigate();
+  const params = useParams();
+
+  const selectedEmployeeId: number | null = params['*']
+    ? (() => {
+        const seg = params['*'].split('/')[0];
+        if (seg === 'new') return null;
+        const parsed = parseInt(seg, 10);
+        return isNaN(parsed) ? null : parsed;
+      })()
+    : null;
+
+  const isCreatingFromUrl = params['*'] === 'new';
+
   const [navigationHistory, setNavigationHistory] = useState<EmployeeHistoryEntry[]>(() => {
-    const savedFromSession = sessionStorage.getItem('savedEmployeeId');
-    const savedId = savedFromSession ? parseInt(savedFromSession, 10) : (localStorage.getItem('selectedEmployeeId') ? parseInt(localStorage.getItem('selectedEmployeeId')!, 10) : null);
-    return savedId ? [null, savedId] : [null];
+    return selectedEmployeeId ? [null, selectedEmployeeId] : [null];
   });
   const [historyIndex, setHistoryIndex] = useState(() => {
-    const savedFromSession = sessionStorage.getItem('savedEmployeeId');
-    const saved = savedFromSession || localStorage.getItem('selectedEmployeeId');
-    return saved ? 1 : 0;
+    return selectedEmployeeId ? 1 : 0;
   });
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -94,7 +98,7 @@ export const EmployeesScreen: React.FC = () => {
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<number>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  const [isCreatingEmployee, setIsCreatingEmployee] = useState(false);
+  const [isCreatingEmployee, setIsCreatingEmployee] = useState(isCreatingFromUrl);
   const [draftEmployee, setDraftEmployee] = useState<any | null>(null);
   // Состояние для сортировки
   const [sortField, setSortField] = useState<string | null>(null);
@@ -146,15 +150,12 @@ export const EmployeesScreen: React.FC = () => {
     const draft = createEmptyEmployeeDraft();
     setIsCreatingEmployee(true);
     setDraftEmployee(draft);
-    setSelectedEmployeeId(null);
     setSelectedEmployeeIds(new Set());
-    localStorage.removeItem('selectedEmployeeId');
   };
 
   const exitCreationToList = () => {
     setIsCreatingEmployee(false);
     setDraftEmployee(null);
-    setSelectedEmployeeId(null);
     setNavigationHistory((prevHistory) => {
       const updated = [...prevHistory];
       if (historyIndex >= 0 && historyIndex < updated.length) {
@@ -166,8 +167,17 @@ export const EmployeesScreen: React.FC = () => {
       setHistoryIndex(newIndex);
       return updated;
     });
-    localStorage.removeItem('selectedEmployeeId');
+    navigate('/employees');
   };
+
+  useEffect(() => {
+    if (isCreatingFromUrl && !isCreatingEmployee) {
+      startEmployeeCreation();
+    } else if (!isCreatingFromUrl && isCreatingEmployee) {
+      setIsCreatingEmployee(false);
+      setDraftEmployee(null);
+    }
+  }, [isCreatingFromUrl]);
 
   // Фильтрация сотрудников
   const filteredEmployees = employees.filter((employee) => {
@@ -311,17 +321,17 @@ export const EmployeesScreen: React.FC = () => {
     
     if (entry === 'new') {
       startEmployeeCreation();
+      navigate('/employees/new');
       return;
     }
 
     setIsCreatingEmployee(false);
     setDraftEmployee(null);
-    setSelectedEmployeeId(entry ?? null);
 
     if (typeof entry === 'number' && entry) {
-      localStorage.setItem('selectedEmployeeId', entry.toString());
+      navigate(`/employees/${entry}`);
     } else {
-      localStorage.removeItem('selectedEmployeeId');
+      navigate('/employees');
     }
   };
 
@@ -352,15 +362,14 @@ export const EmployeesScreen: React.FC = () => {
 
       if (prevEntry === 'new') {
         startEmployeeCreation();
+        navigate('/employees/new');
       } else {
         setIsCreatingEmployee(false);
         setDraftEmployee(null);
-        setSelectedEmployeeId(prevEntry ?? null);
-
         if (typeof prevEntry === 'number' && prevEntry) {
-          localStorage.setItem('selectedEmployeeId', prevEntry.toString());
+          navigate(`/employees/${prevEntry}`);
         } else {
-          localStorage.removeItem('selectedEmployeeId');
+          navigate('/employees');
         }
       }
     }
@@ -375,15 +384,14 @@ export const EmployeesScreen: React.FC = () => {
 
       if (nextEntry === 'new') {
         startEmployeeCreation();
+        navigate('/employees/new');
       } else {
         setIsCreatingEmployee(false);
         setDraftEmployee(null);
-        setSelectedEmployeeId(nextEntry ?? null);
-
         if (typeof nextEntry === 'number' && nextEntry) {
-          localStorage.setItem('selectedEmployeeId', nextEntry.toString());
+          navigate(`/employees/${nextEntry}`);
         } else {
-          localStorage.removeItem('selectedEmployeeId');
+          navigate('/employees');
         }
       }
     }

@@ -1,7 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import paginationIconActiveLeft from '../../shared/icons/paginationIconActiveLeft.svg';
-import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
-import commentMobIcon from '../../shared/icons/commentMob.svg';
+import paginationIconActiveLeftRaw from '../../shared/icons/paginationIconActiveLeft.svg?raw';
+import upDownTableFilterRaw from '../../shared/icons/upDownTableFilter.svg?raw';
+import commentMobIconRaw from '../../shared/icons/commentMob.svg?raw';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const paginationIconActiveLeft = toDataUrl(paginationIconActiveLeftRaw);
+const upDownTableFilter = toDataUrl(upDownTableFilterRaw);
+const commentMobIcon = toDataUrl(commentMobIconRaw);
 import { apiService } from '../../services/api';
 import { AddFactModal } from '../../shared/ui/AddFactModal/AddFactModal';
 import { AddHoursModal } from '../../shared/ui/AddHoursModal/AddHoursModal';
@@ -159,6 +164,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   const [activeTab, setActiveTab] = useState<'general' | 'specification' | 'tracking'>('general');
   const [specificationItems, setSpecificationItems] = useState<SpecificationItem[]>([]);
   const [isSpecificationLoading, setIsSpecificationLoading] = useState(false);
+  const mobileTrackingLoadedRef = React.useRef(false);
   const [specificationSortField, setSpecificationSortField] = useState<string | null>('npp');
   const [specificationSortDirection, setSpecificationSortDirection] = useState<'asc' | 'desc'>('asc');
 
@@ -399,20 +405,20 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
             is_dismissed: w.is_dismissed === true,
           };
         };
+        const usersRes = await apiService.getUsers();
+        const usersRaw = usersRes?.data ?? usersRes;
+        const allUsers: any[] = Array.isArray(usersRaw)
+          ? usersRaw
+          : Array.isArray(usersRaw?.data)
+          ? usersRaw.data
+          : [];
+
         if (Array.isArray(workersData)) {
           workers = workersData.map(parseWorker).filter((w: any) => !w.is_dismissed);
         } else if (workersData?.workers && Array.isArray(workersData.workers)) {
           workers = workersData.workers.map(parseWorker).filter((w: any) => !w.is_dismissed);
         } else {
-          // Fallback: используем users если assignments/workers не вернул данные
-          const usersRes = await apiService.getUsers();
-          const usersData = usersRes?.data ?? usersRes;
-          const arr = Array.isArray(usersData)
-            ? usersData
-            : Array.isArray(usersData?.data)
-            ? usersData.data
-            : [];
-          workers = arr
+          workers = allUsers
             .filter((u: any) => u.is_employee !== false && u.employee_status !== 'dismissed')
             .map((u: any) => ({
               id: u.id,
@@ -423,38 +429,34 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
             }));
         }
 
-        // В мобильной версии — все рабочие из списка (не только добавленные в проект)
+        const usersByIdForRate = new Map(allUsers.map((u: any) => [u.id, u]));
+        workers = workers.map((w: any) => ({
+          ...w,
+          rate_per_hour: Number(usersByIdForRate.get(w.id)?.rate_per_hour ?? 0) || 0,
+        }));
+
         if (!isCancelled) setWorkersWithBusy(workers);
 
-        // Обогащаем именами: workers + getUsers (assignments/workers может не включать уже назначенных)
         const workersById = new Map(workers.map((w) => [w.id, w]));
-        try {
-          const usersRes = await apiService.getUsers();
-          const usersData = usersRes?.data ?? usersRes;
-          const usersArr = Array.isArray(usersData)
-            ? usersData
-            : Array.isArray(usersData?.data)
-            ? usersData.data
-            : [];
-          usersArr.forEach((u: any) => {
-            if (u?.id != null && !workersById.has(u.id) && !u.is_dismissed) {
-              workersById.set(u.id, {
-                id: u.id,
-                first_name: u.first_name,
-                second_name: u.second_name,
-                last_name: u.last_name,
-              });
-            }
-          });
-        } catch {
-          // игнорируем ошибку getUsers
-        }
+        const usersById = new Map(allUsers.map((u: any) => [u.id, u]));
+        allUsers.forEach((u: any) => {
+          if (u?.id != null && !workersById.has(u.id) && !u.is_dismissed) {
+            workersById.set(u.id, {
+              id: u.id,
+              first_name: u.first_name,
+              second_name: u.second_name,
+              last_name: u.last_name,
+            });
+          }
+        });
 
         const workersList = myAssignedForProject
           .map((a: any) => {
             const worker = a.worker ?? a.user ?? {};
             const workerId = a.worker_id ?? worker.id ?? a.user_id ?? a.id;
             const w = workersById.get(workerId);
+            const user = usersById.get(workerId) ?? worker;
+            const rate = Number(user?.rate_per_hour ?? worker?.rate_per_hour ?? a.rate_per_hour ?? 0) || 0;
             const isDismissed = worker.is_dismissed === true || (w && (w as any).is_dismissed);
             return {
               id: workerId,
@@ -462,6 +464,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
               first_name: worker.first_name ?? w?.first_name ?? '',
               last_name: worker.last_name ?? w?.last_name ?? '',
               second_name: worker.second_name ?? w?.second_name ?? '',
+              rate_per_hour: rate,
+              pivot: { rate_per_hour: rate, end_working_date: null },
               is_dismissed: isDismissed,
             };
           })
@@ -716,14 +720,17 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     );
     const projectIds = new Set(activeFromProject.map((e: any) => Number(e.id)));
     const assignedOnly = dayAssignedWorkers.filter((w: any) => !projectIds.has(Number(w.id)));
-    const assignedAsEmps = assignedOnly.map((w: any) => ({
-      id: w.id,
-      last_name: w.last_name ?? '',
-      first_name: w.first_name ?? '',
-      second_name: w.second_name ?? '',
-      pivot: { rate_per_hour: 0, end_working_date: null },
-      rate_per_hour: 0,
-    }));
+    const assignedAsEmps = assignedOnly.map((w: any) => {
+      const rate = Number(w.rate_per_hour ?? w.pivot?.rate_per_hour ?? 0) || 0;
+      return {
+        id: w.id,
+        last_name: w.last_name ?? '',
+        first_name: w.first_name ?? '',
+        second_name: w.second_name ?? '',
+        pivot: { rate_per_hour: rate, end_working_date: null },
+        rate_per_hour: rate,
+      };
+    });
     const activeEmployees = [...activeFromProject, ...assignedAsEmps];
 
     try {
@@ -864,9 +871,11 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       setIsTrackingLoading(false);
       return;
     }
+    if (mobileTrackingLoadedRef.current) return;
 
     let isCancelled = false;
     setIsTrackingLoading(true);
+    mobileTrackingLoadedRef.current = true;
 
     const loadTracking = async () => {
       try {
@@ -1214,12 +1223,17 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     }
     const toAdd = workersWithBusy
       .filter((w) => workerIds.includes(w.id))
-      .map((w) => ({
-        id: w.id,
-        first_name: w.first_name,
-        second_name: w.second_name,
-        last_name: w.last_name,
-      }));
+      .map((w) => {
+        const rate = Number((w as any).rate_per_hour ?? 0) || 0;
+        return {
+          id: w.id,
+          first_name: w.first_name,
+          second_name: w.second_name,
+          last_name: w.last_name,
+          rate_per_hour: rate,
+          pivot: { rate_per_hour: rate, end_working_date: null },
+        };
+      });
     if (!mockApiResponses) {
       for (const id of workerIds) {
         const res = await apiService.addAssignment(id, assignmentDate, projectId);
@@ -1236,6 +1250,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       const newOnes = toAdd.filter((w) => !existingIds.has(w.id));
       return [...prev, ...newOnes];
     });
+    // После изменения назначений нужно заново пересчитать таблицу фиксации
+    mobileTrackingLoadedRef.current = false;
     await onRefresh?.();
   };
 
@@ -1254,6 +1270,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           : p.id !== removeConfirmEmployee.id)
       )
     );
+    // После изменения назначений нужно заново пересчитать таблицу фиксации
+    mobileTrackingLoadedRef.current = false;
     setRemoveConfirmEmployee(null);
     await onRefresh?.();
   };

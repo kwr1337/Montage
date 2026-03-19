@@ -2,13 +2,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import { TextInput } from '../../shared/ui/TextInput';
 import { Button } from '../../shared/ui/Button';
 import { Pagination } from '../../shared/ui/Pagination/Pagination';
-import dotsIcon from '../../shared/icons/dotsIcon.svg';
-import userDropdownIcon from '../../shared/icons/user-dropdown-icon.svg';
-import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
-import calendarIconGrey from '../../shared/icons/calendarIconGrey.svg';
+import dotsIconRaw from '../../shared/icons/dotsIcon.svg?raw';
+import userDropdownIconRaw from '../../shared/icons/user-dropdown-icon.svg?raw';
+import upDownTableFilterRaw from '../../shared/icons/upDownTableFilter.svg?raw';
+import calendarIconGreyRaw from '../../shared/icons/calendarIconGrey.svg?raw';
 import { apiService } from '../../services/api';
 import { canEditEmployees } from '../../services/permissions';
 import './employee-detail.scss';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const dotsIcon = toDataUrl(dotsIconRaw);
+const userDropdownIcon = toDataUrl(userDropdownIconRaw);
+const upDownTableFilter = toDataUrl(upDownTableFilterRaw);
+const calendarIconGrey = toDataUrl(calendarIconGreyRaw);
 
 type EmployeeDetailProps = {
   employee: any;
@@ -282,16 +288,15 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
       setIsLoadingSalary(true);
       try {
         const employeeId = employee.id;
-        console.log('Loading salary history for employee ID:', employeeId);
-        console.log('Employee object:', employee);
         
-        // API требует project_id — загружаем проекты
+        // Загружаем проекты с сотрудниками один раз — используем и для payments, и для hours
+        let allProjects: any[] = [];
         let projectIds: number[] = [];
         try {
-          const projectsRes = await apiService.getProjects(1, 1000);
+          const projectsRes = await apiService.getProjects(1, 1000, { with: ['employees'] });
           const list = projectsRes?.data?.data || projectsRes?.data || projectsRes;
-          const arr = Array.isArray(list) ? list : [list];
-          projectIds = arr.filter((p: any) => p?.id).map((p: any) => p.id);
+          allProjects = Array.isArray(list) ? list : [list];
+          projectIds = allProjects.filter((p: any) => p?.id).map((p: any) => p.id);
         } catch (e) {
           console.error('Error loading projects for payments:', e);
         }
@@ -309,7 +314,6 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
             })
           : { data: { data: [] } };
 
-        console.log('Payments API response:', response);
 
         let paymentsData: any[] = [];
         if (response) {
@@ -334,7 +338,6 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
           return matches;
         });
 
-        console.log(`Filtered payments for employee ${employeeId}:`, paymentsData.length, paymentsData);
 
         // Дополнительная клиентская фильтрация по датам: включаем платёж, если хотя бы одна дата в диапазоне
         if (formData.dateFrom || formData.dateTo) {
@@ -386,23 +389,22 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
           paymentsByMonth.get(monthKey)!.push(payment);
         });
 
-        // Для каждого месяца загружаем часы и формируем данные
+        const workReportsCache = new Map<string, any[]>();
+
         const historyData = await Promise.all(
           Array.from(paymentsByMonth.entries()).map(async ([monthKey, payments]) => {
             const [year, month] = monthKey.split('-');
             const monthDate = new Date(Number(year), Number(month) - 1, 1);
-            
-            // Берем первую выплату для определения месяца
+
             const firstPayment = payments[0];
-            const paymentMonthDate = firstPayment.first_payment_date 
+            const paymentMonthDate = firstPayment.first_payment_date
               ? new Date(firstPayment.first_payment_date)
-              : firstPayment.second_payment_date 
+              : firstPayment.second_payment_date
               ? new Date(firstPayment.second_payment_date)
-              : firstPayment.third_payment_date 
+              : firstPayment.third_payment_date
               ? new Date(firstPayment.third_payment_date)
               : monthDate;
 
-            // Период для часов: при активном фильтре дат — период фильтра (как в Выдача ЗП), иначе — диапазон выплат
             let monthStart: Date;
             let monthEnd: Date;
             if (formData.dateFrom && formData.dateTo) {
@@ -424,21 +426,11 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
             const monthStartStr = monthStart.toISOString().split('T')[0];
             const monthEndStr = monthEnd.toISOString().split('T')[0];
 
-            // Загружаем часы за этот период
             let hours = 0;
             const rate = employee.rate_per_hour || 0;
 
             try {
-              // Получаем все проекты
-              const projectsResponse = await apiService.getProjects(1, 1000, { with: ['employees'] });
-              let projects: any[] = [];
-              if (projectsResponse && projectsResponse.data) {
-                const data = projectsResponse.data.data || projectsResponse.data;
-                projects = Array.isArray(data) ? data : [data];
-              }
-
-              // Находим проекты, где сотрудник участвует (включая уволенных — для истории выплат)
-              let projectsToCheck = projects.filter((project: any) => {
+              let projectsToCheck = allProjects.filter((project: any) => {
                 if (!project.employees || !Array.isArray(project.employees)) return false;
                 return project.employees.some((emp: any) => {
                   const empId = emp.id || emp.user_id;
@@ -446,41 +438,43 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
                 });
               });
 
-              // Fallback: если сотрудника нет в project.employees (напр. уволен), используем project_id из выплаты
               if (projectsToCheck.length === 0) {
                 const paymentProjectIds = [...new Set(payments.map((p: any) => p.project_id).filter(Boolean))];
-                projectsToCheck = projects.filter((p: any) => p.id && paymentProjectIds.includes(p.id));
+                projectsToCheck = allProjects.filter((p: any) => p.id && paymentProjectIds.includes(p.id));
               }
 
-              // Суммируем часы из всех проектов за месяц
               const allHours = await Promise.all(
                 projectsToCheck.map(async (project: any) => {
                   try {
-                    const response = await apiService.getWorkReports(project.id, employee.id, {
-                      per_page: 1000,
-                      filter: {
-                        date_from: monthStartStr,
-                        date_to: monthEndStr,
-                      },
-                    });
-                    
-                    let reports: any[] = [];
-                    if (response?.data?.data && Array.isArray(response.data.data)) {
-                      reports = response.data.data;
-                    } else if (response?.data && Array.isArray(response.data)) {
-                      reports = response.data;
-                    } else if (Array.isArray(response)) {
-                      reports = response;
+                    const cacheKey = `${project.id}:${employee.id}:${monthStartStr}:${monthEndStr}`;
+                    let reports: any[];
+                    if (workReportsCache.has(cacheKey)) {
+                      reports = workReportsCache.get(cacheKey)!;
+                    } else {
+                      const response = await apiService.getWorkReports(project.id, employee.id, {
+                        per_page: 1000,
+                        filter: {
+                          date_from: monthStartStr,
+                          date_to: monthEndStr,
+                        },
+                      });
+                      reports = [];
+                      if (response?.data?.data && Array.isArray(response.data.data)) {
+                        reports = response.data.data;
+                      } else if (response?.data && Array.isArray(response.data)) {
+                        reports = response.data;
+                      } else if (Array.isArray(response)) {
+                        reports = response;
+                      }
+                      workReportsCache.set(cacheKey, reports);
                     }
-                    
-                    // Фильтруем отчеты по месяцу
+
                     const monthReports = reports.filter((report) => {
                       if (!report.report_date) return false;
                       const reportDate = new Date(report.report_date);
                       return reportDate >= monthStart && reportDate <= monthEnd;
                     });
-                    
-                    // Суммируем часы
+
                     return monthReports.reduce((sum, report) => {
                       const hoursWorked = Number(report.hours_worked) || 0;
                       const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';

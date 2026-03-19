@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import userDropdownIcon from '../../icons/user-dropdown-icon.svg';
+import userDropdownIconRaw from '../../icons/user-dropdown-icon.svg?raw';
 import './status-filter.scss';
+
+const userDropdownIcon = `data:image/svg+xml,${encodeURIComponent(userDropdownIconRaw)}`;
 
 interface StatusFilterProps {
   onStatusChange: (status: string) => void;

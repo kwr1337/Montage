@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import closeIcon from '../../icons/closeIcon.svg';
-import calendarIconGrey from '../../icons/calendarIconGrey.svg';
+import closeIconRaw from '../../icons/closeIcon.svg?raw';
+import calendarIconGreyRaw from '../../icons/calendarIconGrey.svg?raw';
 import './add-fact-modal.scss';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const closeIcon = toDataUrl(closeIconRaw);
+const calendarIconGrey = toDataUrl(calendarIconGreyRaw);
 
 type AddFactModalProps = {
   isOpen: boolean;

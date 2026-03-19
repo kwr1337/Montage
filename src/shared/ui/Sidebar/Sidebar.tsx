@@ -1,43 +1,58 @@
 import React from 'react';
-import dashboardIconGrey from '../../icons/dashboardIconGrey.svg';
-import dashboardIconWhite from '../../icons/dashboardIconWhite.svg';
-import menuIconGrey from '../../icons/menuIconGrey.svg';
-import menuIconWhite from '../../icons/menuIconWhite.svg';
-import sotrudnikiIconGrey from '../../icons/sotrudnikiIconGrey.svg';
-import sotrudnikiIconWhite from '../../icons/sotrudnikiIconWhite.svg';
-import nomenculaturaIconGrey from '../../icons/nomenculaturaIconGrey.svg';
-import nomenculaturaIconWhite from '../../icons/nomenculaturaIconWhite.svg';
-import otchetIconGrey from '../../icons/otchetIconGrey.svg';
-import otchetIconWhite from '../../icons/otchetIconWhite.svg';
-import zpIconGrey from '../../icons/zpIconGrey.svg';
-import zpIconWhite from '../../icons/zpIconWhite.svg';
+import dashboardIconGreyRaw from '../../icons/dashboardIconGrey.svg?raw';
+import dashboardIconWhiteRaw from '../../icons/dashboardIconWhite.svg?raw';
+import menuIconGreyRaw from '../../icons/menuIconGrey.svg?raw';
+import menuIconWhiteRaw from '../../icons/menuIconWhite.svg?raw';
+import sotrudnikiIconGreyRaw from '../../icons/sotrudnikiIconGrey.svg?raw';
+import sotrudnikiIconWhiteRaw from '../../icons/sotrudnikiIconWhite.svg?raw';
+import nomenculaturaIconGreyRaw from '../../icons/nomenculaturaIconGrey.svg?raw';
+import nomenculaturaIconWhiteRaw from '../../icons/nomenculaturaIconWhite.svg?raw';
+import otchetIconGreyRaw from '../../icons/otchetIconGrey.svg?raw';
+import otchetIconWhiteRaw from '../../icons/otchetIconWhite.svg?raw';
+import zpIconGreyRaw from '../../icons/zpIconGrey.svg?raw';
+import zpIconWhiteRaw from '../../icons/zpIconWhite.svg?raw';
 import './sidebar.scss';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const dashboardIconGrey = toDataUrl(dashboardIconGreyRaw);
+const dashboardIconWhite = toDataUrl(dashboardIconWhiteRaw);
+const menuIconGrey = toDataUrl(menuIconGreyRaw);
+const menuIconWhite = toDataUrl(menuIconWhiteRaw);
+const sotrudnikiIconGrey = toDataUrl(sotrudnikiIconGreyRaw);
+const sotrudnikiIconWhite = toDataUrl(sotrudnikiIconWhiteRaw);
+const nomenculaturaIconGrey = toDataUrl(nomenculaturaIconGreyRaw);
+const nomenculaturaIconWhite = toDataUrl(nomenculaturaIconWhiteRaw);
+const otchetIconGrey = toDataUrl(otchetIconGreyRaw);
+const otchetIconWhite = toDataUrl(otchetIconWhiteRaw);
+const zpIconGrey = toDataUrl(zpIconGreyRaw);
+const zpIconWhite = toDataUrl(zpIconWhiteRaw);
 
 type MenuItem = {
   id: string;
+  path: string;
   label: string;
   iconGrey: string;
   iconWhite: string;
 };
 
 const menuItems: MenuItem[] = [
-  { id: 'dashboard', label: 'Дашборд', iconGrey: dashboardIconGrey, iconWhite: dashboardIconWhite },
-  { id: 'projects', label: 'Проекты', iconGrey: menuIconGrey, iconWhite: menuIconWhite },
-  { id: 'employees', label: 'Сотрудники', iconGrey: sotrudnikiIconGrey, iconWhite: sotrudnikiIconWhite },
-  { id: 'nomenclature', label: 'Номенклатура', iconGrey: nomenculaturaIconGrey, iconWhite: nomenculaturaIconWhite },
-  { id: 'reports', label: 'Отчеты', iconGrey: otchetIconGrey, iconWhite: otchetIconWhite },
-  { id: 'salary', label: 'Выдача ЗП', iconGrey: zpIconGrey, iconWhite: zpIconWhite },
+  { id: 'dashboard', path: '/dashboard', label: 'Дашборд', iconGrey: dashboardIconGrey, iconWhite: dashboardIconWhite },
+  { id: 'projects', path: '/projects', label: 'Проекты', iconGrey: menuIconGrey, iconWhite: menuIconWhite },
+  { id: 'employees', path: '/employees', label: 'Сотрудники', iconGrey: sotrudnikiIconGrey, iconWhite: sotrudnikiIconWhite },
+  { id: 'nomenclature', path: '/nomenclature', label: 'Номенклатура', iconGrey: nomenculaturaIconGrey, iconWhite: nomenculaturaIconWhite },
+  { id: 'reports', path: '/reports', label: 'Отчеты', iconGrey: otchetIconGrey, iconWhite: otchetIconWhite },
+  { id: 'salary', path: '/salary', label: 'Выдача ЗП', iconGrey: zpIconGrey, iconWhite: zpIconWhite },
 ];
 
 type SidebarProps = {
   activeItem?: string;
-  onNavigate?: (itemId: string) => void;
+  onNavigate?: (path: string) => void;
 };
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeItem = 'projects', onNavigate }) => {
-  const handleClick = (itemId: string) => {
+  const handleClick = (path: string) => {
     if (onNavigate) {
-      onNavigate(itemId);
+      onNavigate(path);
     }
   };
 
@@ -53,7 +68,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeItem = 'projects', onNav
           <button
             key={item.id}
             className={`sidebar__item ${activeItem === item.id ? 'sidebar__item--active' : ''}`}
-            onClick={() => handleClick(item.id)}
+            onClick={() => handleClick(item.path)}
           >
             <img 
               src={activeItem === item.id ? item.iconWhite : item.iconGrey} 
@@ -67,4 +82,3 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeItem = 'projects', onNav
     </aside>
   );
 };
-

@@ -1,120 +1,73 @@
-import { useState, useEffect } from 'react';
+import { lazy, Suspense } from 'react';
 import type { FC } from 'react';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../ui/Sidebar/Sidebar';
 import { apiService } from '../../services/api';
 import { canAccessEmployees, canAccessSalary } from '../../services/permissions';
-import { ProjectsScreen } from '../../screens/Projects/ProjectsScreen';
-import { DashboardScreen } from '../../screens/Dashboard/DashboardScreen';
-import { EmployeesScreen } from '../../screens/Employees/EmployeesScreen';
-import { NomenclatureScreen } from '../../screens/Nomenclature/NomenclatureScreen';
-import { ReportsScreen } from '../../screens/Reports/ReportsScreen';
-import { SalaryScreen } from '../../screens/Salary/SalaryScreen';
 import './main-layout.scss';
+
+const ProjectsScreen = lazy(() => import('../../screens/Projects/ProjectsScreen').then(m => ({ default: m.ProjectsScreen })));
+const DashboardScreen = lazy(() => import('../../screens/Dashboard/DashboardScreen').then(m => ({ default: m.DashboardScreen })));
+const EmployeesScreen = lazy(() => import('../../screens/Employees/EmployeesScreen').then(m => ({ default: m.EmployeesScreen })));
+const NomenclatureScreen = lazy(() => import('../../screens/Nomenclature/NomenclatureScreen').then(m => ({ default: m.NomenclatureScreen })));
+const ReportsScreen = lazy(() => import('../../screens/Reports/ReportsScreen').then(m => ({ default: m.ReportsScreen })));
+const SalaryScreen = lazy(() => import('../../screens/Salary/SalaryScreen').then(m => ({ default: m.SalaryScreen })));
 
 type MainLayoutProps = {
   onLogout?: () => void;
 };
 
-export const MainLayout: FC<MainLayoutProps> = ({ onLogout: _onLogout }) => {
-  const [activeMenuItem, setActiveMenuItem] = useState(() => {
-    const saved = localStorage.getItem('activeMenuItem');
-    if (saved === 'calendar') {
-      localStorage.setItem('activeMenuItem', 'projects');
-      return 'projects';
-    }
-    const user = apiService.getCurrentUser();
-    if (saved === 'employees' && !canAccessEmployees(user)) {
-      localStorage.setItem('activeMenuItem', 'projects');
-      return 'projects';
-    }
-    if (saved === 'salary' && !canAccessSalary(user)) {
-      localStorage.setItem('activeMenuItem', 'projects');
-      return 'projects';
-    }
-    return saved || 'projects';
-  });
+const NoAccess = () => (
+  <div className="main-layout__no-access">
+    <p>Недостаточно прав</p>
+  </div>
+);
 
-  // Устанавливаем флаг в sessionStorage при первой загрузке, чтобы отличить перезагрузку от переключения вкладок
-  useEffect(() => {
-    const isPageReload = !sessionStorage.getItem('isInitialized');
-    if (isPageReload) {
-      sessionStorage.setItem('isInitialized', 'true');
-      // При перезагрузке страницы сохраняем текущие значения selectedProjectId и selectedEmployeeId
-      // в sessionStorage, чтобы они не были очищены при переключении вкладок
-      const savedProjectId = localStorage.getItem('selectedProjectId');
-      const savedEmployeeId = localStorage.getItem('selectedEmployeeId');
-      if (savedProjectId) {
-        sessionStorage.setItem('savedProjectId', savedProjectId);
-      }
-      if (savedEmployeeId) {
-        sessionStorage.setItem('savedEmployeeId', savedEmployeeId);
-      }
-    }
-  }, []);
+const ProtectedEmployees = () => {
+  const user = apiService.getCurrentUser();
+  return canAccessEmployees(user) ? <EmployeesScreen /> : <NoAccess />;
+};
 
-  const handleNavigate = (itemId: string) => {
+const ProtectedSalary = () => {
+  const user = apiService.getCurrentUser();
+  return canAccessSalary(user) ? <SalaryScreen /> : <NoAccess />;
+};
+
+export const MainLayout: FC<MainLayoutProps> = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleNavigate = (path: string) => {
     const user = apiService.getCurrentUser();
-    if (itemId === 'employees' && !canAccessEmployees(user)) {
+    if (path === '/employees' && !canAccessEmployees(user)) {
       alert('Недостаточно прав');
       return;
     }
-    if (itemId === 'salary' && !canAccessSalary(user)) {
+    if (path === '/salary' && !canAccessSalary(user)) {
       alert('Недостаточно прав');
       return;
     }
-    setActiveMenuItem(itemId);
-    localStorage.setItem('activeMenuItem', itemId);
-    
-    // Очищаем открытые карточки при переключении вкладок (но не при перезагрузке страницы)
-    // Если флаг isInitialized уже установлен, значит это переключение вкладок, а не перезагрузка
-    if (sessionStorage.getItem('isInitialized')) {
-      localStorage.removeItem('selectedProjectId');
-      localStorage.removeItem('selectedEmployeeId');
-      // Также очищаем sessionStorage, чтобы карточки не восстанавливались при возврате на вкладку
-      sessionStorage.removeItem('savedProjectId');
-      sessionStorage.removeItem('savedEmployeeId');
-    }
+    navigate(path);
   };
 
-  const renderScreen = () => {
-    const user = apiService.getCurrentUser();
-    if (activeMenuItem === 'employees' && !canAccessEmployees(user)) {
-      return (
-        <div className="main-layout__no-access">
-          <p>Недостаточно прав</p>
-        </div>
-      );
-    }
-    if (activeMenuItem === 'salary' && !canAccessSalary(user)) {
-      return (
-        <div className="main-layout__no-access">
-          <p>Недостаточно прав</p>
-        </div>
-      );
-    }
-    switch (activeMenuItem) {
-      case 'dashboard':
-        return <DashboardScreen />;
-      case 'projects':
-        return <ProjectsScreen />;
-      case 'employees':
-        return <EmployeesScreen />;
-      case 'nomenclature':
-        return <NomenclatureScreen />;
-      case 'reports':
-        return <ReportsScreen />;
-      case 'salary':
-        return <SalaryScreen />;
-      default:
-        return <ProjectsScreen />;
-    }
-  };
+  const activeItem = location.pathname.split('/')[1] || 'projects';
 
   return (
     <div className="main-layout">
-      <Sidebar activeItem={activeMenuItem} onNavigate={handleNavigate} />
-      <main className="main-layout__content">{renderScreen()}</main>
+      <Sidebar activeItem={activeItem} onNavigate={handleNavigate} />
+      <main className="main-layout__content">
+        <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#888' }}>Загрузка...</div>}>
+          <Routes>
+            <Route path="/dashboard" element={<DashboardScreen />} />
+            <Route path="/projects/*" element={<ProjectsScreen />} />
+            <Route path="/employees/*" element={<ProtectedEmployees />} />
+            <Route path="/nomenclature" element={<NomenclatureScreen />} />
+            <Route path="/reports" element={<ReportsScreen />} />
+            <Route path="/salary" element={<ProtectedSalary />} />
+            <Route path="*" element={<Navigate to="/projects" replace />} />
+          </Routes>
+        </Suspense>
+      </main>
     </div>
   );
 };
-

@@ -1,8 +1,13 @@
 import React, { useState, useRef } from 'react';
-import closeIcon from '../../icons/closeIcon.svg';
-import calendarIconGrey from '../../icons/calendarIconGrey.svg';
-import userDropdownIcon from '../../icons/user-dropdown-icon.svg';
+import closeIconRaw from '../../icons/closeIcon.svg?raw';
+import calendarIconGreyRaw from '../../icons/calendarIconGrey.svg?raw';
+import userDropdownIconRaw from '../../icons/user-dropdown-icon.svg?raw';
 import './delete-tracking-modal.scss';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const closeIcon = toDataUrl(closeIconRaw);
+const calendarIconGrey = toDataUrl(calendarIconGreyRaw);
+const userDropdownIcon = toDataUrl(userDropdownIconRaw);
 
 interface DeleteTrackingModalProps {
   isOpen: boolean;

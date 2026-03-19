@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiService } from '../../../services/api';
-import userDropdownIcon from '../../icons/user-dropdown-icon.svg';
-import closeIcon from '../../icons/closeIcon.svg';
+import userDropdownIconRaw from '../../icons/user-dropdown-icon.svg?raw';
+import closeIconRaw from '../../icons/closeIcon.svg?raw';
 import './add-nomenclature-modal.scss';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const userDropdownIcon = toDataUrl(userDropdownIconRaw);
+const closeIcon = toDataUrl(closeIconRaw);
 
 interface AddNomenclatureModalProps {
   isOpen: boolean;

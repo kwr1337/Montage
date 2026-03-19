@@ -3,12 +3,19 @@ import { PageHeader } from '../../shared/ui/PageHeader/PageHeader';
 import { Pagination } from '../../shared/ui/Pagination/Pagination';
 import { apiService } from '../../services/api';
 import { canSeePaymentsReport } from '../../services/permissions';
-import otchetIconGrey from '../../shared/icons/otchetIconGrey.svg';
-import searchIcon from '../../shared/icons/searchIcon.svg';
-import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
-import calendarIconGrey from '../../shared/icons/calendarIconGrey.svg';
-import otchetDownIcon from '../../shared/icons/otchetDown.svg';
+import otchetIconGreyRaw from '../../shared/icons/otchetIconGrey.svg?raw';
+import searchIconRaw from '../../shared/icons/searchIcon.svg?raw';
+import upDownTableFilterRaw from '../../shared/icons/upDownTableFilter.svg?raw';
+import calendarIconGreyRaw from '../../shared/icons/calendarIconGrey.svg?raw';
+import otchetDownIconRaw from '../../shared/icons/otchetDown.svg?raw';
 import './reports.scss';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const otchetIconGrey = toDataUrl(otchetIconGreyRaw);
+const searchIcon = toDataUrl(searchIconRaw);
+const upDownTableFilter = toDataUrl(upDownTableFilterRaw);
+const calendarIconGrey = toDataUrl(calendarIconGreyRaw);
+const otchetDownIcon = toDataUrl(otchetDownIconRaw);
 
 type ReportType = 'nomenclature' | 'payments';
 

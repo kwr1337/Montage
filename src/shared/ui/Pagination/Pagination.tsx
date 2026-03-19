@@ -1,7 +1,11 @@
 import React from 'react';
-import paginationIconLeft from '../../icons/paginationIconNotActiveLeft.svg';
-import paginationIconRight from '../../icons/paginationIconNotActiveRight.svg';
+import paginationIconLeftRaw from '../../icons/paginationIconNotActiveLeft.svg?raw';
+import paginationIconRightRaw from '../../icons/paginationIconNotActiveRight.svg?raw';
 import './pagination.scss';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const paginationIconLeft = toDataUrl(paginationIconLeftRaw);
+const paginationIconRight = toDataUrl(paginationIconRightRaw);
 
 type PaginationProps = {
   currentPage: number;

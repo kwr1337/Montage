@@ -1,7 +1,11 @@
 import React from 'react';
-import glazOtkrit from '../icons/glaz_seriy_otkrit.svg';
-import glazZakrit from '../icons/glaz_seriy_zakrit.svg';
+import glazOtkritRaw from '../icons/glaz_seriy_otkrit.svg?raw';
+import glazZakritRaw from '../icons/glaz_seriy_zakrit.svg?raw';
 import './text-input.scss';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const glazOtkrit = toDataUrl(glazOtkritRaw);
+const glazZakrit = toDataUrl(glazZakritRaw);
 
 type TextInputProps = {
   label?: string;

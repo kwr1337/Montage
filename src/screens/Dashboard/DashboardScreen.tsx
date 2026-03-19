@@ -1,6 +1,9 @@
 import React from 'react';
-import dashboardIconGrey from '../../shared/icons/dashboardIconGrey.svg';
+import dashboardIconGreyRaw from '../../shared/icons/dashboardIconGrey.svg?raw';
 import { PageHeader } from '../../shared/ui/PageHeader/PageHeader';
+import './dashboard.scss';
+
+const dashboardIconGrey = `data:image/svg+xml,${encodeURIComponent(dashboardIconGreyRaw)}`;
 
 export const DashboardScreen: React.FC = () => {
   return (

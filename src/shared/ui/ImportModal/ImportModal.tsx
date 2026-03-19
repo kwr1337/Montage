@@ -1,12 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import closeIcon from '../../icons/closeIcon.svg';
-import importIcon from '../../icons/importIcon.svg';
-import trashIcon from '../../icons/trashIcon.svg';
-import importTableIcon from '../../icons/imporTableIcon.svg';
+import closeIconRaw from '../../icons/closeIcon.svg?raw';
+import importIconRaw from '../../icons/importIcon.svg?raw';
+import trashIconRaw from '../../icons/trashIcon.svg?raw';
+import importTableIconRaw from '../../icons/imporTableIcon.svg?raw';
 import templateFile from '../../files/Файл шаблон для импорта.xlsx?url';
 import { apiService } from '../../../services/api';
 import './import-modal.scss';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const closeIcon = toDataUrl(closeIconRaw);
+const importIcon = toDataUrl(importIconRaw);
+const trashIcon = toDataUrl(trashIconRaw);
+const importTableIcon = toDataUrl(importTableIconRaw);
 
 interface ImportModalProps {
   isOpen: boolean;

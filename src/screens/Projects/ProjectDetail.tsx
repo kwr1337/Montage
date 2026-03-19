@@ -1,21 +1,33 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { apiService } from '../../services/api';
 import { canDeleteProject, canEditProjectGeneralInfo, canChangeProjectStatus, canEditFOT, canManageProjectEmployees, canEditSpecification } from '../../services/permissions';
-import sotrudnikiVProekte from '../../shared/icons/sotrudnikiVProekte.svg';
-import editIcon from '../../shared/icons/editIcon.svg';
-import dotsIcon from '../../shared/icons/dotsIcon.svg';
-import userDropdownIcon from '../../shared/icons/user-dropdown-icon.svg';
-import calendarIconGrey from '../../shared/icons/calendarIconGrey.svg';
-import upDownTableFilter from '../../shared/icons/upDownTableFilter.svg';
-import deleteIcon from '../../shared/icons/deleteIcon.svg';
-import addIcon from '../../shared/icons/addIcon.svg';
+import sotrudnikiVProekteRaw from '../../shared/icons/sotrudnikiVProekte.svg?raw';
+import editIconRaw from '../../shared/icons/editIcon.svg?raw';
+import dotsIconRaw from '../../shared/icons/dotsIcon.svg?raw';
+import userDropdownIconRaw from '../../shared/icons/user-dropdown-icon.svg?raw';
+import calendarIconGreyRaw from '../../shared/icons/calendarIconGrey.svg?raw';
+import upDownTableFilterRaw from '../../shared/icons/upDownTableFilter.svg?raw';
+import deleteIconRaw from '../../shared/icons/deleteIcon.svg?raw';
+import addIconRaw from '../../shared/icons/addIcon.svg?raw';
 import AddNomenclatureModal from '../../shared/ui/AddNomenclatureModal/AddNomenclatureModal';
 import EditNomenclatureModal from '../../shared/ui/EditNomenclatureModal/EditNomenclatureModal';
 import ImportModal from '../../shared/ui/ImportModal/ImportModal';
 import AddTrackingModal from '../../shared/ui/AddTrackingModal/AddTrackingModal';
 import DeleteTrackingModal from '../../shared/ui/DeleteTrackingModal/DeleteTrackingModal';
 import { CommentModal } from '../../shared/ui/CommentModal/CommentModal';
-import commentMobIcon from '../../shared/icons/commentMob.svg';
+import commentMobIconRaw from '../../shared/icons/commentMob.svg?raw';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const sotrudnikiVProekte = toDataUrl(sotrudnikiVProekteRaw);
+const editIcon = toDataUrl(editIconRaw);
+const dotsIcon = toDataUrl(dotsIconRaw);
+const userDropdownIcon = toDataUrl(userDropdownIconRaw);
+const calendarIconGrey = toDataUrl(calendarIconGreyRaw);
+const upDownTableFilter = toDataUrl(upDownTableFilterRaw);
+const deleteIcon = toDataUrl(deleteIconRaw);
+const addIcon = toDataUrl(addIconRaw);
+const commentMobIcon = toDataUrl(commentMobIconRaw);
 import { Pagination } from '../../shared/ui/Pagination/Pagination';
 import '../../shared/ui/CommentModal/comment-modal.scss';
 
@@ -66,28 +78,29 @@ const EDITABLE_PROJECT_STATUS_VALUES = EDITABLE_PROJECT_STATUS_OPTIONS.map((opti
 const DEFAULT_EDITABLE_PROJECT_STATUS = EDITABLE_PROJECT_STATUS_OPTIONS[0].value;
 
 export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, onProjectUpdate, onProjectCreate, onRefresh, isNew = false }) => {
-  const [localProject, setLocalProject] = useState(project);
-  // Восстанавливаем activeTab из localStorage при загрузке
-  const [activeTab, setActiveTab] = useState(() => {
-    if (!project?.id) {
-      return 'general';
-    }
-    const saved = localStorage.getItem(`activeTab_${project.id}`);
-    return saved || 'general';
-  });
+  const navigate = useNavigate();
+  const params = useParams();
 
-  // Обновляем activeTab при изменении проекта
+  const tabFromUrl = (() => {
+    const segments = params['*']?.split('/') || [];
+    const tab = segments[1] || 'general';
+    return ['general', 'specification', 'tracking'].includes(tab) ? tab : 'general';
+  })();
+
+  const activeTab = tabFromUrl;
+
+  const setActiveTabViaUrl = (tab: string) => {
+    if (project?.id) {
+      const path = tab === 'general' ? `/projects/${project.id}` : `/projects/${project.id}/${tab}`;
+      navigate(path, { replace: true });
+    }
+  };
+
+  const [localProject, setLocalProject] = useState(project);
+
   useEffect(() => {
-    if (!project?.id) {
-      setActiveTab('general');
-      return;
-    }
-    const saved = localStorage.getItem(`activeTab_${project.id}`);
-    if (saved) {
-      setActiveTab(saved);
-    } else {
-      setActiveTab('general');
-    }
+    trackingLoadedRef.current = false;
+    specificationLoadedRef.current = false;
   }, [project.id]);
   const [formData, setFormData] = useState({
     address: project.address || '',
@@ -134,6 +147,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   const canEditFOTField = canEditFOT(currentUser);
   const canManageEmployees = canManageProjectEmployees(currentUser);
   const canEditSpec = canEditSpecification(currentUser);
+
+  const trackingLoadedRef = React.useRef(false);
+  const specificationLoadedRef = React.useRef(false);
 
   const startDateInputRef = React.useRef<HTMLInputElement>(null);
   const endDateInputRef = React.useRef<HTMLInputElement>(null);
@@ -269,11 +285,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     }
   };
 
-  // Обновляем данные для фиксации работ при изменении сотрудников проекта
-  // Загружаем только когда открыта вкладка «Фиксация работ» — снижаем лишние запросы
+  const trackingRefreshRef = React.useRef(trackingRefreshTrigger);
   useEffect(() => {
     if (activeTab !== 'tracking') return;
+    const triggerChanged = trackingRefreshTrigger !== trackingRefreshRef.current;
+    if (trackingLoadedRef.current && !triggerChanged) return;
+    trackingRefreshRef.current = trackingRefreshTrigger;
     if (localProject.employees && Array.isArray(localProject.employees)) {
+      trackingLoadedRef.current = true;
       if (!localProject.id) {
         // Новый проект: формируем trackingItems локально без API (work_reports не существуют)
         const employeesWithoutGIP = localProject.employees.filter((emp: any) => !isGIP(emp));
@@ -311,42 +330,30 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       }
       const loadTrackingData = async () => {
         const employeesWithoutGIP = localProject.employees.filter((emp: any) => !isGIP(emp));
+
         const formattedEmployees = await Promise.all(
           employeesWithoutGIP.map(async (employee: any) => {
-            // Получаем дату начала работы сотрудника из pivot
             const startWorkingDate = employee.pivot?.start_working_date || null;
             const endWorkingDate = employee.pivot?.end_working_date || null;
             const daysInProject = calculateDaysInProject(startWorkingDate, endWorkingDate);
-            
-            // Определяем статус: если есть end_working_date, то "Удалён"
-            const status = endWorkingDate ? 'Удалён' : 
+            const status = endWorkingDate ? 'Удалён' :
                           (employee.employee_status === 'active' ? 'Работает' :
                           employee.is_dismissed ? 'Удалён' : 'Неизвестно');
-            
-            // Форматируем дату удаления
-            const deletionDate = endWorkingDate ? 
-              new Date(endWorkingDate).toLocaleDateString('ru-RU', {
-                day: 'numeric',
-                month: 'short',
-                year: 'numeric'
-              }) : null;
-            
-            // Получаем ставку в час
+            const deletionDate = endWorkingDate ?
+              new Date(endWorkingDate).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
             const rate = employee.pivot?.rate_per_hour || employee.rate_per_hour || 0;
-            
-            // Загружаем work_reports для сотрудника
+
             let hours = 0;
             let lastHours = 0;
             let totalSum = 0;
             let lastSum = 0;
-            
+
             try {
               const response = await apiService.getWorkReports(localProject.id, employee.id, {
                 per_page: 1000,
               });
-              
+
               let reports: any[] = [];
-              // Проверяем разные варианты структуры ответа
               if (response?.data?.data && Array.isArray(response.data.data)) {
                 reports = response.data.data;
               } else if (response?.data && Array.isArray(response.data)) {
@@ -354,22 +361,19 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
               } else if (Array.isArray(response)) {
                 reports = response;
               }
-              
-              // Сортируем reports по дате (от новых к старым) для получения последнего
+
               reports.sort((a, b) => {
                 const dateA = new Date(a.report_date).getTime();
                 const dateB = new Date(b.report_date).getTime();
                 return dateB - dateA;
               });
-              
-              // Суммируем все часы
+
               hours = reports.reduce((sum, report) => {
                 const hoursWorked = Number(report.hours_worked) || 0;
                 const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
                 return sum + (isAbsent ? 0 : hoursWorked);
               }, 0);
-              
-              // Получаем последние часы (из самого последнего отчета)
+
               let lastReport: any = null;
               if (reports.length > 0) {
                 lastReport = reports[0];
@@ -377,11 +381,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                 const isLastAbsent = lastReport.absent === true || lastReport.absent === 1 || lastReport.absent === '1';
                 lastHours = isLastAbsent ? 0 : lastHoursWorked;
               }
-              
-              // Рассчитываем суммы
+
               totalSum = hours * rate;
               lastSum = lastHours * rate;
-              
+
               return {
                 id: employee.id,
                 name: `${employee.last_name} ${employee.first_name.charAt(0)}. ${employee.second_name.charAt(0)}.`,
@@ -397,7 +400,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                 days: daysInProject,
                 hours: hours,
                 lastHours: lastHours,
-                lastReport: lastReport, // Сохраняем последний отчет для проверки комментария
+                lastReport: lastReport,
                 rate: rate,
                 lastSum: lastSum,
                 totalSum: totalSum
@@ -427,7 +430,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
             }
           })
         );
-          
+
         // Сортируем: сначала активные, затем удаленные
         const sortedEmployees = formattedEmployees.sort((a: any, b: any) => {
           const aIsDeleted = a.status === 'Удалён';
@@ -445,7 +448,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         setTrackingCurrentPage(1);
       };
       
-      loadTrackingData();
+      loadTrackingData().catch(err => {
+        console.error('loadTrackingData failed:', err);
+        setTrackingItems([]);
+      });
     } else {
       // Если employees пустой или undefined, очищаем trackingItems
       setTrackingItems([]);
@@ -528,10 +534,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     }
   }, [project]);
 
-  // Обновляем данные спецификации при изменении localProject.nomenclature
-  // Загружаем только когда открыта вкладка «Спецификация» — снижаем лишние запросы
+  const prevNomLengthRef = React.useRef<number | undefined>(undefined);
   useEffect(() => {
     if (activeTab !== 'specification') return;
+    const nomLength = localProject.nomenclature?.length;
+    const nomChanged = nomLength !== prevNomLengthRef.current;
+    if (specificationLoadedRef.current && !nomChanged) return;
+    prevNomLengthRef.current = nomLength;
     const loadNomenclatureWithChanges = async () => {
       if (localProject.nomenclature && Array.isArray(localProject.nomenclature) && localProject.id) {
         try {
@@ -595,11 +604,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
           );
           
           setSpecificationItems(itemsWithChanges);
+          specificationLoadedRef.current = true;
         } catch (error) {
           // Ошибка загрузки изменений обработана
         }
       } else {
-        // Если номенклатуры нет, очищаем список
         setSpecificationItems([]);
       }
     };
@@ -714,21 +723,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       setLocalProject(optimisticUpdate);
       if (onProjectUpdate) {
         onProjectUpdate(optimisticUpdate);
-      }
-
-      // Перезагружаем с сервера в фоне для синхронизации (не блокируем UI)
-      try {
-        const updatedProjectResponse = await apiService.getProjectById(localProject.id);
-        if (updatedProjectResponse && updatedProjectResponse.data) {
-          const updatedProject = updatedProjectResponse.data;
-          setLocalProject(updatedProject);
-          if (onProjectUpdate) {
-            onProjectUpdate(updatedProject);
-          }
-        }
-      } catch (error) {
-        console.error('Error refreshing project after update:', error);
-        // Оставляем оптимистичное обновление
       }
 
       setIsEditingHeader(false);
@@ -914,20 +908,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         onProjectUpdate(optimisticUpdate);
       }
 
-      // Перезагружаем с сервера в фоне для синхронизации (не блокируем UI)
-      try {
-        const updatedProjectResponse = await apiService.getProjectById(localProject.id);
-        if (updatedProjectResponse && updatedProjectResponse.data) {
-          const updatedProject = updatedProjectResponse.data;
-          setLocalProject(updatedProject);
-          if (onProjectUpdate) {
-            onProjectUpdate(updatedProject);
-          }
-        }
-      } catch (error) {
-        console.error('Error refreshing project after update:', error);
-        // Оставляем оптимистичное обновление
-      }
     } catch (error) {
       // Ошибка обработана без уведомления пользователя
     }
@@ -1317,33 +1297,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         project_managers: foremenIds.length > 0 ? foremenIds : localProject.project_managers,
       });
 
-      // После успешного PATCH делаем GET запрос для синхронизации с сервером
-      // Небольшая задержка для обработки на сервере
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      const updatedProjectResponse = await apiService.getProjectById(localProject.id);
-      
-      if (updatedProjectResponse && updatedProjectResponse.data) {
-        const serverProject = updatedProjectResponse.data;
-        
-        // Сравниваем и обновляем с данными с сервера (более актуальными)
-        if (serverProject.employees && Array.isArray(serverProject.employees)) {
-          // Синхронизируем с сервером - обновляем localProject реальными данными
-          setLocalProject({
-            ...serverProject,
-            employees: [...serverProject.employees]
-          });
-          // Перезагружаем таблицу с полными данными (часы, суммы) через useEffect
-          setTrackingRefreshTrigger(prev => prev + 1);
-
-          // Обновляем данные в родительском компоненте
-          if (onProjectUpdate) {
-            onProjectUpdate(serverProject);
-          }
-        }
-      }
+      setTrackingRefreshTrigger(prev => prev + 1);
     } catch (error) {
-      // Если ошибка - откатываем оптимистичное обновление
       console.error('Error adding employee:', error);
       
       // Откатываем к предыдущему состоянию
@@ -1515,50 +1470,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         project_managers: foremenIds.length > 0 ? foremenIds : localProject.project_managers,
       });
 
-      // После успешного PATCH делаем GET запрос для синхронизации с сервером
-      // Небольшая задержка для обработки на сервере
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      const updatedProjectResponse = await apiService.getProjectById(localProject.id);
-      
-      if (updatedProjectResponse && updatedProjectResponse.data) {
-        const serverProject = updatedProjectResponse.data;
-        
-        // Синхронизируем с сервером - обновляем localProject реальными данными
-        if (serverProject.employees && Array.isArray(serverProject.employees)) {
-          setLocalProject({
-            ...serverProject,
-            employees: [...serverProject.employees]
-          });
-          setTrackingRefreshTrigger(prev => prev + 1);
-
-          // Обновляем данные в родительском компоненте
-          if (onProjectUpdate) {
-            onProjectUpdate(serverProject);
-          }
-        }
-      }
+      setTrackingRefreshTrigger(prev => prev + 1);
 
       // Очищаем выбор
       setSelectedItems(new Set());
     } catch (error) {
-      // Если ошибка - откатываем оптимистичное обновление
       console.error('Error deleting employee:', error);
-      
-      // Откатываем к предыдущему состоянию - перезагружаем проект с сервера
-      try {
-        const response = await apiService.getProjectById(localProject.id);
-        if (response && response.data) {
-          setLocalProject(response.data);
-          setTrackingRefreshTrigger(prev => prev + 1);
-
-          if (onProjectUpdate) {
-            onProjectUpdate(response.data);
-          }
-        }
-      } catch (rollbackError) {
-        console.error('Error rolling back:', rollbackError);
-      }
     }
   };
 
@@ -1800,15 +1717,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
 
       setSpecificationItems(prev => prev.filter(item => !selectedItems.has(item.id)));
       setSelectedItems(new Set());
-
-      // Обновляем проект с сервера и синхронизируем с родителем
-      const response = await apiService.getProjectById(localProject.id);
-      const updatedProject = response?.data ?? response;
-      if (updatedProject) {
-        setLocalProject(updatedProject);
-        onProjectUpdate?.(updatedProject);
-      }
-      await onRefresh?.();
     } catch (error) {
       // Ошибка обработана без уведомления пользователя
     }
@@ -2149,34 +2057,21 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
           <div className="projects__detail-tabs-top">
             <button 
               className={`projects__detail-tab ${activeTab === 'general' ? 'projects__detail-tab--active' : ''}`}
-              onClick={() => {
-                setActiveTab('general');
-                if (project?.id) {
-                  localStorage.setItem(`activeTab_${project.id}`, 'general');
-                }
-              }}
+              onClick={() => setActiveTabViaUrl('general')}
             >
               Общая информация
             </button>
             <button 
               className={`projects__detail-tab ${activeTab === 'specification' ? 'projects__detail-tab--active' : ''}`}
-              onClick={() => {
-                setActiveTab('specification');
-                if (project?.id) {
-                  localStorage.setItem(`activeTab_${project.id}`, 'specification');
-                }
-              }}
+              onClick={() => setActiveTabViaUrl('specification')}
             >
               Спецификация
             </button>
             <button 
               className={`projects__detail-tab ${activeTab === 'tracking' ? 'projects__detail-tab--active' : ''}`}
               onClick={() => {
-                setActiveTab('tracking');
-                setTrackingCurrentPage(1); // Сбрасываем пагинацию при переключении на вкладку
-                if (project?.id) {
-                  localStorage.setItem(`activeTab_${project.id}`, 'tracking');
-                }
+                setActiveTabViaUrl('tracking');
+                setTrackingCurrentPage(1);
               }}
             >
               Фиксация работ
@@ -2918,7 +2813,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         onEdit={handleSaveEdit}
         initialData={editingItem ? {
           nomenclature: editingItem.name,
-          changeDate: new Date().toISOString().split('T')[0], // Формат YYYY-MM-DD для date input
+          changeDate: new Date().toISOString().split('T')[0],
           quantity: editingItem.changes || editingItem.plan
         } : undefined}
         historyData={nomenclatureHistory}

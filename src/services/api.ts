@@ -37,9 +37,35 @@ interface ApiResponse<T> {
 
 class ApiService {
   private baseURL: string;
+  private _requestCache = new Map<string, { promise: Promise<any>; ts: number }>();
+  private readonly CACHE_TTL = 10_000; // 10 секунд — дедупликация в рамках одной загрузки страницы
 
   constructor(baseURL: string) {
     this.baseURL = baseURL;
+  }
+
+  private _cachedGet<T>(cacheKey: string, fetcher: () => Promise<T>): Promise<T> {
+    const now = Date.now();
+    const cached = this._requestCache.get(cacheKey);
+    if (cached && (now - cached.ts) < this.CACHE_TTL) {
+      return cached.promise;
+    }
+    const promise = fetcher().catch(err => {
+      this._requestCache.delete(cacheKey);
+      throw err;
+    });
+    this._requestCache.set(cacheKey, { promise, ts: now });
+    return promise;
+  }
+
+  invalidateCache(prefix?: string): void {
+    if (!prefix) {
+      this._requestCache.clear();
+      return;
+    }
+    for (const key of this._requestCache.keys()) {
+      if (key.startsWith(prefix)) this._requestCache.delete(key);
+    }
   }
 
   private async request<T>(
@@ -134,6 +160,8 @@ class ApiService {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user');
     localStorage.removeItem('token_type');
+    this.clearProfileCache();
+    this.invalidateCache();
   }
 
   isAuthenticated(): boolean {
@@ -176,11 +204,31 @@ class ApiService {
     }
   }
 
+  private _profileCache: { promise: Promise<any> | null; data: any | null } = { promise: null, data: null };
+
   async getCurrentUserProfile(): Promise<any> {
-    const response = await this.request<any>('/auth/me', {
-      method: 'GET',
-    });
-    return response;
+    if (this._profileCache.data) return this._profileCache.data;
+    if (this._profileCache.promise) return this._profileCache.promise;
+
+    this._profileCache.promise = this.request<any>('/auth/me', { method: 'GET' })
+      .then(response => {
+        const userData = response?.data ?? response;
+        this._profileCache.data = response;
+        if (userData && typeof userData === 'object') {
+          localStorage.setItem('user', JSON.stringify(userData));
+        }
+        return response;
+      })
+      .catch(err => {
+        this._profileCache.promise = null;
+        throw err;
+      });
+
+    return this._profileCache.promise;
+  }
+
+  clearProfileCache(): void {
+    this._profileCache = { promise: null, data: null };
   }
 
   async getProjects(
@@ -201,35 +249,32 @@ class ApiService {
     if (options?.with?.length) {
       options.with.forEach((rel) => params.append('with[]', rel));
     }
-    // filter[manager_id][] вызывает 500 на бэкенде — не используем. Пробуем filter[project_managers][] и filter[manager_id]=id
     if (options?.filter?.project_managers?.length) {
       options.filter.project_managers.forEach((id) => params.append('filter[project_managers][]', String(id)));
     }
     if (options?.filter?.manager_id?.length) {
-      params.set('filter[manager_id]', options.filter.manager_id.join(',')); // формат filter[manager_id]=21
+      params.set('filter[manager_id]', options.filter.manager_id.join(','));
     }
     if (options?.my) {
       params.set('my', '1');
     }
     const query = params.toString();
-    const response = await this.request<any>(`/projects${query ? `?${query}` : ''}`, {
-      method: 'GET',
-    });
-    return response;
+    const url = `/projects${query ? `?${query}` : ''}`;
+    return this._cachedGet(`projects:${query}`, () =>
+      this.request<any>(url, { method: 'GET' })
+    );
   }
 
   async getProjectById(projectId: number): Promise<any> {
-    const response = await this.request<any>(`/projects/${projectId}?with[]=nomenclature&with[]=employees`, {
-      method: 'GET',
-    });
-    return response;
+    return this._cachedGet(`project:${projectId}`, () =>
+      this.request<any>(`/projects/${projectId}?with[]=nomenclature&with[]=employees`, { method: 'GET' })
+    );
   }
 
   async getUsers(): Promise<any> {
-    const response = await this.request<any>('/users', {
-      method: 'GET',
-    });
-    return response;
+    return this._cachedGet('users', () =>
+      this.request<any>('/users', { method: 'GET' })
+    );
   }
 
   /** Назначения рабочих на день. Только свои (бригадир = авторизованный пользователь). project_id — фильтр по проекту */
@@ -309,6 +354,7 @@ class ApiService {
       },
       body: JSON.stringify(data),
     });
+    this.invalidateCache('projects');
     return response;
   }
 
@@ -334,6 +380,8 @@ class ApiService {
       }
 
       const responseData = await response.json();
+      this.invalidateCache('project');
+      this.invalidateCache('projects');
       return responseData;
     } catch (error) {
       throw error;
@@ -347,15 +395,17 @@ class ApiService {
         'Accept': 'application/json',
       },
     });
+    this.invalidateCache('project');
+    this.invalidateCache('projects');
     return response;
   }
 
   // Получить историю изменений номенклатуры в проекте
   async getNomenclatureChanges(projectId: number, nomenclatureId: number, page: number = 1, perPage: number = 100): Promise<any> {
-    const response = await this.request<any>(`/projects/${projectId}/nomenclature/${nomenclatureId}/changes?page=${page}&per_page=${perPage}&with[]=logs&with[]=logs.user`, {
-      method: 'GET',
-    });
-    return response;
+    const url = `/projects/${projectId}/nomenclature/${nomenclatureId}/changes?page=${page}&per_page=${perPage}&with[]=logs&with[]=logs.user`;
+    return this._cachedGet(`nom-changes:${projectId}:${nomenclatureId}:${page}:${perPage}`, () =>
+      this.request<any>(url, { method: 'GET' })
+    );
   }
 
   // Добавить изменение номенклатуры в проекте
@@ -370,6 +420,7 @@ class ApiService {
       },
       body: JSON.stringify(payload),
     });
+    this.invalidateCache('nom-changes');
     return response;
   }
 
@@ -381,15 +432,15 @@ class ApiService {
         'Accept': 'application/json',
       },
     });
+    this.invalidateCache('project');
     return response;
   }
 
   // Получить список номенклатуры
   async getNomenclature(): Promise<any> {
-    const response = await this.request<any>('/nomenclature', {
-      method: 'GET',
-    });
-    return response;
+    return this._cachedGet('nomenclature', () =>
+      this.request<any>('/nomenclature', { method: 'GET' })
+    );
   }
 
   // Создать номенклатуру в общей номенклатуре
@@ -407,6 +458,7 @@ class ApiService {
         description: data.description || '',
       }),
     });
+    this.invalidateCache('nomenclature');
     return response;
   }
 
@@ -420,6 +472,7 @@ class ApiService {
       },
       body: JSON.stringify({ start_amount: startAmount }),
     });
+    this.invalidateCache('project');
     return response;
   }
 
@@ -466,6 +519,7 @@ class ApiService {
       throw new Error(`Import failed: ${response.status} ${errorText}`);
     }
     const contentType = response.headers.get('content-type');
+    this.invalidateCache('project');
     if (contentType && contentType.includes('application/json')) {
       return response.json();
     }
@@ -481,13 +535,11 @@ class ApiService {
     if (options?.with && Array.isArray(options.with)) {
       options.with.forEach((item) => params.append('with[]', item));
     }
-    if (params.toString()) {
-      url += `?${params.toString()}`;
-    }
-    const response = await this.request<any>(url, {
-      method: 'GET',
-    });
-    return response;
+    const qs = params.toString();
+    if (qs) url += `?${qs}`;
+    return this._cachedGet(`nom-facts:${projectId}:${nomenclatureId}:${qs}`, () =>
+      this.request<any>(url, { method: 'GET' })
+    );
   }
 
   // Создать фактический расход номенклатуры в проекте
@@ -503,10 +555,10 @@ class ApiService {
         fact_date: factDate,
       }),
     });
+    this.invalidateCache('nom-facts');
     return response;
   }
 
-  // Редактировать фактический расход номенклатуры в проекте
   async updateNomenclatureFact(projectId: number, nomenclatureId: number, factId: number, amount: number, factDate: string): Promise<any> {
     const response = await this.request<any>(`/projects/${projectId}/nomenclature/${nomenclatureId}/facts/${factId}`, {
       method: 'PATCH',
@@ -519,10 +571,10 @@ class ApiService {
         fact_date: factDate,
       }),
     });
+    this.invalidateCache('nom-facts');
     return response;
   }
 
-  // Удалить фактический расход номенклатуры в проекте
   async deleteNomenclatureFact(projectId: number, nomenclatureId: number, factId: number): Promise<any> {
     const response = await this.request<any>(`/projects/${projectId}/nomenclature/${nomenclatureId}/facts/${factId}`, {
       method: 'DELETE',
@@ -530,6 +582,7 @@ class ApiService {
         'Accept': 'application/json',
       },
     });
+    this.invalidateCache('nom-facts');
     return response;
   }
 
@@ -542,21 +595,22 @@ class ApiService {
         'Accept': 'application/json',
       },
     });
+    this.invalidateCache('project');
+    this.invalidateCache('projects');
     return response;
   }
 
-  /** Получить все work-reports по проекту (если API поддерживает) — для списка сотрудников с часами */
   async getProjectWorkReports(projectId: number, params?: { page?: number; per_page?: number }): Promise<any> {
-    let url = `/projects/${projectId}/work-reports`;
     const search = new URLSearchParams();
     if (params?.page) search.append('page', String(params.page));
     if (params?.per_page) search.append('per_page', String(params.per_page));
     const qs = search.toString();
-    if (qs) url += `?${qs}`;
-    return this.request<any>(url, { method: 'GET' });
+    const url = `/projects/${projectId}/work-reports${qs ? `?${qs}` : ''}`;
+    return this._cachedGet(`project-work-reports:${projectId}:${qs}`, () =>
+      this.request<any>(url, { method: 'GET' })
+    );
   }
 
-  // Получить список рабочего графика сотрудника в проекте
   async getWorkReports(
     projectId: number,
     userId: number,
@@ -569,7 +623,6 @@ class ApiService {
   ): Promise<any> {
     let url = `/projects/${projectId}/user/${userId}/work-reports`;
     const params = new URLSearchParams();
-    
     if (options?.page) params.append('page', options.page.toString());
     if (options?.per_page) params.append('per_page', options.per_page.toString());
     if (options?.with) {
@@ -579,15 +632,11 @@ class ApiService {
       if (options.filter.date_from) params.append('filter[date_from]', options.filter.date_from);
       if (options.filter.date_to) params.append('filter[date_to]', options.filter.date_to);
     }
-    
-    if (params.toString()) {
-      url += `?${params.toString()}`;
-    }
-    
-    const response = await this.request<any>(url, {
-      method: 'GET',
-    });
-    return response;
+    const qs = params.toString();
+    if (qs) url += `?${qs}`;
+    return this._cachedGet(`work-reports:${projectId}:${userId}:${qs}`, () =>
+      this.request<any>(url, { method: 'GET' })
+    );
   }
 
   // Добавить запись в график сотрудника
@@ -609,10 +658,11 @@ class ApiService {
       },
       body: JSON.stringify(data),
     });
+    this.invalidateCache('project-work-reports');
+    this.invalidateCache('work-reports');
     return response;
   }
 
-  // Изменить запись в графике сотрудника
   async updateWorkReport(
     projectId: number,
     userId: number,
@@ -631,10 +681,11 @@ class ApiService {
       },
       body: JSON.stringify(data),
     });
+    this.invalidateCache('project-work-reports');
+    this.invalidateCache('work-reports');
     return response;
   }
 
-  // Удалить запись из графика сотрудника
   async deleteWorkReport(projectId: number, userId: number, reportId: number): Promise<any> {
     const response = await this.request<any>(`/projects/${projectId}/user/${userId}/work-reports/${reportId}`, {
       method: 'DELETE',
@@ -642,6 +693,8 @@ class ApiService {
         'Accept': 'application/json',
       },
     });
+    this.invalidateCache('project-work-reports');
+    this.invalidateCache('work-reports');
     return response;
   }
 

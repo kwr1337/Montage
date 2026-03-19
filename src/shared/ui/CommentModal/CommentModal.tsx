@@ -1,6 +1,9 @@
 import React from 'react';
-import closeIcon from '../../icons/closeIcon.svg';
+import closeIconRaw from '../../icons/closeIcon.svg?raw';
 import './comment-modal.scss';
+
+const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
+const closeIcon = toDataUrl(closeIconRaw);
 
 interface CommentModalProps {
   isOpen: boolean;
