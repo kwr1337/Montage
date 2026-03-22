@@ -43,6 +43,8 @@ type Payment = {
   // Вычисляемые поля для отображения
   employeeName?: string;
   employeePosition?: string;
+  /** Название проекта для строки выплаты */
+  projectName?: string;
   hours?: number;
   rate?: number;
   total?: number;
@@ -175,19 +177,17 @@ export const SalaryScreen: React.FC = () => {
       }
 
 
-        // Группируем выплаты по сотрудникам И месяцам
-        // Каждая выплата за отдельный месяц должна быть отдельной строкой
-        const paymentsByEmployeeAndMonth = new Map<string, Payment>();
-        
+        // Группируем выплаты по сотруднику + проекту + месяцу (одна строка = один проект)
+        const paymentsByEmployeeProjectMonth = new Map<string, Payment>();
+
         paymentsData.forEach((payment: Payment) => {
-          // Определяем месяц выплаты по дате первой выплаты
-          const paymentDate = payment.first_payment_date 
+          const paymentDate = payment.first_payment_date
             ? new Date(payment.first_payment_date)
-            : payment.second_payment_date 
-            ? new Date(payment.second_payment_date)
-            : payment.third_payment_date 
-            ? new Date(payment.third_payment_date)
-            : null;
+            : payment.second_payment_date
+              ? new Date(payment.second_payment_date)
+              : payment.third_payment_date
+                ? new Date(payment.third_payment_date)
+                : null;
 
           if (!paymentDate || Number.isNaN(paymentDate.getTime())) {
             console.warn(`Payment ${payment.id} has no valid date, skipping`);
@@ -195,67 +195,99 @@ export const SalaryScreen: React.FC = () => {
           }
 
           const userId = payment.user_id;
-          const monthKey = `${userId}-${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, '0')}`;
-          
-          // Если для этого сотрудника и месяца уже есть выплата, берем более свежую
-          if (paymentsByEmployeeAndMonth.has(monthKey)) {
-            const existingPayment = paymentsByEmployeeAndMonth.get(monthKey)!;
-            const existingDate = existingPayment.first_payment_date 
+          const projectKey = payment.project_id != null ? String(payment.project_id) : 'none';
+          const monthKey = `${userId}-${projectKey}-${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, '0')}`;
+
+          if (paymentsByEmployeeProjectMonth.has(monthKey)) {
+            const existingPayment = paymentsByEmployeeProjectMonth.get(monthKey)!;
+            const existingDate = existingPayment.first_payment_date
               ? new Date(existingPayment.first_payment_date)
-              : existingPayment.second_payment_date 
-              ? new Date(existingPayment.second_payment_date)
-              : existingPayment.third_payment_date 
-              ? new Date(existingPayment.third_payment_date)
-              : null;
-            
+              : existingPayment.second_payment_date
+                ? new Date(existingPayment.second_payment_date)
+                : existingPayment.third_payment_date
+                  ? new Date(existingPayment.third_payment_date)
+                  : null;
+
             if (existingDate && paymentDate > existingDate) {
-              paymentsByEmployeeAndMonth.set(monthKey, payment);
+              paymentsByEmployeeProjectMonth.set(monthKey, payment);
             }
           } else {
-            paymentsByEmployeeAndMonth.set(monthKey, payment);
+            paymentsByEmployeeProjectMonth.set(monthKey, payment);
           }
         });
 
-        // Форматируем данные для отображения — одна строка на сотрудника-месяц
+        const sumHoursForProject = async (
+          projectId: number,
+          uid: number,
+          monthStart: Date,
+          monthEnd: Date,
+          monthStartStr: string,
+          monthEndStr: string
+        ): Promise<number> => {
+          const cacheKey = `${projectId}:${uid}:${monthStartStr}:${monthEndStr}`;
+          let reports: any[];
+          if (workReportsCache.has(cacheKey)) {
+            reports = workReportsCache.get(cacheKey)!;
+          } else {
+            const response = await apiService.getWorkReports(projectId, uid, {
+              per_page: 1000,
+              filter: {
+                date_from: monthStartStr,
+                date_to: monthEndStr,
+              },
+            });
+            reports = [];
+            if (response?.data?.data && Array.isArray(response.data.data)) {
+              reports = response.data.data;
+            } else if (response?.data && Array.isArray(response.data)) {
+              reports = response.data;
+            } else if (Array.isArray(response)) {
+              reports = response;
+            }
+            workReportsCache.set(cacheKey, reports);
+          }
+
+          const monthReports = reports.filter((report) => {
+            if (!report.report_date) return false;
+            const reportDate = new Date(report.report_date);
+            return reportDate >= monthStart && reportDate <= monthEnd;
+          });
+
+          return monthReports.reduce((sum, report) => {
+            const hoursWorked = Number(report.hours_worked) || 0;
+            const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
+            return sum + (isAbsent ? 0 : hoursWorked);
+          }, 0);
+        };
+
         const formattedPayments = await Promise.all(
-          Array.from(paymentsByEmployeeAndMonth.values()).map(async (payment) => {
+          Array.from(paymentsByEmployeeProjectMonth.values()).map(async (payment) => {
             const userId = payment.user_id;
-            
+
             const userData: any = payment.user || usersById.get(userId) || null;
-            
+
             let hours = 0;
             let total = 0;
-            const rate = userData?.rate_per_hour || 0;
+            let rate = 0;
+
+            const projectMeta = payment.project_id != null
+              ? allProjectsList.find((p: any) => p.id === payment.project_id)
+              : null;
+            const projectName =
+              payment.project_id != null
+                ? (projectMeta?.name || `Проект №${payment.project_id}`)
+                : 'Все проекты (нет привязки)';
 
             if (userId) {
               try {
-                let projectsToCheck = allProjectsList.filter((project: any) => {
-                  if (!project.employees || !Array.isArray(project.employees)) return false;
-                  return project.employees.some((emp: any) => {
-                    const empId = emp.id || emp.user_id;
-                    return empId === userId;
-                  });
-                });
-
-                if (projectsToCheck.length === 0 && payment.project_id) {
-                  projectsToCheck = allProjectsList.filter((p: any) => p.id === payment.project_id);
-                }
-
-                const employeeProjects = projectsToCheck;
-
-                // Определяем месяц для подсчета часов
-                // Используем месяц из первой выплаты, если она есть, иначе текущий месяц
                 const now = new Date();
                 let monthStart: Date;
                 let monthEnd: Date;
-                
-                // Приоритет: фильтр дат (период просмотра) → диапазон всех дат выплат → текущий месяц
+
                 if (dateFrom && dateTo) {
-                  // Пользователь выбрал период — используем его для учёта часов
                   monthStart = new Date(dateFrom);
                   monthEnd = new Date(dateTo);
                 } else if (payment.first_payment_date || payment.second_payment_date || payment.third_payment_date) {
-                  // Берём диапазон от самой ранней до самой поздней выплаты (охватываем все месяцы)
                   const dates = [
                     payment.first_payment_date,
                     payment.second_payment_date,
@@ -267,62 +299,50 @@ export const SalaryScreen: React.FC = () => {
                   monthStart = new Date(earliest.getFullYear(), earliest.getMonth(), 1);
                   monthEnd = new Date(latest.getFullYear(), latest.getMonth() + 1, 0, 23, 59, 59);
                 } else {
-                  // Иначе используем текущий месяц
                   monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
                   monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
                 }
-                
+
                 const monthStartStr = monthStart.toISOString().split('T')[0];
                 const monthEndStr = monthEnd.toISOString().split('T')[0];
-                
 
-                // Суммируем часы из всех проектов сотрудника за выбранный месяц
-                const allHours = await Promise.all(
-                  employeeProjects.map(async (project: any) => {
-                    try {
-                      const cacheKey = `${project.id}:${userId}:${monthStartStr}:${monthEndStr}`;
-                      let reports: any[];
-                      if (workReportsCache.has(cacheKey)) {
-                        reports = workReportsCache.get(cacheKey)!;
-                      } else {
-                        const response = await apiService.getWorkReports(project.id, userId, {
-                          per_page: 1000,
-                          filter: {
-                            date_from: monthStartStr,
-                            date_to: monthEndStr,
-                          },
-                        });
-                        reports = [];
-                        if (response?.data?.data && Array.isArray(response.data.data)) {
-                          reports = response.data.data;
-                        } else if (response?.data && Array.isArray(response.data)) {
-                          reports = response.data;
-                        } else if (Array.isArray(response)) {
-                          reports = response;
-                        }
-                        workReportsCache.set(cacheKey, reports);
-                      }
+                if (payment.project_id != null) {
+                  const pid = payment.project_id;
+                  const project = projectMeta ?? allProjectsList.find((p: any) => p.id === pid);
+                  const empInProject = project?.employees?.find((emp: any) => {
+                    const empId = emp.id || emp.user_id;
+                    return empId === userId;
+                  });
+                  rate =
+                    Number(
+                      empInProject?.pivot?.rate_per_hour ??
+                        empInProject?.rate_per_hour ??
+                        userData?.rate_per_hour ??
+                        0
+                    ) || 0;
 
-                      const monthReports = reports.filter((report) => {
-                        if (!report.report_date) return false;
-                        const reportDate = new Date(report.report_date);
-                        return reportDate >= monthStart && reportDate <= monthEnd;
-                      });
+                  hours = await sumHoursForProject(pid, userId, monthStart, monthEnd, monthStartStr, monthEndStr);
+                  total = hours * rate;
+                } else {
+                  let projectsToCheck = allProjectsList.filter((project: any) => {
+                    if (!project.employees || !Array.isArray(project.employees)) return false;
+                    return project.employees.some((emp: any) => {
+                      const empId = emp.id || emp.user_id;
+                      return empId === userId;
+                    });
+                  });
 
-                      return monthReports.reduce((sum, report) => {
-                        const hoursWorked = Number(report.hours_worked) || 0;
-                        const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
-                        return sum + (isAbsent ? 0 : hoursWorked);
-                      }, 0);
-                    } catch (error) {
-                      console.error(`Error loading work reports for employee ${userId} in project ${project.id}:`, error);
-                      return 0;
-                    }
-                  })
-                );
+                  rate = userData?.rate_per_hour || 0;
 
-                hours = allHours.reduce((sum, h) => sum + h, 0);
-                total = hours * rate;
+                  const allHours = await Promise.all(
+                    projectsToCheck.map(async (project: any) =>
+                      sumHoursForProject(project.id, userId, monthStart, monthEnd, monthStartStr, monthEndStr)
+                    )
+                  );
+
+                  hours = allHours.reduce((sum, h) => sum + h, 0);
+                  total = hours * rate;
+                }
               } catch (error) {
                 console.error(`Error loading hours for employee ${userId}:`, error);
               }
@@ -330,24 +350,23 @@ export const SalaryScreen: React.FC = () => {
 
             const employeeName = userData ? apiService.formatUserName(userData) : '';
             const employeePosition = userData?.role || '';
-            
-            // total: часы×ставка → API total → сумма выплат (как на странице сотрудника)
+
             const firstAmount = Number(payment.first_payment_amount) || 0;
             const secondAmount = Number(payment.second_payment_amount) || 0;
             const thirdAmount = Number(payment.third_payment_amount) || 0;
-            let effectiveTotal = total > 0 ? total : (Number(payment.total) || 0);
+            let effectiveTotal = total > 0 ? total : Number(payment.total) || 0;
             if (effectiveTotal === 0 && (firstAmount > 0 || secondAmount > 0 || thirdAmount > 0)) {
               effectiveTotal = firstAmount + secondAmount + thirdAmount;
             }
 
-            // Используем данные из выплаты
             return {
               ...payment,
-              user: userData || payment.user, // Сохраняем загруженные данные пользователя
-              employeeName: employeeName,
-              employeePosition: employeePosition,
-              rate: rate,
-              hours: hours,
+              user: userData || payment.user,
+              employeeName,
+              employeePosition,
+              projectName,
+              rate,
+              hours,
               total: effectiveTotal,
             };
           })
@@ -384,7 +403,8 @@ export const SalaryScreen: React.FC = () => {
       filtered = filtered.filter(
         (payment) =>
           (payment.employeeName || '').toLowerCase().includes(query) ||
-          (payment.employeePosition || '').toLowerCase().includes(query)
+          (payment.employeePosition || '').toLowerCase().includes(query) ||
+          (payment.projectName || '').toLowerCase().includes(query)
       );
     }
 
@@ -466,6 +486,10 @@ export const SalaryScreen: React.FC = () => {
           case 'employee':
             aValue = (a.employeeName || '').toLowerCase();
             bValue = (b.employeeName || '').toLowerCase();
+            break;
+          case 'project':
+            aValue = (a.projectName || '').toLowerCase();
+            bValue = (b.projectName || '').toLowerCase();
             break;
           case 'hours':
             aValue = Number(a.hours) || 0;
@@ -629,6 +653,7 @@ export const SalaryScreen: React.FC = () => {
 
       return {
         'Сотрудник': payment.employeeName || '',
+        'Проект': payment.projectName || '',
         'Должность': payment.employeePosition || '',
         'Кол-во часов': payment.hours || 0,
         'Ставка, ₽/час': `${formatCurrency(payment.rate || 0)}`,
@@ -836,6 +861,18 @@ export const SalaryScreen: React.FC = () => {
                   />
                 </div>
                 <div 
+                  className="salary__table-header-col salary__table-header-col--project"
+                  onClick={() => handleSort('project')}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <span>Проект</span>
+                  <img 
+                    src={upDownTableFilter} 
+                    alt="↑↓" 
+                    className={`salary__sort-icon ${sortField === 'project' ? 'salary__sort-icon--active' : ''}`}
+                  />
+                </div>
+                <div 
                   className="salary__table-header-col salary__table-header-col--hours"
                   onClick={() => handleSort('hours')}
                   style={{ cursor: 'pointer' }}
@@ -956,6 +993,9 @@ export const SalaryScreen: React.FC = () => {
                         <div className="salary__employee-name">{payment.employeeName}</div>
                       </div>
                     </div>
+                    <div className="salary__table-row-col salary__table-row-col--project" title={payment.projectName || ''}>
+                      <span className="salary__project-name">{payment.projectName || '—'}</span>
+                    </div>
                     <div className="salary__table-row-col salary__table-row-col--hours">
                       {payment.hours}
                     </div>
@@ -1050,8 +1090,30 @@ export const SalaryScreen: React.FC = () => {
           setIsAddPaymentModalOpen(false);
           setEditingPayment(null);
         }}
+        periodDateFrom={dateFrom}
+        periodDateTo={dateTo}
         onSave={async (data) => {
           try {
+            const parsePay = (s?: string | number) => {
+              if (s == null || s === '') return 0;
+              return parseFloat(String(s).replace(/\s/g, '').replace(/₽/g, '')) || 0;
+            };
+            const sumSaved =
+              parsePay(data.firstPayment?.amount) +
+              parsePay(data.secondPayment?.amount) +
+              parsePay(data.thirdPayment?.amount);
+            const maxAllowed =
+              editingPayment != null
+                ? Number(editingPayment.total) ||
+                  (editingPayment.hours != null && editingPayment.rate != null
+                    ? editingPayment.hours * editingPayment.rate
+                    : 0)
+                : null;
+            if (maxAllowed != null && maxAllowed > 0.01 && sumSaved - maxAllowed > 0.01) {
+              alert('Сумма выплат не может превышать начислено.');
+              return;
+            }
+
             if (editingPayment) {
               await apiService.updatePayment(editingPayment.id, {
                 user_id: data.employeeId,

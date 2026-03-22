@@ -61,6 +61,9 @@ type AddPaymentModalProps = {
     thirdPayment?: PaymentData;
     comment?: string;
   }) => void;
+  /** Период (как на экране ЗП) для расчёта «начислено» при добавлении новой выплаты */
+  periodDateFrom?: string;
+  periodDateTo?: string;
   projects?: Array<{ id: number; name: string }>;
   employees?: Array<{
     id: number;
@@ -74,10 +77,52 @@ type AddPaymentModalProps = {
   editData?: PaymentEditData | null;
 };
 
+/** Часы × ставка по проекту за период (как на экране «Выдача ЗП») */
+async function computeOwedTotalForProject(
+  projectId: number,
+  employeeId: number,
+  dateFrom: string,
+  dateTo: string,
+  fallbackRatePerHour?: number
+): Promise<number> {
+  const projRes = await apiService.getProjectById(projectId);
+  const project = projRes?.data ?? projRes;
+  const emp = project?.employees?.find((e: any) => Number(e.id ?? e.user_id) === Number(employeeId));
+  const rate =
+    Number(emp?.pivot?.rate_per_hour ?? emp?.rate_per_hour ?? fallbackRatePerHour ?? 0) || 0;
+  const monthStart = new Date(dateFrom);
+  const monthEnd = new Date(dateTo);
+  const response = await apiService.getWorkReports(projectId, employeeId, {
+    per_page: 1000,
+    filter: { date_from: dateFrom, date_to: dateTo },
+  });
+  let reports: any[] = [];
+  if (response?.data?.data && Array.isArray(response.data.data)) {
+    reports = response.data.data;
+  } else if (response?.data && Array.isArray(response.data)) {
+    reports = response.data;
+  } else if (Array.isArray(response)) {
+    reports = response;
+  }
+  const monthReports = reports.filter((report) => {
+    if (!report.report_date) return false;
+    const reportDate = new Date(report.report_date);
+    return reportDate >= monthStart && reportDate <= monthEnd;
+  });
+  const hours = monthReports.reduce((sum, report) => {
+    const hoursWorked = Number(report.hours_worked) || 0;
+    const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
+    return sum + (isAbsent ? 0 : hoursWorked);
+  }, 0);
+  return hours * rate;
+}
+
 export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  periodDateFrom,
+  periodDateTo,
   projects = [],
   employees = [],
   editData = null,
@@ -109,6 +154,9 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
     method: 'Наличные',
   });
   const [comment, setComment] = useState('');
+  /** Начислено (часы×ставка) за период при создании выплаты — для лимита и автостроки «остаток» */
+  const [estimatedOwedTotal, setEstimatedOwedTotal] = useState<number | null>(null);
+  const [isEstimatingOwed, setIsEstimatingOwed] = useState(false);
 
   const employeeDropdownRef = useRef<HTMLDivElement>(null);
   const methodDropdownRef1 = useRef<HTMLDivElement>(null);
@@ -191,6 +239,40 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
     load();
   }, [selectedProjectId, isOpen, employees, editData?.employeeId]);
 
+  useEffect(() => {
+    if (!isOpen || editData || !selectedProjectId || !selectedEmployeeId || !periodDateFrom || !periodDateTo) {
+      setEstimatedOwedTotal(null);
+      return;
+    }
+    let cancelled = false;
+    setIsEstimatingOwed(true);
+    const emp = employees.find((e) => e.id === selectedEmployeeId);
+    const fallback = Number((emp as any)?.user?.rate_per_hour ?? 0) || 0;
+    computeOwedTotalForProject(selectedProjectId, selectedEmployeeId, periodDateFrom, periodDateTo, fallback)
+      .then((total) => {
+        if (!cancelled) setEstimatedOwedTotal(total);
+      })
+      .catch(() => {
+        if (!cancelled) setEstimatedOwedTotal(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsEstimatingOwed(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, editData, selectedProjectId, selectedEmployeeId, periodDateFrom, periodDateTo, employees]);
+
+  const capTotalForForm = React.useMemo(() => {
+    if (editData) {
+      return (
+        Number(editData.total) ||
+        (editData.hours != null && editData.rate != null ? editData.hours * editData.rate : 0)
+      );
+    }
+    return estimatedOwedTotal ?? 0;
+  }, [editData, estimatedOwedTotal]);
+
   const formatDateDDMMYYYY = (dateString: string) => {
     if (!dateString) return '';
     const date = new Date(dateString);
@@ -259,6 +341,48 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
       return;
     }
 
+    const firstAmt = firstPayment.amount && firstPayment.date ? parseAmount(firstPayment.amount) : 0;
+    const secondAmt = secondPayment.amount && secondPayment.date ? parseAmount(secondPayment.amount) : 0;
+    let thirdAmt = 0;
+    if (capTotalForForm > 0) {
+      const calculatedBalance = Math.max(0, capTotalForForm - firstAmt - secondAmt);
+      if (calculatedBalance > 0 && thirdPayment.date) {
+        thirdAmt = calculatedBalance;
+      }
+    } else if (thirdPayment.amount && thirdPayment.date) {
+      thirdAmt = parseAmount(thirdPayment.amount);
+    }
+    const sumPayments = firstAmt + secondAmt + thirdAmt;
+    const fmt = (n: number) =>
+      new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(n));
+
+    if (sumPayments > 0.01) {
+      if (!editData && isEstimatingOwed) {
+        alert('Подождите: рассчитывается начисленная сумма по проекту за период.');
+        return;
+      }
+      if (!editData && periodDateFrom && periodDateTo && estimatedOwedTotal === null && !isEstimatingOwed) {
+        alert('Не удалось рассчитать начислено за период. Проверьте часы по проекту или попробуйте позже.');
+        return;
+      }
+    }
+
+    if (capTotalForForm > 0.01 && sumPayments - capTotalForForm > 0.01) {
+      alert(
+        `Сумма выплат (${fmt(sumPayments)} ₽) не может превышать начислено (${fmt(capTotalForForm)} ₽). Уменьшите суммы выплат.`
+      );
+      return;
+    }
+
+    if (capTotalForForm <= 0.01 && sumPayments > 0.01) {
+      alert(
+        editData
+          ? 'По записи начислено 0 ₽ — укажите выплаты только если скорректировано начисление (часы/ставка).'
+          : 'За выбранный период по проекту начислено 0 ₽ — нельзя внести выплату больше 0.'
+      );
+      return;
+    }
+
     const data = {
       employeeId: selectedEmployeeId,
       projectId,
@@ -275,14 +399,8 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
       } : undefined,
       // Остаток рассчитываем автоматически
       thirdPayment: (() => {
-        const effectiveTotal = editData?.total || (editData?.hours != null && editData?.rate != null ? editData.hours * editData.rate : 0);
-        if (effectiveTotal > 0) {
-          // Для редактирования рассчитываем остаток автоматически
-          const firstAmount = parseAmount(firstPayment.amount);
-          const secondAmount = parseAmount(secondPayment.amount);
-          const calculatedBalance = Math.max(0, effectiveTotal - firstAmount - secondAmount);
-          
-          // Если остаток больше 0 и есть дата, создаем третью выплату
+        if (capTotalForForm > 0) {
+          const calculatedBalance = Math.max(0, capTotalForForm - firstAmt - secondAmt);
           if (calculatedBalance > 0 && thirdPayment.date) {
             return {
               amount: calculatedBalance.toString(),
@@ -291,7 +409,6 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
             };
           }
         } else if (thirdPayment.amount && thirdPayment.date) {
-          // Для новой выплаты используем значение из формы
           return {
             amount: thirdPayment.amount,
             date: thirdPayment.date,
@@ -363,20 +480,18 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
   }, [editData, isOpen]);
 
   // Автоматический расчет остатка при изменении первой или второй выплаты
-  const effectiveTotal = editData?.total || (editData?.hours != null && editData?.rate != null ? editData.hours * editData.rate : 0);
   React.useEffect(() => {
-    if (effectiveTotal > 0) {
+    if (capTotalForForm > 0) {
       const firstAmount = parseAmount(firstPayment.amount);
       const secondAmount = parseAmount(secondPayment.amount);
-      const calculatedBalance = Math.max(0, effectiveTotal - firstAmount - secondAmount);
-      
-      // Обновляем остаток автоматически при изменении первой или второй выплаты
-      setThirdPayment(prev => ({
+      const calculatedBalance = Math.max(0, capTotalForForm - firstAmount - secondAmount);
+
+      setThirdPayment((prev) => ({
         ...prev,
         amount: calculatedBalance > 0 ? calculatedBalance.toString() : '',
       }));
     }
-  }, [firstPayment.amount, secondPayment.amount, effectiveTotal]);
+  }, [firstPayment.amount, secondPayment.amount, capTotalForForm]);
 
   // Закрытие dropdown при клике вне
   React.useEffect(() => {
@@ -686,11 +801,10 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
                       className="add-payment-modal__input"
                       readOnly
                       value={(() => {
-                        const total = editData?.total || (editData?.hours != null && editData?.rate != null ? editData.hours * editData.rate : 0);
-                        if (total > 0) {
+                        if (capTotalForForm > 0) {
                           const firstAmount = parseAmount(firstPayment.amount);
                           const secondAmount = parseAmount(secondPayment.amount);
-                          const calculatedBalance = Math.max(0, total - firstAmount - secondAmount);
+                          const calculatedBalance = Math.max(0, capTotalForForm - firstAmount - secondAmount);
                           return calculatedBalance > 0 ? formatCurrencyInput(calculatedBalance.toString()) : '';
                         }
                         return '';
@@ -785,7 +899,11 @@ export const AddPaymentModal: React.FC<AddPaymentModalProps> = ({
           <button
             className="add-payment-modal__btn add-payment-modal__btn--save"
             onClick={handleSave}
-            disabled={!selectedEmployeeId || (projects.length > 0 && !selectedProjectId && !editData?.projectId)}
+            disabled={
+              !selectedEmployeeId ||
+              (projects.length > 0 && !selectedProjectId && !editData?.projectId) ||
+              (!editData && isEstimatingOwed)
+            }
           >
             {editData ? 'Сохранить' : 'Добавить'}
           </button>

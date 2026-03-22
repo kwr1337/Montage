@@ -367,7 +367,13 @@
 
     &--employee {
       flex: 1;
-      min-width: 200px;
+      min-width: 160px;
+    }
+
+    &--project {
+      width: 180px;
+      flex-shrink: 0;
+      min-width: 0;
     }
 
     &--hours {
@@ -443,7 +449,14 @@
 
     &--employee {
       flex: 1;
-      min-width: 200px;
+      min-width: 160px;
+    }
+
+    &--project {
+      width: 180px;
+      flex-shrink: 0;
+      min-width: 0;
+      overflow: hidden;
     }
 
     &--hours {
@@ -474,6 +487,14 @@
       width: 90px;
       flex-shrink: 0;
     }
+  }
+
+  &__project-name {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
   }
 
   &__checkbox {
