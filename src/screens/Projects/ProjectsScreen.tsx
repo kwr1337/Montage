@@ -138,7 +138,34 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc'); // по умолчанию по убыванию
 
   const calculateTotalSpent = (project: any): number => {
-    return Number(project.budget_spent) || 0;
+    const budgetBalance = project?.budget_balance;
+    const budget = project?.budget;
+    if (Number.isFinite(Number(budget)) && Number.isFinite(Number(budgetBalance))) {
+      const spent = Number(budget) - Number(budgetBalance);
+      return spent > 0 ? spent : 0;
+    }
+
+    const spentCandidates = [
+      project?.total_spent,
+      project?.spent,
+      project?.budget_spent,
+    ];
+    const spentCandidate = spentCandidates.find((value) => Number.isFinite(Number(value)));
+    if (spentCandidate != null) {
+      return Number(spentCandidate) || 0;
+    }
+
+    // Fallback: если бэкенд возвращает список tracking_items (иногда в других ключах)
+    const trackingItems = project?.tracking_items ?? project?.trackingItems;
+    if (Array.isArray(trackingItems)) {
+      const fromTrackingItems = trackingItems.reduce(
+        (acc: number, item: any) => acc + (Number(item?.total_sum) || 0),
+        0
+      );
+      if (Number.isFinite(fromTrackingItems)) return fromTrackingItems;
+    }
+
+    return 0;
   };
 
   useEffect(() => {

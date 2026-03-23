@@ -1101,6 +1101,16 @@
     white-space: nowrap;
   }
 
+  &__project-name {
+    font-size: 12px;
+    font-weight: 400;
+    color: #2787f5;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
   &__payout {
     display: flex;
     flex-direction: column;

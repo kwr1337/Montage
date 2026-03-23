@@ -366,8 +366,8 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
           });
         }
 
-        // Группируем выплаты по месяцам
-        const paymentsByMonth = new Map<string, any[]>();
+        // Группируем выплаты по проекту и месяцам (чтобы суммы не сливались)
+        const paymentsByProjectAndMonth = new Map<string, any[]>();
         
         paymentsData.forEach((payment: any) => {
           // Определяем месяц по дате первой выплаты
@@ -381,19 +381,22 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
 
           if (!paymentDate || Number.isNaN(paymentDate.getTime())) return;
 
-          const monthKey = `${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, '0')}`;
+          const projectId = payment.project_id != null ? Number(payment.project_id) : null;
+          const projectKey = projectId != null ? String(projectId) : 'none';
+          const monthKey = `${projectKey}-${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, '0')}`;
           
-          if (!paymentsByMonth.has(monthKey)) {
-            paymentsByMonth.set(monthKey, []);
+          if (!paymentsByProjectAndMonth.has(monthKey)) {
+            paymentsByProjectAndMonth.set(monthKey, []);
           }
-          paymentsByMonth.get(monthKey)!.push(payment);
+          paymentsByProjectAndMonth.get(monthKey)!.push(payment);
         });
 
         const workReportsCache = new Map<string, any[]>();
 
         const historyData = await Promise.all(
-          Array.from(paymentsByMonth.entries()).map(async ([monthKey, payments]) => {
-            const [year, month] = monthKey.split('-');
+          Array.from(paymentsByProjectAndMonth.entries()).map(async ([monthKey, payments]) => {
+            const [projectKey, year, month] = monthKey.split('-');
+            const projectId = projectKey === 'none' ? null : Number(projectKey);
             const monthDate = new Date(Number(year), Number(month) - 1, 1);
 
             const firstPayment = payments[0];
@@ -427,67 +430,125 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
             const monthEndStr = monthEnd.toISOString().split('T')[0];
 
             let hours = 0;
-            const rate = employee.rate_per_hour || 0;
+            let rate = 0;
+            const projectMeta = projectId != null ? allProjects.find((p: any) => p.id === projectId) : null;
+            const projectName =
+              projectId != null
+                ? (projectMeta?.name || `Проект №${projectId}`)
+                : 'Все проекты (нет привязки)';
 
             try {
-              let projectsToCheck = allProjects.filter((project: any) => {
-                if (!project.employees || !Array.isArray(project.employees)) return false;
-                return project.employees.some((emp: any) => {
-                  const empId = emp.id || emp.user_id;
-                  return empId === employee.id;
-                });
-              });
+              // Если выплата привязана к проекту — считаем часы ТОЛЬКО по нему.
+              if (projectId != null) {
+                const projectEmployee =
+                  Array.isArray(projectMeta?.employees)
+                    ? projectMeta.employees.find((emp: any) => {
+                        const empId = emp?.id ?? emp?.user_id;
+                        return Number(empId) === Number(employee.id);
+                      })
+                    : null;
 
-              if (projectsToCheck.length === 0) {
-                const paymentProjectIds = [...new Set(payments.map((p: any) => p.project_id).filter(Boolean))];
-                projectsToCheck = allProjects.filter((p: any) => p.id && paymentProjectIds.includes(p.id));
-              }
+                rate =
+                  Number(projectEmployee?.pivot?.rate_per_hour ?? projectEmployee?.rate_per_hour ?? employee.rate_per_hour ?? 0) ||
+                  0;
 
-              const allHours = await Promise.all(
-                projectsToCheck.map(async (project: any) => {
-                  try {
-                    const cacheKey = `${project.id}:${employee.id}:${monthStartStr}:${monthEndStr}`;
-                    let reports: any[];
-                    if (workReportsCache.has(cacheKey)) {
-                      reports = workReportsCache.get(cacheKey)!;
-                    } else {
-                      const response = await apiService.getWorkReports(project.id, employee.id, {
-                        per_page: 1000,
-                        filter: {
-                          date_from: monthStartStr,
-                          date_to: monthEndStr,
-                        },
-                      });
-                      reports = [];
-                      if (response?.data?.data && Array.isArray(response.data.data)) {
-                        reports = response.data.data;
-                      } else if (response?.data && Array.isArray(response.data)) {
-                        reports = response.data;
-                      } else if (Array.isArray(response)) {
-                        reports = response;
-                      }
-                      workReportsCache.set(cacheKey, reports);
-                    }
-
-                    const monthReports = reports.filter((report) => {
-                      if (!report.report_date) return false;
-                      const reportDate = new Date(report.report_date);
-                      return reportDate >= monthStart && reportDate <= monthEnd;
-                    });
-
-                    return monthReports.reduce((sum, report) => {
-                      const hoursWorked = Number(report.hours_worked) || 0;
-                      const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
-                      return sum + (isAbsent ? 0 : hoursWorked);
-                    }, 0);
-                  } catch (error) {
-                    console.error(`Error loading work reports for project ${project.id}:`, error);
-                    return 0;
+                const cacheKey = `${projectId}:${employee.id}:${monthStartStr}:${monthEndStr}`;
+                let reports: any[];
+                if (workReportsCache.has(cacheKey)) {
+                  reports = workReportsCache.get(cacheKey)!;
+                } else {
+                  const response = await apiService.getWorkReports(projectId, employee.id, {
+                    per_page: 1000,
+                    filter: {
+                      date_from: monthStartStr,
+                      date_to: monthEndStr,
+                    },
+                  });
+                  reports = [];
+                  if (response?.data?.data && Array.isArray(response.data.data)) {
+                    reports = response.data.data;
+                  } else if (response?.data && Array.isArray(response.data)) {
+                    reports = response.data;
+                  } else if (Array.isArray(response)) {
+                    reports = response;
                   }
-                })
-              );
+                  workReportsCache.set(cacheKey, reports);
+                }
 
-              hours = allHours.reduce((sum, h) => sum + h, 0);
+                const monthReports = reports.filter((report) => {
+                  if (!report.report_date) return false;
+                  const reportDate = new Date(report.report_date);
+                  return reportDate >= monthStart && reportDate <= monthEnd;
+                });
+
+                hours = monthReports.reduce((sum, report) => {
+                  const hoursWorked = Number(report.hours_worked) || 0;
+                  const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
+                  return sum + (isAbsent ? 0 : hoursWorked);
+                }, 0);
+              } else {
+                // Если проект не указан — сохраняем старую логику: суммируем по всем проектам сотрудника.
+                rate = employee.rate_per_hour || 0;
+
+                let projectsToCheck = allProjects.filter((project: any) => {
+                  if (!project.employees || !Array.isArray(project.employees)) return false;
+                  return project.employees.some((emp: any) => {
+                    const empId = emp.id || emp.user_id;
+                    return empId === employee.id;
+                  });
+                });
+
+                if (projectsToCheck.length === 0) {
+                  const paymentProjectIds = [...new Set(payments.map((p: any) => p.project_id).filter(Boolean))];
+                  projectsToCheck = allProjects.filter((p: any) => p.id && paymentProjectIds.includes(p.id));
+                }
+
+                const allHours = await Promise.all(
+                  projectsToCheck.map(async (project: any) => {
+                    try {
+                      const cacheKey = `${project.id}:${employee.id}:${monthStartStr}:${monthEndStr}`;
+                      let reports: any[];
+                      if (workReportsCache.has(cacheKey)) {
+                        reports = workReportsCache.get(cacheKey)!;
+                      } else {
+                        const response = await apiService.getWorkReports(project.id, employee.id, {
+                          per_page: 1000,
+                          filter: {
+                            date_from: monthStartStr,
+                            date_to: monthEndStr,
+                          },
+                        });
+                        reports = [];
+                        if (response?.data?.data && Array.isArray(response.data.data)) {
+                          reports = response.data.data;
+                        } else if (response?.data && Array.isArray(response.data)) {
+                          reports = response.data;
+                        } else if (Array.isArray(response)) {
+                          reports = response;
+                        }
+                        workReportsCache.set(cacheKey, reports);
+                      }
+
+                      const monthReports = reports.filter((report) => {
+                        if (!report.report_date) return false;
+                        const reportDate = new Date(report.report_date);
+                        return reportDate >= monthStart && reportDate <= monthEnd;
+                      });
+
+                      return monthReports.reduce((sum, report) => {
+                        const hoursWorked = Number(report.hours_worked) || 0;
+                        const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
+                        return sum + (isAbsent ? 0 : hoursWorked);
+                      }, 0);
+                    } catch (error) {
+                      console.error(`Error loading work reports for project ${project.id}:`, error);
+                      return 0;
+                    }
+                  })
+                );
+
+                hours = allHours.reduce((sum, h) => sum + h, 0);
+              }
             } catch (error) {
               console.error('Error loading hours:', error);
             }
@@ -521,6 +582,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
             return {
               month: getMonthName(displayMonth),
               year: displayYear,
+              projectName,
               hours: rate > 0 && total > 0 ? Math.round((total / rate) * 100) / 100 : hours,
               rate: rate,
               total: total,
@@ -1313,6 +1375,12 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
                       <div className="employee-detail__month">
                         <span className="employee-detail__month-name">{item.month}</span>
                         <span className="employee-detail__month-year">{item.year}</span>
+                      <span
+                        className="employee-detail__project-name"
+                        title={item.projectName || ''}
+                      >
+                        {item.projectName || '—'}
+                      </span>
                       </div>
                     </div>
                     <div className="employee-detail__salary-table-col">

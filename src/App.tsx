@@ -84,6 +84,7 @@ function App() {
   const useMockData = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mock') === '1';
   const shouldUseMobileProjects = isAuthenticated && isMobileDevice && (isBrigadier || useMockData);
   const shouldShowMobileRestriction = isAuthenticated && isMobileDevice && !isBrigadier && !useMockData;
+  const shouldShowBrigadierPcRestriction = isAuthenticated && !isMobileDevice && isBrigadier && !useMockData;
 
   return (
     <BrowserRouter>
@@ -116,6 +117,19 @@ function App() {
                 <div className="mobile-restriction__content">
                   <h1>Доступ через ПК</h1>
                   <p>Мобильная версия доступна только для бригадиров. Пожалуйста, откройте сервис на компьютере.</p>
+                  <button type="button" onClick={handleLogout}>Выйти</button>
+                </div>
+              </div>
+            }
+          />
+        ) : shouldShowBrigadierPcRestriction ? (
+          <Route
+            path="*"
+            element={
+              <div className="mobile-restriction">
+                <div className="mobile-restriction__content">
+                  <h1>Доступ через мобильную версию</h1>
+                  <p>Бригадир может использовать сервис только на мобильном устройстве. Пожалуйста, откройте сервис на телефоне или планшете.</p>
                   <button type="button" onClick={handleLogout}>Выйти</button>
                 </div>
               </div>

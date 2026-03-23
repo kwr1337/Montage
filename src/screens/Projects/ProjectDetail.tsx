@@ -236,12 +236,113 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   const [trackingSortField, setTrackingSortField] = useState<string | null>(null);
   const [trackingSortDirection, setTrackingSortDirection] = useState<'asc' | 'desc'>('asc');
   const [trackingRefreshTrigger, setTrackingRefreshTrigger] = useState(0);
+  // Доп. расход: учитываем work_reports тех рабочих, которых нет в localProject.employees,
+  // но у них есть отработанные часы (например, назначения в мобильной версии)
+  const [extraSpentFromMissingWorkers, setExtraSpentFromMissingWorkers] = useState<number>(0);
 
   // Проверка, является ли сотрудник ГИП (не отображаем в иконках и в фиксации работ)
   const isGIP = (emp: any) => {
     const role = (emp?.role || emp?.position || '').toLowerCase();
     return role.includes('гип') || role === 'главный инженер проекта';
   };
+
+  // Считаем "Израсходовали" с учетом всех work_reports проекта (включая тех, кого нет в localProject.employees)
+  useEffect(() => {
+    if (!localProject?.id) {
+      setExtraSpentFromMissingWorkers(0);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadExtraSpent = async () => {
+      try {
+        const projectEmployeeIds = new Set<number>(
+          (localProject?.employees || [])
+            .filter((emp: any) => !isGIP(emp))
+            .map((emp: any) => Number(emp.id ?? emp.user_id))
+            .filter((id: number) => Number.isFinite(id) && id > 0)
+        );
+
+        // Ставки: сначала из проекта, потом добиваем из /users
+        const ratesByUserId = new Map<number, number>();
+        (localProject?.employees || [])
+          .filter((emp: any) => !isGIP(emp))
+          .forEach((emp: any) => {
+            const uid = Number(emp.id ?? emp.user_id);
+            if (!Number.isFinite(uid) || uid <= 0) return;
+            const rate =
+              Number(emp.pivot?.rate_per_hour ?? emp.rate_per_hour ?? emp.pivot?.hourly_rate ?? 0) || 0;
+            ratesByUserId.set(uid, rate);
+          });
+
+        const usersRes = await apiService.getUsers();
+        const usersRaw = usersRes?.data ?? usersRes;
+        const users = Array.isArray(usersRaw)
+          ? usersRaw
+          : Array.isArray(usersRaw?.data)
+            ? usersRaw.data
+            : [];
+        users.forEach((u: any) => {
+          const uid = Number(u.id);
+          if (!Number.isFinite(uid) || uid <= 0) return;
+          if (!ratesByUserId.has(uid)) {
+            ratesByUserId.set(uid, Number(u.rate_per_hour ?? 0) || 0);
+          }
+        });
+
+        let extraSpent = 0;
+        const pageSize = 1000;
+        let page = 1;
+        let lastPage = 1;
+        let safety = 0;
+
+        while (page <= lastPage && safety < 20) {
+          safety += 1;
+          const resp = await apiService.getProjectWorkReports(localProject.id, { page, per_page: pageSize });
+          const respData = resp?.data?.data ?? resp?.data ?? resp;
+          const arr = Array.isArray(respData) ? respData : [];
+
+          const maybeLast =
+            resp?.data?.last_page ??
+            resp?.data?.meta?.last_page ??
+            resp?.data?.pagination?.last_page;
+          if (Number.isFinite(Number(maybeLast))) {
+            lastPage = Number(maybeLast);
+          }
+
+          for (const report of arr) {
+            const widRaw = report?.user_id ?? report?.employee_id ?? report?.user?.id;
+            const wid = Number(widRaw);
+            if (!Number.isFinite(wid) || wid <= 0) continue;
+            if (projectEmployeeIds.has(wid)) continue; // только "лишние" пользователи
+
+            const hoursWorked = Number(report.hours_worked) || 0;
+            const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
+            if (isAbsent) continue;
+
+            const rate = ratesByUserId.get(wid) ?? 0;
+            extraSpent += hoursWorked * rate;
+          }
+
+          // Если бэкенд вернул меньше страницы — дальше данных может не быть
+          if (arr.length < pageSize) break;
+          page += 1;
+        }
+
+        if (!cancelled) setExtraSpentFromMissingWorkers(extraSpent);
+      } catch (e) {
+        console.error('Error calculating extra spent:', e);
+        if (!cancelled) setExtraSpentFromMissingWorkers(0);
+      }
+    };
+
+    loadExtraSpent();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [localProject?.id, localProject?.employees?.length, trackingRefreshTrigger]);
 
   // Вспомогательная функция для фильтрации активных (не удаленных) сотрудников
   const getActiveEmployees = (employees: any[]) => {
@@ -2089,7 +2190,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
             <div className="projects__detail-budget-card projects__detail-budget-card--spent">
               <span className="projects__detail-budget-label">Израсходовали</span>
               <div className="projects__detail-budget-value">
-                {trackingItems.reduce((sum, item) => sum + (item.totalSum || 0), 0).toLocaleString('ru-RU')} ₽
+                {(() => {
+                  const allocated = localProject?.budget || 0;
+                  const budgetBalance = localProject?.budget_balance;
+                  if (Number.isFinite(Number(budgetBalance))) {
+                    const spent = Math.max(0, allocated - Number(budgetBalance));
+                    return spent.toLocaleString('ru-RU');
+                  }
+
+                  // fallback: локальный расчет по work_reports
+                  const spentByReports =
+                    trackingItems.reduce((sum, item) => sum + (item.totalSum || 0), 0) +
+                    (extraSpentFromMissingWorkers || 0);
+                  return spentByReports.toLocaleString('ru-RU');
+                })()} ₽
               </div>
             </div>
             <div className="projects__detail-budget-card projects__detail-budget-card--remaining">
@@ -2097,8 +2211,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
               <div className="projects__detail-budget-value">
                 {(() => {
                   const allocated = localProject?.budget || 0;
-                  const spent = trackingItems.reduce((sum, item) => sum + (item.totalSum || 0), 0);
-                  const remaining = Math.max(0, allocated - spent);
+                  const budgetBalance = localProject?.budget_balance;
+                  if (Number.isFinite(Number(budgetBalance))) {
+                    const remaining = Math.max(0, Number(budgetBalance));
+                    return `${remaining.toLocaleString('ru-RU')} ₽`;
+                  }
+
+                  // fallback: локальный расчет по work_reports
+                  const spentByReports =
+                    trackingItems.reduce((sum, item) => sum + (item.totalSum || 0), 0) +
+                    (extraSpentFromMissingWorkers || 0);
+                  const remaining = Math.max(0, allocated - spentByReports);
                   return `${remaining.toLocaleString('ru-RU')} ₽`;
                 })()}
               </div>

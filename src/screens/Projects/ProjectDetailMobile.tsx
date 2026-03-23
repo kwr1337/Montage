@@ -244,13 +244,28 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
 
   const summary = useMemo(() => {
     const allocated = Number(project?.budget) || 0;
+    const budgetBalanceCandidate = project?.budget_balance ?? project?.remaining_budget;
+    const budgetBalance = Number(budgetBalanceCandidate);
 
-    // Используем рассчитанную сумму из work_reports, если она есть
+    // Предпочитаем поля бэка: budget_balance = сколько осталось
+    if (Number.isFinite(budgetBalance)) {
+      const spentValue = Math.max(0, allocated - budgetBalance);
+      const remaining = Math.max(0, budgetBalance);
+      return {
+        allocated,
+        spent: spentValue,
+        remaining,
+        startDate: project?.start_date || '',
+        endDate: project?.end_date || '',
+        foreman: getForemanFullName(project),
+      };
+    }
+
+    // Fallback: старое локальное вычисление потраченного
     let spentValue = 0;
     if (calculatedSpent !== null) {
       spentValue = calculatedSpent;
     } else {
-      // Иначе используем данные из проекта
       const spentCandidates = [
         project?.total_spent,
         project?.spent,
@@ -274,7 +289,6 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       spentValue = Number(spent) || 0;
     }
 
-    // Остаток = Выделено - Израсходовали (рассчитываем локально по work_reports)
     const remaining = Math.max(0, allocated - spentValue);
 
     return {
@@ -642,6 +656,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   };
 
   // Загружаем и рассчитываем потраченную сумму из work_reports (за всё время, включая удалённых)
+  // Важно: в мобильной фиксации бригадир может назначать рабочих на день, даже если их нет в проекте.
+  // Поэтому включаем `dayAssignedWorkers` в расчёт "Израсходовали".
   useEffect(() => {
     if (!project?.id) return;
 
@@ -649,17 +665,39 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
 
     const loadSpent = async () => {
       try {
-        const employees = project?.employees || [];
-        const employeesForSpent = employees.filter((emp: any) => !isGIP(emp));
+        const projectEmployees = project?.employees || [];
+        const projectEmployeeIds = new Set(projectEmployees.map((e: any) => Number(e.id ?? e.user_id)));
 
-        // Загружаем work_reports для ВСЕХ сотрудников (включая удалённых) — за всё время
+        const baseEmployeesForSpent = projectEmployees
+          .filter((emp: any) => !isGIP(emp))
+          .map((emp: any) => ({
+            id: Number(emp.id ?? emp.user_id),
+            pivot: emp.pivot,
+            rate_per_hour: emp.pivot?.rate_per_hour ?? emp.rate_per_hour ?? 0,
+          }));
+
+        const assignedOnlyForSpent = dayAssignedWorkers
+          .filter((w: any) => !projectEmployeeIds.has(Number(w.id)))
+          .map((w: any) => ({
+            id: Number(w.id),
+            pivot: w.pivot,
+            rate_per_hour: Number(w.rate_per_hour ?? w.pivot?.rate_per_hour ?? w.pivot?.hourly_rate ?? 0) || 0,
+          }));
+
+        const uniqueEmployeesForSpent = new Map<number, any>();
+        [...baseEmployeesForSpent, ...assignedOnlyForSpent].forEach((emp: any) => {
+          if (!emp?.id) return;
+          uniqueEmployeesForSpent.set(emp.id, emp);
+        });
+
+        // Загружаем work_reports для сотрудников (за всё время)
         const totalSpent = await Promise.all(
-          employeesForSpent.map(async (emp: any) => {
+          Array.from(uniqueEmployeesForSpent.values()).map(async (emp: any) => {
             try {
               const response = await apiService.getWorkReports(project.id, emp.id, {
                 per_page: 1000,
               });
-              
+
               let reports: any[] = [];
               if (response?.data?.data && Array.isArray(response.data.data)) {
                 reports = response.data.data;
@@ -668,18 +706,15 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
               } else if (Array.isArray(response)) {
                 reports = response;
               }
-              
+
               // Суммируем часы
               const totalHours = reports.reduce((sum, report) => {
                 const hoursWorked = Number(report.hours_worked) || 0;
                 const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
                 return sum + (isAbsent ? 0 : hoursWorked);
               }, 0);
-              
-              // Получаем ставку
-              const rate = emp.pivot?.rate_per_hour || emp.rate_per_hour || emp.pivot?.hourly_rate || 0;
-              
-              // Рассчитываем сумму для сотрудника
+
+              const rate = Number(emp.rate_per_hour ?? emp.pivot?.rate_per_hour ?? emp.pivot?.hourly_rate ?? 0) || 0;
               return totalHours * rate;
             } catch (error) {
               console.error(`Error loading work reports for employee ${emp.id}:`, error);
@@ -687,10 +722,9 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
             }
           })
         );
-        
-        // Суммируем все суммы сотрудников
+
         const projectTotalSpent = totalSpent.reduce((sum, employeeSpent) => sum + employeeSpent, 0);
-        
+
         if (!isCancelled) {
           setCalculatedSpent(projectTotalSpent);
         }
@@ -707,7 +741,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     return () => {
       isCancelled = true;
     };
-  }, [project?.id, project?.employees]);
+  }, [project?.id, project?.employees, dayAssignedWorkers]);
 
   // Функция для загрузки trackingItems (вынесена отдельно для переиспользования)
   // Учитываем и назначенных на сегодня (dayAssignedWorkers), чтобы только что добавленные могли вводить часы
