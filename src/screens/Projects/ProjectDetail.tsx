@@ -87,13 +87,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     return ['general', 'specification', 'tracking'].includes(tab) ? tab : 'general';
   })();
 
-  const activeTab = tabFromUrl;
+  const [localTab, setLocalTab] = useState('general');
+
+  const activeTab = isNew ? localTab : tabFromUrl;
 
   const setActiveTabViaUrl = (tab: string) => {
-    if (project?.id) {
-      const path = tab === 'general' ? `/projects/${project.id}` : `/projects/${project.id}/${tab}`;
-      navigate(path, { replace: true });
+    if (isNew || !project?.id) {
+      setLocalTab(tab);
+      return;
     }
+    const path = tab === 'general' ? `/projects/${project.id}` : `/projects/${project.id}/${tab}`;
+    navigate(path, { replace: true });
   };
 
   const [localProject, setLocalProject] = useState(project);
