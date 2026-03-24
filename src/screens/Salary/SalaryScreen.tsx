@@ -152,8 +152,8 @@ export const SalaryScreen: React.FC = () => {
 
       const response = projectIds.length > 0
         ? await apiService.getPayments({
-            page: currentPage,
-            per_page: 500,
+            page: 1,
+            per_page: 5000,
             with: ['user'],
             filter,
           })
@@ -373,20 +373,14 @@ export const SalaryScreen: React.FC = () => {
         );
 
       setPayments(formattedPayments);
-      
-      // Обновляем totalPages из ответа API
-      if (response && response.data && response.data.last_page) {
-        setTotalPages(response.data.last_page);
-      } else {
-        setTotalPages(Math.ceil(formattedPayments.length / itemsPerPage));
-      }
+      setCurrentPage(1);
     } catch (error) {
       console.error('Error loading payments:', error);
       setPayments([]);
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, dateFrom, dateTo]);
+  }, [dateFrom, dateTo]);
 
   // Загрузка данных о выплатах при изменении фильтров
   useEffect(() => {
