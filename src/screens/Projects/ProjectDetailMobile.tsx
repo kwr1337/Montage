@@ -9,7 +9,7 @@ const upDownTableFilter = toDataUrl(upDownTableFilterRaw);
 const commentMobIcon = toDataUrl(commentMobIconRaw);
 import { apiService } from '../../services/api';
 import { AddFactModal } from '../../shared/ui/AddFactModal/AddFactModal';
-import { AddHoursModal } from '../../shared/ui/AddHoursModal/AddHoursModal';
+import { AddHoursModal, type AddHoursFormState } from '../../shared/ui/AddHoursModal/AddHoursModal';
 import { CommentModal } from '../../shared/ui/CommentModal/CommentModal';
 import { AddEmployeesModal, type WorkerWithBusy } from '../../shared/ui/AddEmployeesModal/AddEmployeesModal';
 import { RemoveEmployeeConfirmModal } from '../../shared/ui/RemoveEmployeeConfirmModal/RemoveEmployeeConfirmModal';
@@ -19,6 +19,14 @@ import '../../shared/ui/CommentModal/comment-modal.scss';
 import '../../shared/ui/AddEmployeesModal/add-employees-modal.scss';
 import '../../shared/ui/RemoveEmployeeConfirmModal/remove-employee-confirm-modal.scss';
 import './project-detail-mobile.scss';
+
+function formatTodayDateStr(): string {
+  const t = new Date();
+  const y = t.getFullYear();
+  const m = String(t.getMonth() + 1).padStart(2, '0');
+  const d = String(t.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 
 type ProjectDetailMobileProps = {
   project: any;
@@ -195,6 +203,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   const [trackingSortDirection, setTrackingSortDirection] = useState<'asc' | 'desc'>('asc');
   const [isHoursModalOpen, setIsHoursModalOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<any | null>(null);
+  const [hoursModalForm, setHoursModalForm] = useState<AddHoursFormState | null>(null);
   const [trackedDates, setTrackedDates] = useState<string[]>([]);
   const [calculatedSpent, setCalculatedSpent] = useState<number | null>(null);
   const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
@@ -1193,6 +1202,12 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       fullName: item?.fullName ?? item?.employeeName ?? '',
       hourlyRate: Number(item?.hourlyRate) || 0,
     };
+    setHoursModalForm({
+      hours: 8,
+      reason: '',
+      isAbsent: false,
+      selectedDateStr: formatTodayDateStr(),
+    });
     setSelectedEmployee(employee);
     setIsHoursModalOpen(true);
     const dates = (item?.reports || []).map((report: any) => report.report_date);
@@ -1202,6 +1217,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   const handleCloseHoursModal = () => {
     setIsHoursModalOpen(false);
     setSelectedEmployee(null);
+    setHoursModalForm(null);
   };
 
   // Функция для получения комментария из последнего отчета (последняя дата)
@@ -1529,18 +1545,15 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     await onRefresh?.();
   };
 
-  if (isPortrait) {
-    return (
-      <div className="mobile-project-detail mobile-project-detail--portrait">
-        <div className="mobile-project-detail__orientation-message">
-          <p>Держите телефон горизонтально</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="mobile-project-detail">
+      {isPortrait && (
+        <div className="mobile-project-detail__orientation-message mobile-project-detail__orientation-message--overlay">
+          <p>Держите телефон горизонтально</p>
+        </div>
+      )}
+      {!isPortrait && (
+      <>
       <div className="mobile-project-detail__top-card">
         <div className="mobile-project-detail__header">
           <button type="button" className="mobile-project-detail__back" onClick={onBack} aria-label="Назад к списку проектов">
@@ -1924,6 +1937,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           )}
         </div>
       )}
+      </>
+      )}
 
       {selectedNomenclature && (
         <AddFactModal
@@ -1940,9 +1955,9 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
         />
       )}
 
-      {selectedEmployee && (
+      {selectedEmployee && hoursModalForm && (
         <AddHoursModal
-          isOpen={isHoursModalOpen}
+          isOpen={isHoursModalOpen && !isPortrait}
           onClose={handleCloseHoursModal}
           onSave={handleSaveHours}
           projectId={project.id}
@@ -1954,6 +1969,8 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           trackedDates={trackedDates}
           onSuccess={handleHoursSaveSuccess}
           enforceTimeRestriction={true}
+          externalForm={hoursModalForm}
+          onExternalFormChange={setHoursModalForm}
         />
       )}
 

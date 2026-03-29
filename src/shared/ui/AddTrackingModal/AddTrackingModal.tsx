@@ -30,6 +30,7 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
   const [formData, setFormData] = useState({
     employeeId: 0,
     employeeName: '',
+    employeeRole: '',
     status: 'Работает',
     rate: '',
     startDate: today, // Автоматически устанавливаем сегодняшнюю дату
@@ -47,11 +48,28 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
     return `${last_name} ${firstNameInitial}.${secondNameInitial ? ` ${secondNameInitial}.` : ''}`;
   };
 
+  const formatRoleLabel = (user: any) => {
+    if (!user) return '';
+    const r = user.role || user.position;
+    return typeof r === 'string' ? r.trim() : '';
+  };
+
+  const isWorkerRole = (employee: any) => {
+    const r = String(employee?.role || employee?.position || '')
+      .trim()
+      .toLowerCase();
+    return r === 'рабочий';
+  };
+
   // Фильтруем сотрудников - показываем только тех, кто еще не в проекте ИЛИ удален из проекта
   // Удаленные сотрудники (с end_working_date) должны снова появляться в списке
   // НО уволенные сотрудники (is_dismissed === true) не должны отображаться
+  // Роль «Рабочий» — в этом списке не показываем (добавляются через другие сценарии)
   const availableEmployees = employees
     .filter((employee: any) => {
+      if (isWorkerRole(employee)) {
+        return false;
+      }
       // Исключаем уволенных сотрудников
       if (employee.is_dismissed === true) {
         return false;
@@ -91,6 +109,7 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
     
     handleInputChange('employeeId', employee.id);
     handleInputChange('employeeName', employeeName);
+    handleInputChange('employeeRole', formatRoleLabel(employee));
     handleInputChange('rate', ratePerHour.toString());
     setIsEmployeeDropdownOpen(false);
     setError(''); // Очищаем ошибку при выборе сотрудника
@@ -133,6 +152,7 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
       setFormData({
         employeeId: 0,
         employeeName: '',
+        employeeRole: '',
         status: 'Работает',
         rate: '',
         startDate: today,
@@ -150,6 +170,7 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
     setFormData({
       employeeId: 0,
       employeeName: '',
+      employeeRole: '',
       status: 'Работает',
       rate: '',
       startDate: today,
@@ -177,7 +198,14 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
                   className="add-tracking-modal__input add-tracking-modal__input--dropdown"
                   onClick={() => setIsEmployeeDropdownOpen(!isEmployeeDropdownOpen)}
                 >
-                  <span>{formData.employeeName || 'Выберите сотрудника'}</span>
+                  <div className="add-tracking-modal__dropdown-value">
+                    <span className="add-tracking-modal__dropdown-value-main">
+                      {formData.employeeName || 'Выберите сотрудника'}
+                    </span>
+                    {formData.employeeRole ? (
+                      <span className="add-tracking-modal__dropdown-value-sub">{formData.employeeRole}</span>
+                    ) : null}
+                  </div>
                   <img src={userDropdownIcon} alt="▼" />
                 </div>
                 {isEmployeeDropdownOpen && (
@@ -187,15 +215,21 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
                         Нет доступных сотрудников
                       </div>
                     ) : (
-                      availableEmployees.map((employee) => (
-                        <div
-                          key={employee.id}
-                          className="add-tracking-modal__dropdown-item"
-                          onClick={() => handleEmployeeSelect(employee)}
-                        >
-                          {formatUserName(employee)}
-                        </div>
-                      ))
+                      availableEmployees.map((employee) => {
+                        const roleLabel = formatRoleLabel(employee);
+                        return (
+                          <div
+                            key={employee.id}
+                            className="add-tracking-modal__dropdown-item"
+                            onClick={() => handleEmployeeSelect(employee)}
+                          >
+                            <span className="add-tracking-modal__dropdown-item-name">{formatUserName(employee)}</span>
+                            {roleLabel ? (
+                              <span className="add-tracking-modal__dropdown-item-role">{roleLabel}</span>
+                            ) : null}
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 )}

@@ -51,6 +51,24 @@ const formatUserName = (user: any) => {
   return `${lastName} ${firstNameInitial}${secondNameInitial ? `.${secondNameInitial}.` : '.'}`.trim();
 };
 
+/** Ответ Laravel paginator для GET /projects (одна страница) */
+function parseProjectsPagesResponse(response: any): { rows: any[]; lastPage: number } {
+  let rows: any[] = [];
+  let lastPage = 1;
+  if (!response) return { rows, lastPage };
+  const r = response;
+  if (Array.isArray(r)) return { rows: r, lastPage: 1 };
+  if (Array.isArray(r.data)) {
+    rows = r.data;
+    lastPage = Number(r.meta?.last_page ?? r.last_page ?? 1) || 1;
+  } else if (r.data && typeof r.data === 'object' && Array.isArray(r.data.data)) {
+    rows = r.data.data;
+    const meta = r.data.meta || r.meta || {};
+    lastPage = Number(meta.last_page ?? r.last_page ?? 1) || 1;
+  }
+  return { rows, lastPage: Math.max(1, lastPage) };
+}
+
 type ProjectsScreenProps = {
   onLogout?: () => void;
 };
@@ -85,7 +103,6 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     return selectedProjectId ? 1 : 0;
   });
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const itemsPerPage = 11;
   const [isCreatingProject, setIsCreatingProject] = useState(isCreatingFromUrl);
   const [hoveredProjectId, setHoveredProjectId] = useState<number | null>(null);
@@ -137,6 +154,47 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
   const [sortField, setSortField] = useState<string | null>(null); // null = сортировка по дате добавления (по умолчанию)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc'); // по умолчанию по убыванию
 
+  const isProjectArchived = (project: any) =>
+    project.is_archived === 1 ||
+    project.is_archived === true ||
+    project.status === 'Архив' ||
+    project.status === 'archived';
+
+  const currentUser = apiService.getCurrentUser();
+  const isBrigadier = (currentUser?.role || currentUser?.position) === 'Бригадир';
+  const projectsFetchKey = isBrigadier && currentUser?.id ? `m:${currentUser.id}` : 'all';
+
+  const loadAllProjects = React.useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const all: any[] = [];
+      let page = 1;
+      let lastPage = 1;
+      const perPage = 100;
+      const cu = apiService.getCurrentUser();
+      const brig = (cu?.role || cu?.position) === 'Бригадир';
+      const filter = brig && cu?.id ? { filter: { manager_id: [cu.id] } } : undefined;
+      do {
+        const response = await apiService.getProjects(page, perPage, filter);
+        const { rows, lastPage: lp } = parseProjectsPagesResponse(response);
+        lastPage = lp;
+        all.push(...rows);
+        page++;
+        if (rows.length === 0) break;
+      } while (page <= lastPage);
+      setProjects(all);
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+      setProjects([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadAllProjects();
+  }, [projectsFetchKey, loadAllProjects]);
+
   const calculateTotalSpent = (project: any): number => {
     const budgetBalance = project?.budget_balance;
     const budget = project?.budget;
@@ -168,51 +226,6 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     return 0;
   };
 
-  useEffect(() => {
-    const fetchProjects = async () => {
-      setIsLoading(true);
-      try {
-        const response = await apiService.getProjects(currentPage, itemsPerPage, getProjectsFilter);
-        
-        if (Array.isArray(response)) {
-          setProjects(response);
-          // Если массив без мета-данных, используем локальную пагинацию
-          setTotalPages(1);
-        } else if (response && response.data) {
-          if (Array.isArray(response.data)) {
-            setProjects(response.data);
-            // Laravel pagination format
-            if (response.last_page) {
-              setTotalPages(response.last_page);
-            } else if (response.meta) {
-              const total = response.meta.total || response.data.length;
-              setTotalPages(Math.ceil(total / itemsPerPage));
-            } else if (response.pagination) {
-              setTotalPages(response.pagination.total_pages || 1);
-            } else {
-              setTotalPages(1);
-            }
-          } else {
-            setProjects([]);
-            setTotalPages(1);
-          }
-        } else {
-          setProjects([]);
-          setTotalPages(1);
-        }
-        
-      } catch (error) {
-        console.error('Error fetching projects:', error);
-        setProjects([]);
-        setTotalPages(1);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchProjects();
-  }, [currentPage]);
-
   // Фильтрация проектов по статусу и поиску (клиентская, пока сервер не поддерживает)
   const filteredProjects = projects.filter((project) => {
     // Исключаем удаленные проекты
@@ -225,8 +238,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     if (statusFilter === 'all') {
       matchesStatus = true;
     } else if (statusFilter === 'Архив') {
-      // Для статуса "Архив" проверяем поле is_archived
-      matchesStatus = project.is_archived === 1 || project.is_archived === true;
+      matchesStatus = isProjectArchived(project);
     } else {
       // Для остальных статусов проверяем project.status
       matchesStatus = project.status === statusFilter;
@@ -285,6 +297,12 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     const sorted = [...filteredProjects];
     
     sorted.sort((a: any, b: any) => {
+      const archA = isProjectArchived(a) ? 1 : 0;
+      const archB = isProjectArchived(b) ? 1 : 0;
+      if (archA !== archB) {
+        return archA - archB;
+      }
+
       // Если sortField === null, сортируем по дате добавления (по умолчанию)
       if (sortField === null) {
         // Сортируем по ID (по дате добавления) по убыванию по умолчанию
@@ -368,6 +386,19 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
   };
 
   const sortedProjects = getSortedProjects();
+
+  const totalPagesCalculated = Math.max(1, Math.ceil(sortedProjects.length / itemsPerPage));
+
+  useEffect(() => {
+    if (currentPage > totalPagesCalculated) {
+      setCurrentPage(totalPagesCalculated);
+    }
+  }, [currentPage, totalPagesCalculated]);
+
+  const paginatedProjects = sortedProjects.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   // Обработчик клика на значок сортировки
   const handleSort = (field: string | null) => {
@@ -502,10 +533,6 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     }
   };
 
-  const currentUser = apiService.getCurrentUser();
-  const isBrigadier = (currentUser?.role || currentUser?.position) === 'Бригадир';
-  const getProjectsFilter = isBrigadier && currentUser?.id ? { filter: { manager_id: [currentUser.id] } } : undefined;
-
   const createEmptyProjectDraft = () => {
     const isBrigadier = (currentUser?.role || currentUser?.position) === 'Бригадир';
     return {
@@ -551,23 +578,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
     // Если проект был удален, обновляем список с сервера
     if (updatedProject.is_deleted === true || updatedProject.is_deleted === 1) {
       try {
-        const response = await apiService.getProjects(currentPage, itemsPerPage, getProjectsFilter);
-        
-        if (Array.isArray(response)) {
-          setProjects(response);
-        } else if (response && response.data) {
-          if (Array.isArray(response.data)) {
-            setProjects(response.data);
-            if (response.last_page) {
-              setTotalPages(response.last_page);
-            } else if (response.meta) {
-              const total = response.meta.total || response.data.length;
-              setTotalPages(Math.ceil(total / itemsPerPage));
-            } else if (response.pagination) {
-              setTotalPages(response.pagination.total_pages || 1);
-            }
-          }
-        }
+        await loadAllProjects();
       } catch (error) {
         console.error('Error refreshing projects after delete:', error);
         // В случае ошибки обновляем локально
@@ -696,25 +707,8 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
       
       await Promise.all(archivePromises);
       
-      // Перезагружаем список проектов с сервера для получения актуальных данных
       try {
-        const response = await apiService.getProjects(currentPage, itemsPerPage, getProjectsFilter);
-        
-        if (Array.isArray(response)) {
-          setProjects(response);
-        } else if (response && response.data) {
-          if (Array.isArray(response.data)) {
-            setProjects(response.data);
-            if (response.last_page) {
-              setTotalPages(response.last_page);
-            } else if (response.meta) {
-              const total = response.meta.total || response.data.length;
-              setTotalPages(Math.ceil(total / itemsPerPage));
-            } else if (response.pagination) {
-              setTotalPages(response.pagination.total_pages || 1);
-            }
-          }
-        }
+        await loadAllProjects();
       } catch (error) {
         console.error('Error refreshing projects after archive/unarchive:', error);
         // В случае ошибки обновляем локально
@@ -960,8 +954,8 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
               {projects.length === 0 ? 'Нет проектов' : 'Нет проектов с такими параметрами'}
             </div>
           ) : (
-            sortedProjects.map((project) => {
-              const isArchived = project.is_archived === 1 || project.is_archived === true || project.status === 'Архив';
+            paginatedProjects.map((project) => {
+              const isArchived = isProjectArchived(project);
               const statusClassNames = [
                 'projects__status',
                 project.status === 'Новый' ? 'projects__status--new' : '',
@@ -1158,7 +1152,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
         {/* Пагинация */}
         <Pagination
           currentPage={currentPage}
-          totalPages={totalPages}
+          totalPages={totalPagesCalculated}
           onPageChange={handlePageChange}
         />
         </div>

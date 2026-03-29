@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import closeIconRaw from '../../icons/closeIcon.svg?raw';
 import calendarIconGreyRaw from '../../icons/calendarIconGrey.svg?raw';
 import { apiService } from '../../../services/api';
@@ -7,6 +7,15 @@ import './add-hours-modal.scss';
 const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
 const closeIcon = toDataUrl(closeIconRaw);
 const calendarIconGrey = toDataUrl(calendarIconGreyRaw);
+
+/** Контролируемое состояние формы (родитель не размонтируется при повороте экрана) */
+export type AddHoursFormState = {
+  hours: number;
+  reason: string;
+  isAbsent: boolean;
+  /** Локальная дата YYYY-MM-DD */
+  selectedDateStr: string;
+};
 
 type AddHoursModalProps = {
   isOpen: boolean;
@@ -22,6 +31,9 @@ type AddHoursModalProps = {
   onSuccess?: () => void; // Callback после успешного сохранения
   /** В мобильной версии: корректировка часов возможна только с 6:00 до 21:00 */
   enforceTimeRestriction?: boolean;
+  /** Если заданы оба — поля формы контролируются родителем (сохраняются при remount) */
+  externalForm?: AddHoursFormState;
+  onExternalFormChange?: (next: AddHoursFormState) => void;
 };
 
 export const AddHoursModal: React.FC<AddHoursModalProps> = ({
@@ -33,28 +45,55 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
   trackedDates = [],
   onSuccess,
   enforceTimeRestriction = false,
+  externalForm,
+  onExternalFormChange,
 }) => {
-  const [hours, setHours] = useState<number>(8);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [isAbsent, setIsAbsent] = useState(false);
-  const [reason, setReason] = useState('');
+  const isControlled = Boolean(externalForm && onExternalFormChange);
+
+  const [internalHours, setInternalHours] = useState<number>(8);
+  const [internalSelectedDate, setInternalSelectedDate] = useState<Date>(new Date());
+  const [internalAbsent, setInternalAbsent] = useState(false);
+  const [internalReason, setInternalReason] = useState('');
   const [savedDates, setSavedDates] = useState<string[]>(trackedDates);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const hours = isControlled ? externalForm!.hours : internalHours;
+  const isAbsent = isControlled ? externalForm!.isAbsent : internalAbsent;
+  const reason = isControlled ? externalForm!.reason : internalReason;
+
+  const selectedDate = useMemo(() => {
+    if (isControlled) {
+      const parts = externalForm!.selectedDateStr.split('-').map(Number);
+      const y = parts[0];
+      const m = parts[1];
+      const d = parts[2];
+      if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) {
+        return new Date();
+      }
+      return new Date(y, m - 1, d);
+    }
+    return internalSelectedDate;
+  }, [isControlled, externalForm, internalSelectedDate]);
+
+  const patchForm = (patch: Partial<AddHoursFormState>) => {
+    if (!isControlled || !externalForm || !onExternalFormChange) return;
+    onExternalFormChange({ ...externalForm, ...patch });
+  };
 
   // Обновляем savedDates при изменении trackedDates
   useEffect(() => {
     setSavedDates(trackedDates);
   }, [trackedDates]);
 
-  // Всегда используем сегодняшнюю дату при открытии модального окна
+  // Всегда используем сегодняшнюю дату при открытии модального окна (только неконтролируемый режим)
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !isControlled) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      setSelectedDate(today);
+      setInternalSelectedDate(today);
     }
-  }, [isOpen]);
+  }, [isOpen, isControlled]);
 
   // Функция для форматирования даты в YYYY-MM-DD (используем локальное время, чтобы избежать проблем с часовыми поясами)
   const formatDateString = (date: Date): string => {
@@ -77,13 +116,22 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
 
   const handleIncrement = () => {
     if (hours < 24 && !isAbsent) {
-      setHours((prev) => prev + 1);
+      if (isControlled) {
+        patchForm({ hours: hours + 1 });
+      } else {
+        setInternalHours((prev) => prev + 1);
+      }
     }
   };
 
   const handleDecrement = () => {
     if (!isAbsent) {
-      setHours((prev) => Math.max(0, prev - 1));
+      const next = Math.max(0, hours - 1);
+      if (isControlled) {
+        patchForm({ hours: next });
+      } else {
+        setInternalHours(next);
+      }
     }
   };
 
@@ -94,7 +142,11 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
     if (value === '' || /^\d+$/.test(value)) {
       const numValue = value === '' ? 0 : parseInt(value, 10);
       if (numValue >= 0 && numValue <= 24) {
-        setHours(numValue);
+        if (isControlled) {
+          patchForm({ hours: numValue });
+        } else {
+          setInternalHours(numValue);
+        }
       }
     }
   };
@@ -102,7 +154,11 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
   const handleHoursBlur = () => {
     // Если поле пустое, устанавливаем 8 часов по умолчанию
     if (hours === 0 && !isAbsent) {
-      setHours(8);
+      if (isControlled) {
+        patchForm({ hours: 8 });
+      } else {
+        setInternalHours(8);
+      }
     }
   };
 
@@ -304,13 +360,21 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
                 checked={isAbsent}
                 onChange={(e) => {
                   const checked = e.target.checked;
-                  setIsAbsent(checked);
-                  if (checked) {
-                    setHours(0);
-                    setReason('');
+                  if (isControlled) {
+                    patchForm({
+                      isAbsent: checked,
+                      hours: checked ? 0 : 8,
+                      reason: '',
+                    });
                   } else {
-                    setHours(8);
-                    setReason('');
+                    setInternalAbsent(checked);
+                    if (checked) {
+                      setInternalHours(0);
+                      setInternalReason('');
+                    } else {
+                      setInternalHours(8);
+                      setInternalReason('');
+                    }
                   }
                 }}
                 className="add-hours-modal__absent-checkbox"
@@ -331,7 +395,10 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
               <textarea
                 placeholder="Укажите причину отсутствия"
                 value={reason}
-                onChange={(e) => setReason(e.target.value)}
+                onChange={(e) => {
+                  if (isControlled) patchForm({ reason: e.target.value });
+                  else setInternalReason(e.target.value);
+                }}
                 className="add-hours-modal__reason-textarea"
               />
             </div>
@@ -343,7 +410,10 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
               <textarea
                 placeholder="Укажите причину отклонения от стандартных 8 часов"
                 value={reason}
-                onChange={(e) => setReason(e.target.value)}
+                onChange={(e) => {
+                  if (isControlled) patchForm({ reason: e.target.value });
+                  else setInternalReason(e.target.value);
+                }}
                 className="add-hours-modal__reason-textarea"
               />
             </div>
