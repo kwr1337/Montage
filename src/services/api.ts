@@ -39,15 +39,25 @@ class ApiService {
   private baseURL: string;
   private _requestCache = new Map<string, { promise: Promise<any>; ts: number }>();
   private readonly CACHE_TTL = 10_000; // 10 секунд — дедупликация в рамках одной загрузки страницы
+  /** Дольше кэшируем тяжёлые GET по номенклатуре (много параллельных строк спецификации) */
+  private readonly CACHE_TTL_NOM = 60_000;
 
   constructor(baseURL: string) {
     this.baseURL = baseURL;
   }
 
+  private _cacheTtlForKey(cacheKey: string): number {
+    if (cacheKey.startsWith('nom-facts:') || cacheKey.startsWith('nom-changes:')) {
+      return this.CACHE_TTL_NOM;
+    }
+    return this.CACHE_TTL;
+  }
+
   private _cachedGet<T>(cacheKey: string, fetcher: () => Promise<T>): Promise<T> {
     const now = Date.now();
+    const ttl = this._cacheTtlForKey(cacheKey);
     const cached = this._requestCache.get(cacheKey);
-    if (cached && (now - cached.ts) < this.CACHE_TTL) {
+    if (cached && (now - cached.ts) < ttl) {
       return cached.promise;
     }
     const promise = fetcher().catch(err => {
@@ -408,6 +418,13 @@ class ApiService {
     );
   }
 
+  /** Все изменения номенклатуры проекта (одним запросом) */
+  async getProjectNomenclatureChangesAll(projectId: number): Promise<any> {
+    return this._cachedGet(`nom-changes:all:${projectId}`, () =>
+      this.request<any>(`/projects/${projectId}/nomenclature/changes`, { method: 'GET' })
+    );
+  }
+
   // Добавить изменение номенклатуры в проекте
   async addNomenclatureChange(projectId: number, nomenclatureId: number, amountChange: number): Promise<any> {
     const payload = { amount_change: amountChange };
@@ -457,6 +474,23 @@ class ApiService {
         price: data.price,
         description: data.description || '',
       }),
+    });
+    this.invalidateCache('nomenclature');
+    return response;
+  }
+
+  /** Обновить карточку номенклатуры (например ед. изм. после импорта с другой подписью в файле) */
+  async updateNomenclature(
+    id: number,
+    data: { name?: string; unit?: string; price?: number; description?: string }
+  ): Promise<any> {
+    const response = await this.request<any>(`/nomenclature/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(data),
     });
     this.invalidateCache('nomenclature');
     return response;
@@ -524,6 +558,13 @@ class ApiService {
       return response.json();
     }
     return { data: null, success: true };
+  }
+
+  /** Все факты номенклатуры проекта (одним запросом) */
+  async getProjectNomenclatureFactsAll(projectId: number): Promise<any> {
+    return this._cachedGet(`nom-facts:all:${projectId}`, () =>
+      this.request<any>(`/projects/${projectId}/nomenclature/facts`, { method: 'GET' })
+    );
   }
 
   // Получить список фактических расходов номенклатуры в проекте

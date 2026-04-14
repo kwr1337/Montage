@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { apiService } from '../../services/api';
+import { fetchProjectSpecificationDetailCache } from '../../utils/nomenclatureRowDetails';
+import { formatSpecQuantityForDisplay } from '../../utils/specQuantityFormat';
+import { fetchAllProjectWorkReportsDeduped, groupWorkReportsByUserId } from '../../utils/projectWorkReports';
 import { canDeleteProject, canEditProjectGeneralInfo, canChangeProjectStatus, canEditFOT, canManageProjectEmployees, canEditSpecification } from '../../services/permissions';
 import sotrudnikiVProekteRaw from '../../shared/icons/sotrudnikiVProekte.svg?raw';
 import editIconRaw from '../../shared/icons/editIcon.svg?raw';
@@ -38,6 +41,16 @@ const getInitials = (employee: any) => {
   const firstInitial = first_name ? first_name.charAt(0).toUpperCase() : '';
   const lastInitial = last_name ? last_name.charAt(0).toUpperCase() : '';
   return (lastInitial + firstInitial) || '—';
+};
+
+type SpecificationBaseRow = {
+  id: number;
+  npp: number;
+  name: string;
+  status: string;
+  unit: string;
+  plan: number;
+  sortFact: number;
 };
 
 // Функция для получения цвета фона на основе имени
@@ -104,7 +117,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
 
   useEffect(() => {
     trackingLoadedRef.current = false;
-    specificationLoadedRef.current = false;
+    setSpecificationDetailCache({});
   }, [project.id]);
   const [formData, setFormData] = useState({
     address: project.address || '',
@@ -153,7 +166,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   const canEditSpec = canEditSpecification(currentUser);
 
   const trackingLoadedRef = React.useRef(false);
-  const specificationLoadedRef = React.useRef(false);
 
   const startDateInputRef = React.useRef<HTMLInputElement>(null);
   const endDateInputRef = React.useRef<HTMLInputElement>(null);
@@ -225,8 +237,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     return `${last_name} ${firstNameInitial}.${secondNameInitial ? ` ${secondNameInitial}.` : ''}`;
   };
   
-  // Данные для спецификации - берем из localProject.nomenclature
-  const [specificationItems, setSpecificationItems] = useState<any[]>([]);
+  /** Детали по строкам (изм., факт): с бэка — два bulk GET на весь проект */
+  const [specificationDetailCache, setSpecificationDetailCache] = useState<
+    Record<number, { changes: number | null; fact: number }>
+  >({});
   const [specificationSortField, setSpecificationSortField] = useState<string | null>('npp');
   const [specificationSortDirection, setSpecificationSortDirection] = useState<'asc' | 'desc'>('asc');
 
@@ -234,6 +248,54 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
   const [isDeleteTrackingModalOpen, setIsDeleteTrackingModalOpen] = useState(false);
   const [employeesToDelete, setEmployeesToDelete] = useState<Array<{ id: number; name: string; status: string }>>([]);
+
+  const specificationBaseRows = React.useMemo((): SpecificationBaseRow[] => {
+    if (!localProject.nomenclature || !Array.isArray(localProject.nomenclature)) return [];
+    return localProject.nomenclature.map((item: any, index: number) => {
+      const sortFact = Number(item?.pivot?.current_amount ?? item?.fact ?? 0);
+      return {
+        id: item.id,
+        npp: item.index_number ?? item.npp ?? item.pivot?.npp ?? index + 1,
+        name: item.name,
+        status: item.is_deleted
+          ? `Удалён\n${new Date(item.deleted_at).toLocaleDateString('ru-RU')}`
+          : 'Активен',
+        unit: item.unit || '',
+        plan: item.pivot?.start_amount || 0,
+        sortFact: Number.isFinite(sortFact) ? sortFact : 0,
+      };
+    });
+  }, [localProject.nomenclature]);
+
+  const nomenclatureFingerprint = React.useMemo(
+    () =>
+      `${localProject.id}:${(localProject.nomenclature || [])
+        .map((x: any) => x.id)
+        .sort((a: number, b: number) => a - b)
+        .join(',')}`,
+    [localProject.id, localProject.nomenclature]
+  );
+
+  useEffect(() => {
+    setSpecificationDetailCache({});
+    setCurrentPage(1);
+  }, [nomenclatureFingerprint]);
+
+  const specificationRowsMerged = React.useMemo(() => {
+    return specificationBaseRows.map((row: SpecificationBaseRow) => {
+      const det = specificationDetailCache[row.id];
+      return {
+        id: row.id,
+        npp: row.npp,
+        name: row.name,
+        status: row.status,
+        unit: row.unit,
+        plan: row.plan,
+        changes: det?.changes ?? null,
+        fact: det ? det.fact : row.sortFact,
+      };
+    });
+  }, [specificationBaseRows, specificationDetailCache]);
 
   // Данные для фиксации работ - формируем из реальных сотрудников проекта
   const [trackingItems, setTrackingItems] = useState<any[]>([]);
@@ -436,105 +498,67 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       const loadTrackingData = async () => {
         const employeesWithoutGIP = localProject.employees.filter((emp: any) => !isGIP(emp));
 
-        const formattedEmployees = await Promise.all(
-          employeesWithoutGIP.map(async (employee: any) => {
-            const startWorkingDate = employee.pivot?.start_working_date || null;
-            const endWorkingDate = employee.pivot?.end_working_date || null;
-            const daysInProject = calculateDaysInProject(startWorkingDate, endWorkingDate);
-            const status = endWorkingDate ? 'Удалён' :
-                          (employee.employee_status === 'active' ? 'Работает' :
-                          employee.is_dismissed ? 'Удалён' : 'Неизвестно');
-            const deletionDate = endWorkingDate ?
-              new Date(endWorkingDate).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
-            const rate = employee.pivot?.rate_per_hour || employee.rate_per_hour || 0;
+        let reportsByUser: Map<number, any[]>;
+        try {
+          const allReports = await fetchAllProjectWorkReportsDeduped(localProject.id);
+          reportsByUser = groupWorkReportsByUserId(allReports);
+        } catch (error) {
+          console.error('Error loading project work reports for tracking table:', error);
+          reportsByUser = new Map();
+        }
 
-            let hours = 0;
-            let lastHours = 0;
-            let totalSum = 0;
-            let lastSum = 0;
+        const formattedEmployees = employeesWithoutGIP.map((employee: any) => {
+          const startWorkingDate = employee.pivot?.start_working_date || null;
+          const endWorkingDate = employee.pivot?.end_working_date || null;
+          const daysInProject = calculateDaysInProject(startWorkingDate, endWorkingDate);
+          const status = endWorkingDate ? 'Удалён' :
+                        (employee.employee_status === 'active' ? 'Работает' :
+                        employee.is_dismissed ? 'Удалён' : 'Неизвестно');
+          const deletionDate = endWorkingDate ?
+            new Date(endWorkingDate).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+          const rate = employee.pivot?.rate_per_hour || employee.rate_per_hour || 0;
 
-            try {
-              const response = await apiService.getWorkReports(localProject.id, employee.id, {
-                per_page: 1000,
-              });
+          const reports = reportsByUser.get(employee.id) ?? [];
 
-              let reports: any[] = [];
-              if (response?.data?.data && Array.isArray(response.data.data)) {
-                reports = response.data.data;
-              } else if (response?.data && Array.isArray(response.data)) {
-                reports = response.data;
-              } else if (Array.isArray(response)) {
-                reports = response;
-              }
+          const hours = reports.reduce((sum, report) => {
+            const hoursWorked = Number(report.hours_worked) || 0;
+            const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
+            return sum + (isAbsent ? 0 : hoursWorked);
+          }, 0);
 
-              reports.sort((a, b) => {
-                const dateA = new Date(a.report_date).getTime();
-                const dateB = new Date(b.report_date).getTime();
-                return dateB - dateA;
-              });
+          let lastReport: any = null;
+          let lastHours = 0;
+          if (reports.length > 0) {
+            lastReport = reports[0];
+            const lastHoursWorked = Number(lastReport.hours_worked) || 0;
+            const isLastAbsent = lastReport.absent === true || lastReport.absent === 1 || lastReport.absent === '1';
+            lastHours = isLastAbsent ? 0 : lastHoursWorked;
+          }
 
-              hours = reports.reduce((sum, report) => {
-                const hoursWorked = Number(report.hours_worked) || 0;
-                const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
-                return sum + (isAbsent ? 0 : hoursWorked);
-              }, 0);
+          const totalSum = hours * rate;
+          const lastSum = lastHours * rate;
 
-              let lastReport: any = null;
-              if (reports.length > 0) {
-                lastReport = reports[0];
-                const lastHoursWorked = Number(lastReport.hours_worked) || 0;
-                const isLastAbsent = lastReport.absent === true || lastReport.absent === 1 || lastReport.absent === '1';
-                lastHours = isLastAbsent ? 0 : lastHoursWorked;
-              }
-
-              totalSum = hours * rate;
-              lastSum = lastHours * rate;
-
-              return {
-                id: employee.id,
-                name: `${employee.last_name} ${employee.first_name.charAt(0)}. ${employee.second_name.charAt(0)}.`,
-                role: employee.role || 'Не указана',
-                status: status,
-                deletionDate: deletionDate,
-                startDate: startWorkingDate ?
-                          new Date(startWorkingDate).toLocaleDateString('ru-RU', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric'
-                          }) : 'Не указана',
-                days: daysInProject,
-                hours: hours,
-                lastHours: lastHours,
-                lastReport: lastReport,
-                rate: rate,
-                lastSum: lastSum,
-                totalSum: totalSum
-              };
-            } catch (error) {
-              console.error(`Error loading work reports for employee ${employee.id}:`, error);
-              return {
-                id: employee.id,
-                name: `${employee.last_name} ${employee.first_name.charAt(0)}. ${employee.second_name.charAt(0)}.`,
-                role: employee.role || 'Не указана',
-                status: status,
-                deletionDate: deletionDate,
-                startDate: startWorkingDate ?
-                          new Date(startWorkingDate).toLocaleDateString('ru-RU', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric'
-                          }) : 'Не указана',
-                days: daysInProject,
-                hours: 0,
-                lastHours: 0,
-                lastReport: null,
-                rate: rate,
-                lastSum: 0,
-                totalSum: 0
-              };
-            }
-          })
-        );
+          return {
+            id: employee.id,
+            name: `${employee.last_name} ${employee.first_name.charAt(0)}. ${employee.second_name.charAt(0)}.`,
+            role: employee.role || 'Не указана',
+            status: status,
+            deletionDate: deletionDate,
+            startDate: startWorkingDate ?
+                      new Date(startWorkingDate).toLocaleDateString('ru-RU', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric'
+                      }) : 'Не указана',
+            days: daysInProject,
+            hours: hours,
+            lastHours: lastHours,
+            lastReport: lastReport,
+            rate: rate,
+            lastSum: lastSum,
+            totalSum: totalSum
+          };
+        });
 
         // Сортируем: сначала активные, затем удаленные
         const sortedEmployees = formattedEmployees.sort((a: any, b: any) => {
@@ -638,88 +662,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       }));
     }
   }, [project]);
-
-  const prevNomLengthRef = React.useRef<number | undefined>(undefined);
-  useEffect(() => {
-    if (activeTab !== 'specification') return;
-    const nomLength = localProject.nomenclature?.length;
-    const nomChanged = nomLength !== prevNomLengthRef.current;
-    if (specificationLoadedRef.current && !nomChanged) return;
-    prevNomLengthRef.current = nomLength;
-    const loadNomenclatureWithChanges = async () => {
-      if (localProject.nomenclature && Array.isArray(localProject.nomenclature) && localProject.id) {
-        try {
-          // Загружаем изменения для каждого материала
-          const itemsWithChanges = await Promise.all(
-            localProject.nomenclature.map(async (item: any, index: number) => {
-              let lastChange = null;
-              let factValue = 0;
-              
-              try {
-                // Получаем историю изменений для этого материала
-                const changesResponse = await apiService.getNomenclatureChanges(localProject.id, item.id);
-                
-                // Берем последнее изменение (последнее в массиве, так как API возвращает их по возрастанию даты)
-                if (changesResponse && changesResponse.data && Array.isArray(changesResponse.data) && changesResponse.data.length > 0) {
-                  const latestChange = changesResponse.data[changesResponse.data.length - 1];
-                  lastChange = latestChange.amount_change;
-                }
-              } catch (error) {
-                // Тихо игнорируем ошибки - материал просто не будет иметь изменений
-              }
-
-              try {
-                // Загружаем факты и суммируем их
-                const factsResponse = await apiService.getNomenclatureFacts(localProject.id, item.id, {
-                  per_page: 1000,
-                });
-                
-                let factsData: any[] = [];
-                if (factsResponse?.data?.data && Array.isArray(factsResponse.data.data)) {
-                  factsData = factsResponse.data.data;
-                } else if (factsResponse?.data && Array.isArray(factsResponse.data)) {
-                  factsData = factsResponse.data;
-                } else if (Array.isArray(factsResponse)) {
-                  factsData = factsResponse;
-                }
-
-                // Суммируем все факты (исключая удаленные)
-                factValue = factsData
-                  .filter((fact: any) => !fact.is_deleted)
-                  .reduce((sum: number, fact: any) => {
-                    const amount = Number(fact.amount) || 0;
-                    return sum + amount;
-                  }, 0);
-              } catch (error) {
-                // Игнорируем ошибки загрузки фактов, используем значение из pivot
-                factValue = Number(item?.pivot?.current_amount ?? item?.fact ?? 0);
-              }
-
-              return {
-                id: item.id,
-                npp: item.index_number ?? item.npp ?? item.pivot?.npp ?? index + 1,
-                name: item.name,
-                status: item.is_deleted ? `Удалён\n${new Date(item.deleted_at).toLocaleDateString('ru-RU')}` : 'Активен',
-                unit: item.unit || '',
-                plan: item.pivot?.start_amount || 0,
-                changes: lastChange,
-                fact: Number.isFinite(factValue) ? factValue : 0
-              };
-            })
-          );
-          
-          setSpecificationItems(itemsWithChanges);
-          specificationLoadedRef.current = true;
-        } catch (error) {
-          // Ошибка загрузки изменений обработана
-        }
-      } else {
-        setSpecificationItems([]);
-      }
-    };
-
-    loadNomenclatureWithChanges();
-  }, [localProject.id, localProject.nomenclature, activeTab]);
 
   const handleInputChange = (field: string, value: string) => {
     // Для поля budget проверяем, что значение не отрицательное
@@ -1134,14 +1076,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
           data.quantity
         );
 
-        // Обновляем локальное состояние - добавляем изменение
-        setSpecificationItems(prev => 
-          prev.map(item => 
-            item.id === editingItem.id 
-              ? { ...item, changes: data.quantity }
-              : item
-          )
-        );
+        setSpecificationDetailCache((prev) => ({
+          ...prev,
+          [editingItem.id]: {
+            changes: data.quantity,
+            fact: prev[editingItem.id]?.fact ?? Number(editingItem.fact) ?? 0,
+          },
+        }));
 
         // Перезагружаем историю изменений
         const changesResponse = await apiService.getNomenclatureChanges(localProject.id, editingItem.id);
@@ -1262,6 +1203,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         const existingInProject = localProject.nomenclature?.find((item: any) => {
           return item.id === nomenclatureItem.id;
         });
+
+        const fileUnit = String(row.unit || '').trim();
+        if (fileUnit && fileUnit !== String(nomenclatureItem.unit ?? '').trim()) {
+          try {
+            await apiService.updateNomenclature(nomenclatureItem.id, { unit: fileUnit });
+            nomenclatureItem = { ...nomenclatureItem, unit: fileUnit };
+            const globalIdx = allNomenclature.findIndex((x: any) => x.id === nomenclatureItem.id);
+            if (globalIdx >= 0) {
+              allNomenclature[globalIdx] = { ...allNomenclature[globalIdx], unit: fileUnit };
+            }
+          } catch {
+            // бэкенд может не поддержать PATCH — таблица покажет unit из справочника как раньше
+          }
+        }
 
         if (existingInProject) {
           // Номенклатура уже в проекте — суммируем с Планом и обновляем start_amount
@@ -1642,6 +1597,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
 
   // Функция сортировки для спецификации
   const handleSpecificationSort = (field: string | null) => {
+    setCurrentPage(1);
     if (specificationSortField === field) {
       setSpecificationSortDirection(specificationSortDirection === 'asc' ? 'desc' : 'asc');
     } else {
@@ -1652,12 +1608,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
 
   // Сортировка спецификации
   const sortedSpecificationItems = React.useMemo(() => {
-    const sorted = [...specificationItems];
+    const sorted = [...specificationRowsMerged];
     if (specificationSortField) {
       sorted.sort((a, b) => {
         let aValue: any;
         let bValue: any;
-        
+
         switch (specificationSortField) {
           case 'npp':
             aValue = a.npp ?? 0;
@@ -1690,20 +1646,23 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
           default:
             return 0;
         }
-        
+
+        let cmp: number;
         if (typeof aValue === 'string' && typeof bValue === 'string') {
-          return specificationSortDirection === 'asc' 
-            ? aValue.localeCompare(bValue, 'ru')
-            : bValue.localeCompare(aValue, 'ru');
+          cmp =
+            specificationSortDirection === 'asc'
+              ? aValue.localeCompare(bValue, 'ru')
+              : bValue.localeCompare(aValue, 'ru');
         } else {
-          return specificationSortDirection === 'asc' 
-            ? aValue - bValue
-            : bValue - aValue;
+          cmp =
+            specificationSortDirection === 'asc' ? aValue - bValue : bValue - aValue;
         }
+        if (cmp !== 0) return cmp;
+        return (a.npp ?? 0) - (b.npp ?? 0);
       });
     }
     return sorted;
-  }, [specificationItems, specificationSortField, specificationSortDirection]);
+  }, [specificationRowsMerged, specificationSortField, specificationSortDirection]);
 
   // Функция сортировки для фиксации работ
   const handleTrackingSort = (field: string | null) => {
@@ -1784,6 +1743,36 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   const endIndex = startIndex + itemsPerPage;
   const paginatedItems = sortedSpecificationItems.slice(startIndex, endIndex);
 
+  useEffect(() => {
+    if (activeTab !== 'specification' || !localProject.id || specificationBaseRows.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const pivotBy: Record<number, number> = {};
+        const nomIds: number[] = [];
+        for (const r of specificationBaseRows) {
+          nomIds.push(r.id);
+          pivotBy[r.id] = r.sortFact;
+        }
+        const cache = await fetchProjectSpecificationDetailCache(
+          localProject.id,
+          nomIds,
+          pivotBy,
+          { includeFactByForeman: false }
+        );
+        if (cancelled) return;
+        setSpecificationDetailCache(cache);
+      } catch {
+        // строки остаются на pivot до следующей попытки
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, localProject.id, nomenclatureFingerprint, specificationBaseRows]);
+
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
   };
@@ -1820,8 +1809,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         await apiService.removeNomenclature(localProject.id, itemId);
       }
 
-      setSpecificationItems(prev => prev.filter(item => !selectedItems.has(item.id)));
       setSelectedItems(new Set());
+      await onRefresh?.();
     } catch (error) {
       // Ошибка обработана без уведомления пользователя
     }
@@ -2574,6 +2563,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                   <div 
                     key={item.id} 
                     className={`projects__specification-row ${item.status.includes('Удалён') ? 'projects__specification-row--deleted' : ''}`}
+                    title={String(item.name ?? '')}
                   >
                     <div className="projects__specification-col">
                       <input
@@ -2593,10 +2583,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                       <span>{item.unit}</span>
                     </div>
                     <div className="projects__specification-col">
-                      <span>{Math.floor(Number(item.plan) || 0)}</span>
+                      <span>{formatSpecQuantityForDisplay(item.plan, '0')}</span>
                     </div>
                     <div className="projects__specification-col">
-                      <span>{item.changes !== null ? Math.floor(Number(item.changes)) : ''}</span>
+                      <span>{item.changes !== null ? formatSpecQuantityForDisplay(item.changes) : ''}</span>
                     </div>
                     <div className="projects__specification-col">
                       <button 
@@ -2613,7 +2603,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                       </button>
                     </div>
                     <div className="projects__specification-col">
-                      <span>{item.fact !== null && item.fact !== undefined ? Math.floor(Number(item.fact)).toLocaleString('ru-RU') : '0'}</span>
+                      <span>
+                        {item.fact !== null && item.fact !== undefined
+                          ? formatSpecQuantityForDisplay(item.fact, '0')
+                          : '0'}
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -2927,7 +2921,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         onClose={() => setIsAddModalOpen(false)}
         onAdd={handleAddNomenclature}
         projectId={localProject.id}
-        existingNomenclatureIds={specificationItems.map(item => item.id)}
+        existingNomenclatureIds={(localProject.nomenclature || []).map((n: any) => n.id)}
       />
 
       <EditNomenclatureModal
@@ -2941,7 +2935,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         initialData={editingItem ? {
           nomenclature: editingItem.name,
           changeDate: new Date().toISOString().split('T')[0],
-          quantity: editingItem.changes || editingItem.plan
+          quantity: editingItem.changes != null ? editingItem.changes : editingItem.plan
         } : undefined}
         historyData={nomenclatureHistory}
       />

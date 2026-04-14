@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import closeIconRaw from '../../icons/closeIcon.svg?raw';
 import calendarIconGreyRaw from '../../icons/calendarIconGrey.svg?raw';
 import { apiService } from '../../../services/api';
@@ -15,6 +15,14 @@ export type AddHoursFormState = {
   isAbsent: boolean;
   /** Локальная дата YYYY-MM-DD */
   selectedDateStr: string;
+};
+
+export type ExistingWorkReportForEdit = {
+  id: number;
+  report_date: string;
+  hours_worked?: number;
+  absent?: boolean;
+  notes?: string;
 };
 
 type AddHoursModalProps = {
@@ -34,6 +42,8 @@ type AddHoursModalProps = {
   /** Если заданы оба — поля формы контролируются родителем (сохраняются при remount) */
   externalForm?: AddHoursFormState;
   onExternalFormChange?: (next: AddHoursFormState) => void;
+  /** Если за эту дату уже есть отчёт — PATCH вместо POST (редактирование в тот же день) */
+  existingReport?: ExistingWorkReportForEdit | null;
 };
 
 export const AddHoursModal: React.FC<AddHoursModalProps> = ({
@@ -47,6 +57,7 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
   enforceTimeRestriction = false,
   externalForm,
   onExternalFormChange,
+  existingReport = null,
 }) => {
   const isControlled = Boolean(externalForm && onExternalFormChange);
 
@@ -81,27 +92,41 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
     onExternalFormChange({ ...externalForm, ...patch });
   };
 
-  // Обновляем savedDates при изменении trackedDates
-  useEffect(() => {
-    setSavedDates(trackedDates);
-  }, [trackedDates]);
-
-  // Всегда используем сегодняшнюю дату при открытии модального окна (только неконтролируемый режим)
-  useEffect(() => {
-    if (isOpen && !isControlled) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      setInternalSelectedDate(today);
-    }
-  }, [isOpen, isControlled]);
-
-  // Функция для форматирования даты в YYYY-MM-DD (используем локальное время, чтобы избежать проблем с часовыми поясами)
+  // YYYY-MM-DD в локальном времени (нужна до эффектов и handleSave)
   const formatDateString = (date: Date): string => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
+
+  // Обновляем savedDates при изменении trackedDates
+  useEffect(() => {
+    setSavedDates(trackedDates);
+  }, [trackedDates]);
+
+  // При открытии: сегодня (неконтролируемый режим); при необходимости — подстановка из existingReport
+  useEffect(() => {
+    if (!isOpen || isControlled) return;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    setInternalSelectedDate(today);
+    setError(null);
+    const todayStr = formatDateString(today);
+    const exDate = existingReport?.report_date ? String(existingReport.report_date).slice(0, 10) : '';
+    if (existingReport?.id != null && exDate === todayStr) {
+      const a = existingReport.absent as unknown;
+      const abs = a === true || a === 1 || a === '1';
+      setInternalAbsent(abs);
+      const hw = Number(existingReport.hours_worked);
+      setInternalHours(abs ? 0 : Number.isFinite(hw) && hw >= 0 ? Math.min(24, hw) : 8);
+      setInternalReason(existingReport.notes?.trim() ? String(existingReport.notes).trim() : '');
+    } else {
+      setInternalHours(8);
+      setInternalAbsent(false);
+      setInternalReason('');
+    }
+  }, [isOpen, isControlled, existingReport?.id, existingReport?.report_date]);
 
   // Проверка, есть ли фиксация для даты
   const hasTracking = (date: Date): boolean => {
@@ -225,14 +250,26 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
     setError(null);
 
     try {
-      const data = {
-        report_date: dateString,
+      const payload = {
         hours_worked: isAbsent ? 0 : hours,
         absent: isAbsent,
         notes: reason || undefined,
       };
 
-      await apiService.createWorkReport(projectId, employee.id, data);
+      const exDate = existingReport?.report_date ? String(existingReport.report_date).slice(0, 10) : '';
+      const isUpdateToday =
+        existingReport != null &&
+        existingReport.id != null &&
+        exDate === dateString;
+
+      if (isUpdateToday) {
+        await apiService.updateWorkReport(projectId, employee.id, existingReport.id, payload);
+      } else {
+        await apiService.createWorkReport(projectId, employee.id, {
+          report_date: dateString,
+          ...payload,
+        });
+      }
 
       // Добавляем дату в savedDates, если её там еще нет
       if (!savedDates.includes(dateString)) {

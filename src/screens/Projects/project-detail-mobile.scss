@@ -1184,6 +1184,35 @@
     &:active {
       transform: translateY(1px);
     }
+
+    /** Показывается только когда за сегодня уже есть отчёт — отличается от «Ввести часы» */
+    &--edit-today {
+      width: 100%;
+      max-width: 132px;
+      min-height: 32px;
+      height: auto;
+      padding: 6px 10px;
+      gap: 6px;
+      background: #ffffff;
+      color: #2787f5;
+      border: 1.5px solid #2787f5;
+      box-shadow: 0 1px 3px rgba(39, 135, 245, 0.12);
+      font-size: 11px;
+      line-height: 1.2;
+
+      &:active {
+        background: #f0f7ff;
+      }
+    }
+  }
+
+  &__tracking-action-icon {
+    flex-shrink: 0;
+    display: block;
+  }
+
+  &__tracking-action-label {
+    text-align: center;
   }
 
   @media (max-width: 480px), (max-height: 450px) {

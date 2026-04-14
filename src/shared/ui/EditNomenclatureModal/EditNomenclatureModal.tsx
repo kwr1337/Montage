@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import calendarIconGreyRaw from '../../icons/calendarIconGrey.svg?raw';
 import upDownTableFilterRaw from '../../icons/upDownTableFilter.svg?raw';
 import closeIconRaw from '../../icons/closeIcon.svg?raw';
+import { parseSpecQuantityInput } from '../../../utils/specQuantityFormat';
 import './edit-nomenclature-modal.scss';
 
 const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
@@ -39,7 +40,7 @@ const EditNomenclatureModal: React.FC<EditNomenclatureModalProps> = ({
   const [formData, setFormData] = useState({
     nomenclature: initialData.nomenclature,
     changeDate: initialData.changeDate,
-    quantity: initialData.quantity,
+    quantity: String(initialData.quantity ?? ''),
   });
 
   // Обновляем formData когда изменяется initialData
@@ -48,7 +49,7 @@ const EditNomenclatureModal: React.FC<EditNomenclatureModalProps> = ({
       setFormData({
         nomenclature: initialData.nomenclature,
         changeDate: initialData.changeDate,
-        quantity: Math.floor(Number(initialData.quantity)) || 0,
+        quantity: String(initialData.quantity ?? ''),
       });
     }
   }, [isOpen, initialData]);
@@ -61,7 +62,11 @@ const EditNomenclatureModal: React.FC<EditNomenclatureModalProps> = ({
   };
 
   const handleSubmit = () => {
-    const quantityValue = Math.floor(Number(formData.quantity)) || 0;
+    const quantityValue = parseSpecQuantityInput(String(formData.quantity));
+    if (quantityValue === null) {
+      alert('Введите корректное число (дроби через запятую или точку)');
+      return;
+    }
     if (quantityValue < 0) {
       alert('Введите количество не менее 0');
       return;
@@ -69,7 +74,7 @@ const EditNomenclatureModal: React.FC<EditNomenclatureModalProps> = ({
     onEdit({
       nomenclature: formData.nomenclature,
       changeDate: new Date().toISOString().split('T')[0],
-      quantity: quantityValue >= 0 ? quantityValue : 0
+      quantity: quantityValue,
     });
     onClose();
   };
@@ -80,7 +85,7 @@ const EditNomenclatureModal: React.FC<EditNomenclatureModalProps> = ({
     setFormData({
       nomenclature: initialData.nomenclature,
       changeDate: initialData.changeDate,
-      quantity: initialData.quantity,
+      quantity: String(initialData.quantity ?? ''),
     });
   };
 
@@ -126,24 +131,13 @@ const EditNomenclatureModal: React.FC<EditNomenclatureModalProps> = ({
                 <div className="edit-nomenclature-modal__field">
                   <label className="edit-nomenclature-modal__label edit-nomenclature-modal__label--required">Введите кол-во</label>
                   <input
-                    type="number"
-                    min={0}
-                    step={1}
-                    inputMode="numeric"
+                    type="text"
+                    spellCheck={false}
+                    inputMode="decimal"
                     className="edit-nomenclature-modal__input"
                     value={formData.quantity}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (v === '') {
-                        handleInputChange('quantity', 0);
-                        return;
-                      }
-                      const parsed = parseInt(v, 10);
-                      if (!isNaN(parsed) && parsed >= 0) {
-                        handleInputChange('quantity', parsed);
-                      }
-                    }}
-                    placeholder="100"
+                    onChange={(e) => handleInputChange('quantity', e.target.value)}
+                    placeholder="100 или 1,25"
                   />
                 </div>
               </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import closeIconRaw from '../../icons/closeIcon.svg?raw';
 import calendarIconGreyRaw from '../../icons/calendarIconGrey.svg?raw';
+import { formatSpecQuantityForDisplay, parseSpecQuantityInput } from '../../../utils/specQuantityFormat';
 import './add-fact-modal.scss';
 
 const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
@@ -31,9 +32,11 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
   nomenclature,
   existingFact,
 }) => {
-  const [quantity, setQuantity] = useState<number>(existingFact?.amount || 0);
+  const [quantity, setQuantity] = useState<number>(Number(existingFact?.amount) || 0);
   const [date, setDate] = useState<string>(existingFact?.fact_date || new Date().toISOString().split('T')[0]);
-  const [quantityInput, setQuantityInput] = useState<string>(String(Math.floor(existingFact?.amount || 0)));
+  const [quantityInput, setQuantityInput] = useState<string>(
+    formatSpecQuantityForDisplay(existingFact?.amount ?? 0, '0')
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,13 +48,14 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
   // Обновляем состояние при изменении existingFact
   useEffect(() => {
     if (existingFact) {
-      const intAmount = Math.floor(existingFact.amount);
-      setQuantity(intAmount);
-      setQuantityInput(String(intAmount));
+      const amt = Number(existingFact.amount);
+      const safe = Number.isFinite(amt) ? amt : 0;
+      setQuantity(safe);
+      setQuantityInput(formatSpecQuantityForDisplay(safe, '0'));
       setDate(existingFact.fact_date);
     } else {
       setQuantity(0);
-      setQuantityInput('0');
+      setQuantityInput(formatSpecQuantityForDisplay(0, '0'));
       setDate(new Date().toISOString().split('T')[0]);
     }
   }, [existingFact, isOpen]);
@@ -59,34 +63,38 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
   const handleIncrement = () => {
     const newValue = quantity + 1;
     setQuantity(newValue);
-    setQuantityInput(String(newValue));
+    setQuantityInput(formatSpecQuantityForDisplay(newValue, '0'));
   };
 
   const handleDecrement = () => {
     const newValue = Math.max(0, quantity - 1);
     setQuantity(newValue);
-    setQuantityInput(String(newValue));
+    setQuantityInput(formatSpecQuantityForDisplay(newValue, '0'));
   };
 
   const handleQuantityInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setQuantityInput(value);
-    const parsed = value === '' ? 0 : parseInt(value, 10);
-    if (!isNaN(parsed) && parsed >= 0) {
+    const parsed = parseSpecQuantityInput(value);
+    if (parsed !== null) {
       setQuantity(parsed);
     }
   };
 
   const handleQuantityInputBlur = () => {
-    const parsed = quantityInput === '' ? 0 : parseInt(quantityInput, 10);
-    const intValue = isNaN(parsed) || parsed < 0 ? 0 : Math.floor(parsed);
-    setQuantity(intValue);
-    setQuantityInput(String(intValue));
+    const parsed = parseSpecQuantityInput(quantityInput);
+    if (parsed === null) {
+      setQuantity(0);
+      setQuantityInput(formatSpecQuantityForDisplay(0, '0'));
+      return;
+    }
+    setQuantity(parsed);
+    setQuantityInput(formatSpecQuantityForDisplay(parsed, '0'));
   };
 
   const handleSave = async () => {
-    const parsed = quantityInput === '' ? 0 : parseInt(quantityInput, 10);
-    const finalQuantity = isNaN(parsed) || parsed < 0 ? 0 : Math.floor(parsed);
+    const parsed = parseSpecQuantityInput(quantityInput);
+    const finalQuantity = parsed === null || parsed < 0 ? 0 : parsed;
     setError(null);
     setIsSaving(true);
     try {
@@ -142,7 +150,9 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
             {nomenclature.previousValue !== undefined && (
               <div className="add-fact-modal__row">
                 <span className="add-fact-modal__label">Введенное ранее значение</span>
-                <span className="add-fact-modal__value">{Math.floor(Number(nomenclature.previousValue))}</span>
+                <span className="add-fact-modal__value">
+                  {formatSpecQuantityForDisplay(nomenclature.previousValue, '0')}
+                </span>
               </div>
             )}
           </div>
@@ -173,15 +183,14 @@ export const AddFactModal: React.FC<AddFactModalProps> = ({
                   </svg>
                 </button>
                 <input
-                  type="number"
-                  min={0}
-                  step={1}
+                  type="text"
+                  spellCheck={false}
+                  inputMode="decimal"
                   value={quantityInput}
                   onChange={handleQuantityInputChange}
                   onBlur={handleQuantityInputBlur}
                   className="add-fact-modal__counter-input"
                   aria-label="Количество"
-                  inputMode="numeric"
                 />
                 <button
                   type="button"

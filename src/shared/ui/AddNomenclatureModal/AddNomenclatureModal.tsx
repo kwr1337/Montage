@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiService } from '../../../services/api';
+import { parseSpecQuantityInput } from '../../../utils/specQuantityFormat';
 import userDropdownIconRaw from '../../icons/user-dropdown-icon.svg?raw';
 import closeIconRaw from '../../icons/closeIcon.svg?raw';
 import './add-nomenclature-modal.scss';
@@ -31,7 +32,7 @@ const AddNomenclatureModal: React.FC<AddNomenclatureModalProps> = ({
     nomenclatureId: 0,
     nomenclature: '',
     unit: '',
-    quantity: 100 as number | string,
+    quantity: '100' as string,
   });
   const [error, setError] = useState<string>('');
 
@@ -94,10 +95,9 @@ const AddNomenclatureModal: React.FC<AddNomenclatureModalProps> = ({
       setError('Необходимо выбрать номенклатуру');
       return;
     }
-    const raw = typeof formData.quantity === 'string' ? parseInt(formData.quantity, 10) : formData.quantity;
-    const quantityValue = Number.isFinite(raw) ? Math.floor(Number(raw)) : 0;
-    if (!quantityValue || quantityValue <= 0) {
-      setError('Необходимо ввести целое число больше нуля');
+    const quantityValue = parseSpecQuantityInput(String(formData.quantity));
+    if (quantityValue === null || quantityValue <= 0) {
+      setError('Введите число больше нуля (допускаются дроби, запятая или точка)');
       return;
     }
     
@@ -112,7 +112,7 @@ const AddNomenclatureModal: React.FC<AddNomenclatureModalProps> = ({
       nomenclatureId: 0,
       nomenclature: '',
       unit: '',
-      quantity: 100,
+      quantity: '100',
     });
   };
 
@@ -124,7 +124,7 @@ const AddNomenclatureModal: React.FC<AddNomenclatureModalProps> = ({
       nomenclatureId: 0,
       nomenclature: '',
       unit: '',
-      quantity: 100,
+      quantity: '100',
     });
   };
 
@@ -202,26 +202,16 @@ const AddNomenclatureModal: React.FC<AddNomenclatureModalProps> = ({
           <div className="add-nomenclature-modal__field">
             <label className="add-nomenclature-modal__label add-nomenclature-modal__label--required">Введите кол-во</label>
             <input
-              type="number"
-              step="1"
-              min="0"
-              inputMode="numeric"
+              type="text"
+              spellCheck={false}
+              inputMode="decimal"
               className="add-nomenclature-modal__input add-nomenclature-modal__input--quantity"
               value={formData.quantity}
               onChange={(e) => {
-                const value = e.target.value;
-                if (value === '') {
-                  handleInputChange('quantity', '');
-                  setError('');
-                  return;
-                }
-                const parsed = parseInt(value, 10);
-                if (!isNaN(parsed) && parsed >= 0) {
-                  handleInputChange('quantity', parsed);
-                  setError('');
-                }
+                handleInputChange('quantity', e.target.value);
+                setError('');
               }}
-              placeholder="100"
+              placeholder="100 или 12,5"
             />
           </div>
           {error && (

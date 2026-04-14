@@ -2,12 +2,17 @@ import React, { useEffect, useMemo, useState } from 'react';
 import paginationIconActiveLeftRaw from '../../shared/icons/paginationIconActiveLeft.svg?raw';
 import upDownTableFilterRaw from '../../shared/icons/upDownTableFilter.svg?raw';
 import commentMobIconRaw from '../../shared/icons/commentMob.svg?raw';
+import editMobIconRaw from '../../shared/icons/editMob.svg?raw';
 
 const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
 const paginationIconActiveLeft = toDataUrl(paginationIconActiveLeftRaw);
 const upDownTableFilter = toDataUrl(upDownTableFilterRaw);
 const commentMobIcon = toDataUrl(commentMobIconRaw);
+const editMobIcon = toDataUrl(editMobIconRaw);
 import { apiService } from '../../services/api';
+import { fetchAllProjectWorkReportsDeduped, groupWorkReportsByUserId } from '../../utils/projectWorkReports';
+import { fetchProjectSpecificationDetailCache } from '../../utils/nomenclatureRowDetails';
+import { formatSpecQuantityForDisplay } from '../../utils/specQuantityFormat';
 import { AddFactModal } from '../../shared/ui/AddFactModal/AddFactModal';
 import { AddHoursModal, type AddHoursFormState } from '../../shared/ui/AddHoursModal/AddHoursModal';
 import { CommentModal } from '../../shared/ui/CommentModal/CommentModal';
@@ -56,19 +61,6 @@ const formatCurrency = (value?: number | string | null) => {
   return `${Math.max(0, numeric).toLocaleString('ru-RU')} ₽`;
 };
 
-const formatNumber = (value?: number | string | null, fallback: string = '—') => {
-  if (value === null || value === undefined) {
-    return fallback;
-  }
-
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return fallback;
-  }
-
-  return Math.floor(numeric).toLocaleString('ru-RU');
-};
-
 /** Локальная дата YYYY-MM-DD (для сравнения с fact_date) */
 const getTodayLocal = () => {
   const d = new Date();
@@ -102,6 +94,8 @@ const formatDate = (value?: string | null) => {
 
   return `${day}.${month}.${year}`;
 };
+
+const MOBILE_SPEC_PAGE_SIZE = 25;
 
 const getAvatarColor = (text: string) => {
   const colors = [
@@ -170,8 +164,11 @@ type SpecificationItem = {
 
 export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ project, onBack, onRefresh, isLoading = false, mockApiResponses }) => {
   const [activeTab, setActiveTab] = useState<'general' | 'specification' | 'tracking'>('general');
-  const [specificationItems, setSpecificationItems] = useState<SpecificationItem[]>([]);
-  const [isSpecificationLoading, setIsSpecificationLoading] = useState(false);
+  const [specificationDetailCache, setSpecificationDetailCache] = useState<
+    Record<number, { changes: number | null; fact: number; factByForeman?: Record<number, number> }>
+  >({});
+  const [specDetailEpoch, setSpecDetailEpoch] = useState(0);
+  const [specCurrentPage, setSpecCurrentPage] = useState(1);
   const mobileTrackingLoadedRef = React.useRef(false);
   const [specificationSortField, setSpecificationSortField] = useState<string | null>('npp');
   const [specificationSortDirection, setSpecificationSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -205,6 +202,14 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   const [selectedEmployee, setSelectedEmployee] = useState<any | null>(null);
   const [hoursModalForm, setHoursModalForm] = useState<AddHoursFormState | null>(null);
   const [trackedDates, setTrackedDates] = useState<string[]>([]);
+  /** Отчёт за сегодня для PATCH вместо POST в AddHoursModal */
+  const [hoursModalExistingReport, setHoursModalExistingReport] = useState<{
+    id: number;
+    report_date: string;
+    hours_worked?: number;
+    absent?: boolean;
+    notes?: string;
+  } | null>(null);
   const [calculatedSpent, setCalculatedSpent] = useState<number | null>(null);
   const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
   const [selectedComment, setSelectedComment] = useState<{ comment: string; employeeName: string; date: string } | null>(null);
@@ -250,6 +255,61 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   const getTotalFactValue = (item: SpecificationItem): number => {
     return Number(item.fact) || 0;
   };
+
+  const specificationBaseRows = useMemo(() => {
+    if (!Array.isArray(project?.nomenclature) || project.nomenclature.length === 0) return [];
+    return project.nomenclature
+      .map((item: any, index: number) => {
+        const getNomenclatureId = (x: any) =>
+          x?.id ?? x?.nomenclature_id ?? x?.pivot?.nomenclature_id;
+        const nomId = getNomenclatureId(item);
+        if (!nomId) return null;
+        const statusMeta = getSpecificationStatusMeta(item);
+        const planValue = Number(item?.pivot?.start_amount ?? item?.plan ?? 0);
+        const sortFact = Number(item?.pivot?.current_amount ?? item?.fact ?? 0);
+        return {
+          id: nomId,
+          npp: item.index_number ?? item.npp ?? item.pivot?.npp ?? index + 1,
+          name: item.name || '—',
+          unit: item.unit || '—',
+          plan: Number.isFinite(planValue) ? planValue : 0,
+          changes: null,
+          fact: Number.isFinite(sortFact) ? sortFact : 0,
+          factByForeman: undefined,
+          statusLabel: statusMeta.label,
+          statusVariant: statusMeta.variant,
+        } as SpecificationItem;
+      })
+      .filter((row: SpecificationItem | null): row is SpecificationItem => row !== null);
+  }, [project?.nomenclature]);
+
+  const mobileNomFingerprint = useMemo(
+    () =>
+      `${project?.id}:${(project?.nomenclature || [])
+        .map((x: any) => x?.id ?? x?.nomenclature_id ?? x?.pivot?.nomenclature_id)
+        .filter(Boolean)
+        .sort((a: number, b: number) => a - b)
+        .join(',')}`,
+    [project?.id, project?.nomenclature]
+  );
+
+  useEffect(() => {
+    setSpecificationDetailCache({});
+    setSpecCurrentPage(1);
+  }, [mobileNomFingerprint]);
+
+  const specificationRowsMerged = useMemo(() => {
+    return specificationBaseRows.map((row: SpecificationItem) => {
+      const d = specificationDetailCache[row.id];
+      if (!d) return row;
+      return {
+        ...row,
+        changes: d.changes,
+        fact: d.fact,
+        factByForeman: d.factByForeman,
+      };
+    });
+  }, [specificationBaseRows, specificationDetailCache]);
 
   const summary = useMemo(() => {
     const allocated = Number(project?.budget) || 0;
@@ -507,158 +567,6 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     return () => { isCancelled = true; };
   }, [activeTab, assignmentDate, isAddEmployeesModalOpen, isBrigadierForAssignments, mockApiResponses, project?.id, project?.employees]);
 
-  useEffect(() => {
-    let isCancelled = false;
-
-    const loadSpec = async () => {
-      // Проверяем, что проект загружен и имеет номенклатуру
-      if (!project?.id) {
-        if (!isCancelled) {
-          setSpecificationItems([]);
-          setIsSpecificationLoading(false);
-        }
-        return;
-      }
-
-      // Если номенклатуры нет или она пустая, просто очищаем список
-      if (!Array.isArray(project?.nomenclature) || project.nomenclature.length === 0) {
-        if (!isCancelled) {
-          setSpecificationItems([]);
-          setIsSpecificationLoading(false);
-        }
-        return;
-      }
-
-      if (!isCancelled) {
-        setIsSpecificationLoading(true);
-      }
-
-      try {
-        const getNomenclatureId = (item: any) =>
-          item?.id ?? item?.nomenclature_id ?? item?.pivot?.nomenclature_id;
-
-        const itemsWithMeta = await Promise.all(
-          project.nomenclature.map(async (item: any, index: number) => {
-            const nomId = getNomenclatureId(item);
-            if (!nomId) return null;
-
-            let lastChange: number | null = null;
-            let factValue: number = 0;
-
-            try {
-              let response: any;
-              if (mockApiResponses?.getNomenclatureChanges?.[String(nomId)]) {
-                response = mockApiResponses.getNomenclatureChanges[String(nomId)];
-              } else {
-                response = await apiService.getNomenclatureChanges(project.id, nomId);
-              }
-              const changesData = Array.isArray(response?.data)
-                ? response.data
-                : Array.isArray(response)
-                ? response
-                : [];
-
-              if (changesData.length > 0) {
-                const latestChange = changesData[changesData.length - 1];
-                const numericChange = Number(latestChange?.amount_change);
-                if (Number.isFinite(numericChange)) {
-                  lastChange = numericChange;
-                }
-              }
-            } catch {
-              // Игнорируем ошибки загрузки изменений
-            }
-
-            let factByForeman: Record<number, number> = {};
-
-            try {
-              let factsResponse: any;
-              if (mockApiResponses?.getNomenclatureFacts?.[String(nomId)]) {
-                factsResponse = mockApiResponses.getNomenclatureFacts[String(nomId)];
-              } else {
-                factsResponse = await apiService.getNomenclatureFacts(project.id, nomId, {
-                  per_page: 1000,
-                });
-              }
-
-              let factsData: any[] = [];
-              if (factsResponse?.data?.data && Array.isArray(factsResponse.data.data)) {
-                factsData = factsResponse.data.data;
-              } else if (factsResponse?.data && Array.isArray(factsResponse.data)) {
-                factsData = factsResponse.data;
-              } else if (Array.isArray(factsResponse)) {
-                factsData = factsResponse;
-              } else if (factsResponse?.data?.facts && Array.isArray(factsResponse.data.facts)) {
-                factsData = factsResponse.data.facts;
-              }
-
-              const today = getTodayLocal();
-              const activeFacts = factsData.filter((fact: any) => !fact.is_deleted);
-
-              // Сумма всех фактов (общая)
-              factValue = activeFacts.reduce((sum: number, fact: any) => {
-                const amount = Number(fact.amount) || 0;
-                return sum + amount;
-              }, 0);
-
-              // Сумма за день по бригадирам (project_manager_id -> sum). API: project_manager_id, не user_id
-              activeFacts
-                .filter((fact: any) => normalizeFactDate(fact.fact_date) === today)
-                .forEach((fact: any) => {
-                  const uid = fact.project_manager_id ?? fact.user_id ?? fact.user?.id;
-                  if (uid != null) {
-                    const key = Number(uid);
-                    factByForeman[key] = (factByForeman[key] || 0) + (Number(fact.amount) || 0);
-                  }
-                });
-            } catch {
-              // Игнорируем ошибки загрузки фактов, используем значение из pivot
-              factValue = Number(item?.pivot?.current_amount ?? item?.fact ?? 0);
-            }
-
-            const statusMeta = getSpecificationStatusMeta(item);
-            const planValue = Number(item?.pivot?.start_amount ?? item?.plan ?? 0);
-
-            return {
-              id: nomId,
-              npp: item.index_number ?? item.npp ?? item.pivot?.npp ?? index + 1,
-              name: item.name || '—',
-              unit: item.unit || '—',
-              plan: Number.isFinite(planValue) ? planValue : 0,
-              changes: lastChange,
-              fact: Number.isFinite(factValue) ? factValue : 0,
-              factByForeman: Object.keys(factByForeman).length > 0 ? factByForeman : undefined,
-              statusLabel: statusMeta.label,
-              statusVariant: statusMeta.variant,
-            } as SpecificationItem;
-          })
-        );
-
-        // Фильтруем null значения
-        const validItems = itemsWithMeta.filter((item): item is SpecificationItem => item !== null);
-
-        if (!isCancelled) {
-          setSpecificationItems(validItems);
-        }
-      } catch (error) {
-        console.error('Error loading specification:', error);
-        if (!isCancelled) {
-          setSpecificationItems([]);
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsSpecificationLoading(false);
-        }
-      }
-    };
-
-    loadSpec();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [project?.id, project?.nomenclature, mockApiResponses]);
-
   const isGIP = (emp: any) => {
     const role = (emp?.role || emp?.position || '').toLowerCase();
     return role.includes('гип') || role === 'главный инженер проекта';
@@ -699,38 +607,25 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           uniqueEmployeesForSpent.set(emp.id, emp);
         });
 
-        // Загружаем work_reports для сотрудников (за всё время)
-        const totalSpent = await Promise.all(
-          Array.from(uniqueEmployeesForSpent.values()).map(async (emp: any) => {
-            try {
-              const response = await apiService.getWorkReports(project.id, emp.id, {
-                per_page: 1000,
-              });
+        let reportsByUser: Map<number, any[]>;
+        try {
+          const allReports = await fetchAllProjectWorkReportsDeduped(project.id);
+          reportsByUser = groupWorkReportsByUserId(allReports);
+        } catch (error) {
+          console.error('Error loading project work reports for spent:', error);
+          reportsByUser = new Map();
+        }
 
-              let reports: any[] = [];
-              if (response?.data?.data && Array.isArray(response.data.data)) {
-                reports = response.data.data;
-              } else if (response?.data && Array.isArray(response.data)) {
-                reports = response.data;
-              } else if (Array.isArray(response)) {
-                reports = response;
-              }
-
-              // Суммируем часы
-              const totalHours = reports.reduce((sum, report) => {
-                const hoursWorked = Number(report.hours_worked) || 0;
-                const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
-                return sum + (isAbsent ? 0 : hoursWorked);
-              }, 0);
-
-              const rate = Number(emp.rate_per_hour ?? emp.pivot?.rate_per_hour ?? emp.pivot?.hourly_rate ?? 0) || 0;
-              return totalHours * rate;
-            } catch (error) {
-              console.error(`Error loading work reports for employee ${emp.id}:`, error);
-              return 0;
-            }
-          })
-        );
+        const totalSpent = Array.from(uniqueEmployeesForSpent.values()).map((emp: any) => {
+          const reports = reportsByUser.get(emp.id) ?? [];
+          const totalHours = reports.reduce((sum, report) => {
+            const hoursWorked = Number(report.hours_worked) || 0;
+            const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
+            return sum + (isAbsent ? 0 : hoursWorked);
+          }, 0);
+          const rate = Number(emp.rate_per_hour ?? emp.pivot?.rate_per_hour ?? emp.pivot?.hourly_rate ?? 0) || 0;
+          return totalHours * rate;
+        });
 
         const projectTotalSpent = totalSpent.reduce((sum, employeeSpent) => sum + employeeSpent, 0);
 
@@ -777,131 +672,87 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     const activeEmployees = [...activeFromProject, ...assignedAsEmps];
 
     try {
-      // Получаем текущую дату для проверки невыставленных часов
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
-      // Загружаем work_reports для всех активных сотрудников
-      const trackingData = await Promise.all(
-        activeEmployees.map(async (emp: any) => {
-          try {
-            const response = await apiService.getWorkReports(project.id, emp.id, {
-              per_page: 1000,
-            });
-            
-            let reports: any[] = [];
-            if (response?.data?.data && Array.isArray(response.data.data)) {
-              reports = response.data.data;
-            } else if (response?.data && Array.isArray(response.data)) {
-              reports = response.data;
-            } else if (Array.isArray(response)) {
-              reports = response;
+
+      let reportsByUser: Map<number, any[]>;
+      try {
+        const allReports = await fetchAllProjectWorkReportsDeduped(project.id);
+        reportsByUser = groupWorkReportsByUserId(allReports);
+      } catch (error) {
+        console.error('Error loading project work reports for tracking:', error);
+        reportsByUser = new Map();
+      }
+
+      const trackingData = activeEmployees.map((emp: any) => {
+        const reports = reportsByUser.get(emp.id) ?? [];
+        const lastReport = reports.length > 0 ? reports[0] : null;
+
+        const hourlyRate = emp.pivot?.rate_per_hour || emp.rate_per_hour || emp.pivot?.hourly_rate || 0;
+        const employeeName = `${emp.last_name || ''} ${emp.first_name ? `${emp.first_name.charAt(0)}.` : ''}${emp.second_name ? `${emp.second_name.charAt(0)}.` : ''}`.trim();
+
+        let lastDate = null;
+        let lastHours = 0;
+        let lastSum = 0;
+
+        if (lastReport) {
+          lastDate = lastReport.report_date;
+          const hoursWorked = Number(lastReport.hours_worked) || 0;
+          const isAbsent = lastReport.absent === true || lastReport.absent === 1 || lastReport.absent === '1';
+          lastHours = isAbsent ? 0 : hoursWorked;
+          lastSum = lastHours * hourlyRate;
+        }
+
+        let missingDaysWarning = null;
+        if (reports.length > 0 && lastReport) {
+          const lastReportDate = new Date(String(lastReport.report_date).slice(0, 10) + 'T00:00:00');
+          lastReportDate.setHours(0, 0, 0, 0);
+
+          const yesterday = new Date(today);
+          yesterday.setDate(yesterday.getDate() - 1);
+          yesterday.setHours(0, 0, 0, 0);
+
+          if (lastReportDate.getTime() < yesterday.getTime()) {
+            const daysDiff = Math.floor((today.getTime() - lastReportDate.getTime()) / (1000 * 60 * 60 * 24));
+
+            if (daysDiff === 1) {
+              const day = String(lastReportDate.getDate()).padStart(2, '0');
+              const month = String(lastReportDate.getMonth() + 1).padStart(2, '0');
+              const year = lastReportDate.getFullYear();
+              missingDaysWarning = `Не выставлены часы: ${day}.${month}.${year}`;
+            } else if (daysDiff > 1) {
+              missingDaysWarning = `Не выставлены часы: ${daysDiff} дня`;
             }
-            
-            // Сортируем отчеты по дате (от новых к старым)
-            reports.sort((a, b) => {
-              // Парсим дату в формате YYYY-MM-DD
-              const dateA = new Date(a.report_date + 'T00:00:00').getTime();
-              const dateB = new Date(b.report_date + 'T00:00:00').getTime();
-              return dateB - dateA; // От новых к старым
+          } else if (lastReportDate.getTime() === yesterday.getTime()) {
+            const hasTodayReport = reports.some((report: any) => {
+              const reportDate = new Date(String(report.report_date).slice(0, 10) + 'T00:00:00');
+              reportDate.setHours(0, 0, 0, 0);
+              return reportDate.getTime() === today.getTime();
             });
-            
-            // Берем последний отчет по дате (самый новый)
-            const lastReport = reports.length > 0 ? reports[0] : null;
-            
-            const hourlyRate = emp.pivot?.rate_per_hour || emp.rate_per_hour || emp.pivot?.hourly_rate || 0;
-            const employeeName = `${emp.last_name || ''} ${emp.first_name ? `${emp.first_name.charAt(0)}.` : ''}${emp.second_name ? `${emp.second_name.charAt(0)}.` : ''}`.trim();
-            
-            // Данные за последний отчет (последняя дата)
-            let lastDate = null;
-            let lastHours = 0;
-            let lastSum = 0;
-            
-            if (lastReport) {
-              lastDate = lastReport.report_date;
-              const hoursWorked = Number(lastReport.hours_worked) || 0;
-              const isAbsent = lastReport.absent === true || lastReport.absent === 1 || lastReport.absent === '1';
-              lastHours = isAbsent ? 0 : hoursWorked;
-              lastSum = lastHours * hourlyRate;
-            }
-            
-            // Проверяем, есть ли данные за сегодня или вчера
-            let missingDaysWarning = null;
-            if (reports.length > 0 && lastReport) {
-              const lastReportDate = new Date(lastReport.report_date + 'T00:00:00');
-              lastReportDate.setHours(0, 0, 0, 0);
-              
-              const yesterday = new Date(today);
-              yesterday.setDate(yesterday.getDate() - 1);
-              yesterday.setHours(0, 0, 0, 0);
-              
-              // Если последний отчет был не сегодня и не вчера
-              if (lastReportDate.getTime() < yesterday.getTime()) {
-                const daysDiff = Math.floor((today.getTime() - lastReportDate.getTime()) / (1000 * 60 * 60 * 24));
-                
-                if (daysDiff === 1) {
-                  // Один день пропущен - показываем дату последнего дня
-                  const day = String(lastReportDate.getDate()).padStart(2, '0');
-                  const month = String(lastReportDate.getMonth() + 1).padStart(2, '0');
-                  const year = lastReportDate.getFullYear();
-                  missingDaysWarning = `Не выставлены часы: ${day}.${month}.${year}`;
-                } else if (daysDiff > 1) {
-                  // Несколько дней пропущено - показываем количество дней
-                  missingDaysWarning = `Не выставлены часы: ${daysDiff} дня`;
-                }
-              } else if (lastReportDate.getTime() === yesterday.getTime()) {
-                // Данные только за вчера - проверяем, есть ли данные за сегодня
-                const hasTodayReport = reports.some((report: any) => {
-                  const reportDate = new Date(report.report_date + 'T00:00:00');
-                  reportDate.setHours(0, 0, 0, 0);
-                  return reportDate.getTime() === today.getTime();
-                });
-                
-                if (!hasTodayReport) {
-                  // Нет данных за сегодня
-                  missingDaysWarning = 'Не выставлены часы';
-                }
-              }
-            } else if (reports.length === 0) {
-              // Нет отчетов вообще
+
+            if (!hasTodayReport) {
               missingDaysWarning = 'Не выставлены часы';
             }
-            
-            return {
-              id: emp.id,
-              employeeId: emp.id,
-              employeeName: employeeName,
-              fullName: `${emp.last_name || ''} ${emp.first_name || ''} ${emp.second_name || ''}`.trim(),
-              employee: emp, // Сохраняем полный объект сотрудника для аватара
-              date: lastDate, // Дата последнего отчета в формате YYYY-MM-DD
-              hours: lastHours, // Часы за последний отчет
-              hourlyRate: hourlyRate,
-              totalSum: lastSum, // Сумма за последний отчет
-              reports: reports, // Все отчеты (отсортированные от новых к старым)
-              lastReport: lastReport, // Сохраняем последний отчет для проверки комментария
-              missingDaysWarning: missingDaysWarning,
-            };
-          } catch (error) {
-            console.error(`Error loading work reports for employee ${emp.id}:`, error);
-            const hourlyRate = emp.pivot?.rate_per_hour || emp.rate_per_hour || emp.pivot?.hourly_rate || 0;
-            const employeeName = `${emp.last_name || ''} ${emp.first_name ? `${emp.first_name.charAt(0)}.` : ''}${emp.second_name ? `${emp.second_name.charAt(0)}.` : ''}`.trim();
-            return {
-              id: emp.id,
-              employeeId: emp.id,
-              employeeName: employeeName,
-              fullName: `${emp.last_name || ''} ${emp.first_name || ''} ${emp.second_name || ''}`.trim(),
-              employee: emp,
-              date: null,
-              hours: 0,
-              hourlyRate: hourlyRate,
-              totalSum: 0,
-              reports: [],
-              lastReport: null,
-              missingDaysWarning: 'Не выставлены часы',
-            };
           }
-        })
-      );
+        } else if (reports.length === 0) {
+          missingDaysWarning = 'Не выставлены часы';
+        }
+
+        return {
+          id: emp.id,
+          employeeId: emp.id,
+          employeeName: employeeName,
+          fullName: `${emp.last_name || ''} ${emp.first_name || ''} ${emp.second_name || ''}`.trim(),
+          employee: emp,
+          date: lastDate,
+          hours: lastHours,
+          hourlyRate: hourlyRate,
+          totalSum: lastSum,
+          reports: reports,
+          lastReport: lastReport,
+          missingDaysWarning: missingDaysWarning,
+        };
+      });
 
       setTrackingItems(trackingData);
     } catch (error) {
@@ -994,6 +845,12 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     setExistingFact(null);
   };
 
+  /** Сброс кэша деталей спецификации (после сохранения факта и т.п.) */
+  const loadSpecification = React.useCallback(async () => {
+    setSpecificationDetailCache({});
+    setSpecDetailEpoch((e) => e + 1);
+  }, []);
+
   const handleSaveFact = async (quantity: number, date: string) => {
     if (!selectedNomenclature || !project?.id) return;
 
@@ -1074,125 +931,6 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     }
   };
 
-  // Функция для загрузки спецификации (вынесена отдельно для переиспользования)
-  const loadSpecification = React.useCallback(async () => {
-    if (!project?.id || !Array.isArray(project?.nomenclature) || project.nomenclature.length === 0) {
-      setSpecificationItems([]);
-      setIsSpecificationLoading(false);
-      return;
-    }
-
-    setIsSpecificationLoading(true);
-
-    try {
-      const getNomenclatureIdFromItem = (item: any) =>
-        item?.id ?? item?.nomenclature_id ?? item?.pivot?.nomenclature_id;
-
-      const itemsWithMeta = await Promise.all(
-        project.nomenclature.map(async (item: any, index: number) => {
-          const nomId = getNomenclatureIdFromItem(item);
-          if (!nomId) return null;
-
-          let lastChange: number | null = null;
-          let factValue: number = 0;
-
-          try {
-            let response: any;
-            if (mockApiResponses?.getNomenclatureChanges?.[String(nomId)]) {
-              response = mockApiResponses.getNomenclatureChanges[String(nomId)];
-            } else {
-              response = await apiService.getNomenclatureChanges(project.id, nomId);
-            }
-            const changesData = Array.isArray(response?.data)
-              ? response.data
-              : Array.isArray(response)
-              ? response
-              : [];
-
-            if (changesData.length > 0) {
-              const latestChange = changesData[changesData.length - 1];
-              const numericChange = Number(latestChange?.amount_change);
-              if (Number.isFinite(numericChange)) {
-                lastChange = numericChange;
-              }
-            }
-          } catch {
-            // Игнорируем ошибки загрузки изменений
-          }
-
-          let factByForeman: Record<number, number> = {};
-
-          try {
-            let factsResponse: any;
-            if (mockApiResponses?.getNomenclatureFacts?.[String(nomId)]) {
-              factsResponse = mockApiResponses.getNomenclatureFacts[String(nomId)];
-            } else {
-              factsResponse = await apiService.getNomenclatureFacts(project.id, nomId, {
-                per_page: 1000,
-              });
-            }
-
-            let factsData: any[] = [];
-            if (factsResponse?.data?.data && Array.isArray(factsResponse.data.data)) {
-              factsData = factsResponse.data.data;
-            } else if (factsResponse?.data && Array.isArray(factsResponse.data)) {
-              factsData = factsResponse.data;
-            } else if (Array.isArray(factsResponse)) {
-              factsData = factsResponse;
-            } else if (factsResponse?.data?.facts && Array.isArray(factsResponse.data.facts)) {
-              factsData = factsResponse.data.facts;
-            }
-
-            const today = getTodayLocal();
-            const activeFacts = factsData.filter((fact: any) => !fact.is_deleted);
-
-            factValue = activeFacts.reduce((sum: number, fact: any) => {
-              const amount = Number(fact.amount) || 0;
-              return sum + amount;
-            }, 0);
-
-            // API: project_manager_id (бригадир), не user_id
-            activeFacts
-              .filter((fact: any) => normalizeFactDate(fact.fact_date) === today)
-              .forEach((fact: any) => {
-                const uid = fact.project_manager_id ?? fact.user_id ?? fact.user?.id;
-                if (uid != null) {
-                  const key = Number(uid);
-                  factByForeman[key] = (factByForeman[key] || 0) + (Number(fact.amount) || 0);
-                }
-              });
-          } catch {
-            factValue = Number(item?.pivot?.current_amount ?? item?.fact ?? 0);
-          }
-
-          const statusMeta = getSpecificationStatusMeta(item);
-          const planValue = Number(item?.pivot?.start_amount ?? item?.plan ?? 0);
-
-          return {
-            id: nomId,
-            npp: item.index_number ?? item.npp ?? item.pivot?.npp ?? index + 1,
-            name: item.name || '—',
-            unit: item.unit || '—',
-            plan: Number.isFinite(planValue) ? planValue : 0,
-            changes: lastChange,
-            fact: Number.isFinite(factValue) ? factValue : 0,
-            factByForeman: Object.keys(factByForeman).length > 0 ? factByForeman : undefined,
-            statusLabel: statusMeta.label,
-            statusVariant: statusMeta.variant,
-          } as SpecificationItem;
-        })
-      );
-
-      const validItems = itemsWithMeta.filter((it): it is SpecificationItem => it !== null);
-      setSpecificationItems(validItems);
-    } catch (error) {
-      console.error('Error loading specification:', error);
-      setSpecificationItems([]);
-    } finally {
-      setIsSpecificationLoading(false);
-    }
-  }, [project?.id, project?.nomenclature, mockApiResponses]);
-
   const handleOpenHoursModal = async (item: any) => {
     const id = item?.employeeId ?? item?.id;
     if (id == null) return;
@@ -1202,12 +940,39 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       fullName: item?.fullName ?? item?.employeeName ?? '',
       hourlyRate: Number(item?.hourlyRate) || 0,
     };
-    setHoursModalForm({
-      hours: 8,
-      reason: '',
-      isAbsent: false,
-      selectedDateStr: formatTodayDateStr(),
-    });
+    const todayStr = getTodayLocal();
+    const todayReport = (item?.reports || []).find(
+      (r: any) => normalizeFactDate(r.report_date) === todayStr
+    );
+    setHoursModalExistingReport(
+      todayReport != null && todayReport.id != null
+        ? {
+            id: Number(todayReport.id),
+            report_date: todayReport.report_date,
+            hours_worked: Number(todayReport.hours_worked),
+            absent: todayReport.absent,
+            notes: todayReport.notes,
+          }
+        : null
+    );
+    if (todayReport != null && todayReport.id != null) {
+      const a = todayReport.absent as unknown;
+      const abs = a === true || a === 1 || a === '1';
+      const hw = Number(todayReport.hours_worked);
+      setHoursModalForm({
+        hours: abs ? 0 : Number.isFinite(hw) && hw >= 0 ? Math.min(24, hw) : 8,
+        reason: todayReport.notes && String(todayReport.notes).trim() ? String(todayReport.notes).trim() : '',
+        isAbsent: abs,
+        selectedDateStr: formatTodayDateStr(),
+      });
+    } else {
+      setHoursModalForm({
+        hours: 8,
+        reason: '',
+        isAbsent: false,
+        selectedDateStr: formatTodayDateStr(),
+      });
+    }
     setSelectedEmployee(employee);
     setIsHoursModalOpen(true);
     const dates = (item?.reports || []).map((report: any) => report.report_date);
@@ -1218,6 +983,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     setIsHoursModalOpen(false);
     setSelectedEmployee(null);
     setHoursModalForm(null);
+    setHoursModalExistingReport(null);
   };
 
   // Функция для получения комментария из последнего отчета (последняя дата)
@@ -1328,6 +1094,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
 
   // Функция сортировки для спецификации
   const handleSpecificationSort = (field: string | null) => {
+    setSpecCurrentPage(1);
     if (specificationSortField === field) {
       setSpecificationSortDirection(specificationSortDirection === 'asc' ? 'desc' : 'asc');
     } else {
@@ -1338,12 +1105,12 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
 
   // Сортировка спецификации
   const sortedSpecificationItems = useMemo(() => {
-    const sorted = [...specificationItems];
+    const sorted = [...specificationRowsMerged];
     if (specificationSortField) {
       sorted.sort((a, b) => {
         let aValue: any;
         let bValue: any;
-        
+
         switch (specificationSortField) {
           case 'npp':
             aValue = a.npp ?? 0;
@@ -1380,20 +1147,68 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           default:
             return 0;
         }
-        
+
+        let cmp: number;
         if (typeof aValue === 'string' && typeof bValue === 'string') {
-          return specificationSortDirection === 'asc' 
-            ? aValue.localeCompare(bValue, 'ru')
-            : bValue.localeCompare(aValue, 'ru');
+          cmp =
+            specificationSortDirection === 'asc'
+              ? aValue.localeCompare(bValue, 'ru')
+              : bValue.localeCompare(aValue, 'ru');
         } else {
-          return specificationSortDirection === 'asc' 
-            ? aValue - bValue
-            : bValue - aValue;
+          cmp =
+            specificationSortDirection === 'asc' ? aValue - bValue : bValue - aValue;
         }
+        if (cmp !== 0) return cmp;
+        return (a.npp ?? 0) - (b.npp ?? 0);
       });
     }
     return sorted;
-  }, [specificationItems, specificationSortField, specificationSortDirection, foremen, currentForeman]);
+  }, [specificationRowsMerged, specificationSortField, specificationSortDirection, foremen, currentForeman]);
+
+  const mobileSpecPageSlice = useMemo(() => {
+    const totalPages = Math.max(1, Math.ceil(sortedSpecificationItems.length / MOBILE_SPEC_PAGE_SIZE));
+    const page = Math.min(specCurrentPage, totalPages);
+    const start = (page - 1) * MOBILE_SPEC_PAGE_SIZE;
+    const rows = sortedSpecificationItems.slice(start, start + MOBILE_SPEC_PAGE_SIZE);
+    return { totalPages, page, rows, idsKey: rows.map((i) => i.id).join(',') };
+  }, [sortedSpecificationItems, specCurrentPage]);
+
+  useEffect(() => {
+    if (activeTab !== 'specification' || !project?.id || specificationBaseRows.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const pivotBy: Record<number, number> = {};
+        const nomIds: number[] = [];
+        for (const r of specificationBaseRows) {
+          nomIds.push(r.id);
+          pivotBy[r.id] = Number(r.fact) || 0;
+        }
+        const useNomMock =
+          mockApiResponses &&
+          (mockApiResponses.getNomenclatureChanges != null ||
+            mockApiResponses.getNomenclatureFacts != null);
+        const cache = await fetchProjectSpecificationDetailCache(project.id, nomIds, pivotBy, {
+          includeFactByForeman: true,
+          ...(useNomMock
+            ? {
+                mockChangesByNomenclatureId: mockApiResponses!.getNomenclatureChanges,
+                mockFactsByNomenclatureId: mockApiResponses!.getNomenclatureFacts,
+              }
+            : {}),
+        });
+        if (cancelled) return;
+        setSpecificationDetailCache(cache);
+      } catch {
+        // pivot остаётся до следующей загрузки
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, project?.id, mobileNomFingerprint, specificationBaseRows, mockApiResponses, specDetailEpoch]);
 
   // Функция сортировки для фиксации работ
   const handleTrackingSort = (field: string | null) => {
@@ -1472,70 +1287,31 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
 
   const handleHoursSaveSuccess = async () => {
     // Обновляем trackedDates после успешного сохранения
-    if (selectedEmployee) {
-      try {
-        const response = await apiService.getWorkReports(project.id, selectedEmployee.id, {
-          per_page: 1000,
-        });
-        
-        let reports: any[] = [];
-        // Проверяем разные варианты структуры ответа
-        if (response?.data?.data && Array.isArray(response.data.data)) {
-          reports = response.data.data;
-        } else if (response?.data && Array.isArray(response.data)) {
-          reports = response.data;
-        } else if (Array.isArray(response)) {
-          reports = response;
-        }
-        const dates = reports.map((report: any) => report.report_date);
-        
-        setTrackedDates(dates);
-      } catch (error) {
-        console.error('Error refreshing tracked dates:', error);
-      }
-    }
-    
-    // Пересчитываем потраченную сумму (за всё время, включая удалённых)
     if (project?.id) {
       try {
+        const allReports = await fetchAllProjectWorkReportsDeduped(project.id);
+        const reportsByUser = groupWorkReportsByUserId(allReports);
+
+        if (selectedEmployee) {
+          const r = reportsByUser.get(selectedEmployee.id) ?? [];
+          setTrackedDates(r.map((report: any) => report.report_date));
+        }
+
         const employees = project?.employees || [];
         const employeesForSpent = employees.filter((emp: any) => !isGIP(emp));
-
-        const totalSpent = await Promise.all(
-          employeesForSpent.map(async (emp: any) => {
-            try {
-              const response = await apiService.getWorkReports(project.id, emp.id, {
-                per_page: 1000,
-              });
-              
-              let reports: any[] = [];
-              if (response?.data?.data && Array.isArray(response.data.data)) {
-                reports = response.data.data;
-              } else if (response?.data && Array.isArray(response.data)) {
-                reports = response.data;
-              } else if (Array.isArray(response)) {
-                reports = response;
-              }
-              
-              const totalHours = reports.reduce((sum, report) => {
-                const hoursWorked = Number(report.hours_worked) || 0;
-                const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
-                return sum + (isAbsent ? 0 : hoursWorked);
-              }, 0);
-              
-              const rate = emp.pivot?.rate_per_hour || emp.rate_per_hour || emp.pivot?.hourly_rate || 0;
-              return totalHours * rate;
-            } catch (error) {
-              console.error(`Error loading work reports for employee ${emp.id}:`, error);
-              return 0;
-            }
-          })
-        );
-        
-        const projectTotalSpent = totalSpent.reduce((sum, employeeSpent) => sum + employeeSpent, 0);
-        setCalculatedSpent(projectTotalSpent);
+        const totalSpent = employeesForSpent.map((emp: any) => {
+          const reports = reportsByUser.get(emp.id) ?? [];
+          const totalHours = reports.reduce((sum, report) => {
+            const hoursWorked = Number(report.hours_worked) || 0;
+            const isAbsent = report.absent === true || report.absent === 1 || report.absent === '1';
+            return sum + (isAbsent ? 0 : hoursWorked);
+          }, 0);
+          const rate = emp.pivot?.rate_per_hour || emp.rate_per_hour || emp.pivot?.hourly_rate || 0;
+          return totalHours * rate;
+        });
+        setCalculatedSpent(totalSpent.reduce((sum: number, employeeSpent: number) => sum + employeeSpent, 0));
       } catch (error) {
-        console.error('Error refreshing spent:', error);
+        console.error('Error refreshing hours data after save:', error);
       }
     }
     
@@ -1661,9 +1437,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
 
           {activeTab === 'specification' && (
             <section className="mobile-project-detail__specification">
-              {isSpecificationLoading ? (
-                <div className="mobile-project-detail__state">Загружаем спецификацию…</div>
-              ) : specificationItems.length === 0 ? (
+              {specificationBaseRows.length === 0 ? (
                 <div className="mobile-project-detail__specification-empty">
                   <p>В спецификации пока нет материалов.</p>
                 </div>
@@ -1744,13 +1518,17 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                     </div>
 
                     <div className="mobile-project-detail__specification-body">
-                      {sortedSpecificationItems.map((item, index) => {
+                      {mobileSpecPageSlice.rows.map((item, index) => {
                         const myFact = getMyFactValue(item);
                         const totalFact = getTotalFactValue(item);
                         return (
-                        <div key={item.id} className="mobile-project-detail__specification-row">
+                        <div
+                          key={item.id}
+                          className="mobile-project-detail__specification-row"
+                          title={String(item.name ?? '')}
+                        >
                           <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--npp">
-                            <span>{item.npp ?? index + 1}</span>
+                            <span>{item.npp ?? (mobileSpecPageSlice.page - 1) * MOBILE_SPEC_PAGE_SIZE + index + 1}</span>
                           </div>
                           <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--name">
                             <span>{item.name}</span>
@@ -1759,16 +1537,16 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                             <span>{item.unit || '—'}</span>
                           </div>
                           <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--number">
-                            <span>{formatNumber(item.plan, '0')}</span>
+                            <span>{formatSpecQuantityForDisplay(item.plan, '0')}</span>
                           </div>
                           <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--number">
-                            <span>{formatNumber(item.changes, '0')}</span>
+                            <span>{formatSpecQuantityForDisplay(item.changes, item.changes == null ? '—' : '0')}</span>
                           </div>
                           <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--number mobile-project-detail__specification-col--fact">
-                            <span>{formatNumber(myFact, '0')}</span>
+                            <span>{formatSpecQuantityForDisplay(myFact, '0')}</span>
                           </div>
                           <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--number">
-                            <span>{formatNumber(totalFact, '0')}</span>
+                            <span>{formatSpecQuantityForDisplay(totalFact, '0')}</span>
                           </div>
                           <div className="mobile-project-detail__specification-col mobile-project-detail__specification-col--action">
                             <button
@@ -1784,6 +1562,42 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                       })}
                     </div>
                   </div>
+                  {mobileSpecPageSlice.totalPages > 1 && (
+                    <div
+                      className="mobile-project-detail__specification-pagination"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 12,
+                        padding: '12px 0',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        className="mobile-project-detail__specification-action"
+                        disabled={mobileSpecPageSlice.page <= 1}
+                        onClick={() => setSpecCurrentPage((p) => Math.max(1, p - 1))}
+                      >
+                        Назад
+                      </button>
+                      <span style={{ fontSize: 14 }}>
+                        Стр. {mobileSpecPageSlice.page} из {mobileSpecPageSlice.totalPages}
+                      </span>
+                      <button
+                        type="button"
+                        className="mobile-project-detail__specification-action"
+                        disabled={mobileSpecPageSlice.page >= mobileSpecPageSlice.totalPages}
+                        onClick={() =>
+                          setSpecCurrentPage((p) =>
+                            Math.min(mobileSpecPageSlice.totalPages, p + 1)
+                          )
+                        }
+                      >
+                        Вперёд
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </section>
@@ -1919,13 +1733,45 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                             <span>{formatCurrency(item.totalSum)}</span>
                           </div>
                           <div className="mobile-project-detail__tracking-col mobile-project-detail__tracking-col--action">
-                            <button
-                              type="button"
-                              className="mobile-project-detail__tracking-action"
-                              onClick={() => handleOpenHoursModal(item)}
-                            >
-                              Ввести часы
-                            </button>
+                            {(() => {
+                              const hasReportToday = (item?.reports || []).some(
+                                (r: any) => normalizeFactDate(r.report_date) === getTodayLocal()
+                              );
+                              return (
+                                <button
+                                  type="button"
+                                  className={
+                                    hasReportToday
+                                      ? 'mobile-project-detail__tracking-action mobile-project-detail__tracking-action--edit-today'
+                                      : 'mobile-project-detail__tracking-action'
+                                  }
+                                  onClick={() => handleOpenHoursModal(item)}
+                                  aria-label={
+                                    hasReportToday
+                                      ? 'Редактировать часы за сегодня'
+                                      : 'Ввести часы за сегодня'
+                                  }
+                                >
+                                  {hasReportToday ? (
+                                    <>
+                                      <img
+                                        src={editMobIcon}
+                                        alt=""
+                                        className="mobile-project-detail__tracking-action-icon"
+                                        width={14}
+                                        height={14}
+                                        aria-hidden
+                                      />
+                                      <span className="mobile-project-detail__tracking-action-label">
+                                        Редактировать
+                                      </span>
+                                    </>
+                                  ) : (
+                                    'Ввести часы'
+                                  )}
+                                </button>
+                              );
+                            })()}
                           </div>
                         </div>
                       ))}
@@ -1971,6 +1817,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           enforceTimeRestriction={true}
           externalForm={hoursModalForm}
           onExternalFormChange={setHoursModalForm}
+          existingReport={hoursModalExistingReport}
         />
       )}
 
