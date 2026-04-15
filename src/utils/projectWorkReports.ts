@@ -13,10 +13,24 @@ function getLastPageFromResponse(resp: any): number {
   return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
-/**
- * Все страницы work-reports проекта одним «водопадом» (не N запросов по сотрудникам).
- */
-export async function fetchAllProjectWorkReports(
+function dedupeReportsById(reports: any[]): any[] {
+  const seen = new Set<number>();
+  const out: any[] = [];
+  for (const r of reports) {
+    const id = Number(r?.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      out.push(r);
+      continue;
+    }
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(r);
+  }
+  return out;
+}
+
+/** Один проход по GET /projects/:id/work-reports (если бэкенд его отдаёт). */
+async function fetchBulkProjectWorkReportsPages(
   projectId: number,
   options?: { maxPages?: number; perPage?: number }
 ): Promise<any[]> {
@@ -40,16 +54,101 @@ export async function fetchAllProjectWorkReports(
   return all;
 }
 
-/** Дедупликация параллельных вызовов с одним projectId (два useEffect не дернут два полных обхода). */
-const inflightByProject = new Map<number, Promise<any[]>>();
+/** Документированный в API способ — GET /projects/:id/user/:userId/work-reports */
+async function fetchAllReportsForUser(
+  projectId: number,
+  userId: number,
+  options?: { maxPages?: number; perPage?: number }
+): Promise<any[]> {
+  const maxPages = options?.maxPages ?? 50;
+  const perPage = options?.perPage ?? 1000;
+  const all: any[] = [];
+  let page = 1;
+  let lastPage = 1;
+  let safety = 0;
 
-export function fetchAllProjectWorkReportsDeduped(projectId: number): Promise<any[]> {
-  const existing = inflightByProject.get(projectId);
+  while (page <= lastPage && safety < maxPages) {
+    safety += 1;
+    const resp = await apiService.getWorkReports(projectId, userId, { page, per_page: perPage });
+    const arr = extractWorkReportsArray(resp);
+    lastPage = getLastPageFromResponse(resp);
+    all.push(...arr);
+    if (arr.length < perPage) break;
+    page += 1;
+  }
+
+  return all;
+}
+
+export type FetchAllProjectWorkReportsOptions = {
+  maxPages?: number;
+  perPage?: number;
+  /** ID сотрудников проекта: если массовый endpoint недоступен или пустой, подгружаем отчёты по каждому (как в README API). */
+  employeeIds?: number[];
+};
+
+/**
+ * Все work-reports проекта.
+ * Сначала пробуем GET /projects/:id/work-reports; если ответ пустой или запрос падает —
+ * при переданном `employeeIds` собираем отчёты через документированный per-user API.
+ */
+export async function fetchAllProjectWorkReports(
+  projectId: number,
+  options?: FetchAllProjectWorkReportsOptions
+): Promise<any[]> {
+  const maxPages = options?.maxPages ?? 50;
+  const perPage = options?.perPage ?? 1000;
+  const employeeIds = [
+    ...new Set((options?.employeeIds ?? []).filter((id) => Number.isFinite(id) && id > 0)),
+  ].sort((a, b) => a - b);
+
+  let bulk: any[] = [];
+  try {
+    bulk = await fetchBulkProjectWorkReportsPages(projectId, { maxPages, perPage });
+  } catch (e) {
+    console.warn(
+      '[work-reports] GET /projects/:id/work-reports недоступен или ошибка; при наличии списка сотрудников используем per-user API',
+      e
+    );
+  }
+
+  if (bulk.length > 0) {
+    return dedupeReportsById(bulk);
+  }
+
+  if (employeeIds.length === 0) {
+    return [];
+  }
+
+  const perUserLists = await Promise.all(
+    employeeIds.map((uid) =>
+      fetchAllReportsForUser(projectId, uid, { maxPages, perPage }).catch((err) => {
+        console.warn(`[work-reports] не удалось загрузить отчёты для user ${uid}`, err);
+        return [];
+      })
+    )
+  );
+  return dedupeReportsById(perUserLists.flat());
+}
+
+/** Дедупликация параллельных вызовов с одним projectId и тем же набором employeeIds. */
+const inflightByKey = new Map<string, Promise<any[]>>();
+
+export function fetchAllProjectWorkReportsDeduped(
+  projectId: number,
+  options?: { employeeIds?: number[] }
+): Promise<any[]> {
+  const idsKey = (options?.employeeIds ?? [])
+    .slice()
+    .sort((a, b) => a - b)
+    .join(',');
+  const cacheKey = `${projectId}:${idsKey}`;
+  const existing = inflightByKey.get(cacheKey);
   if (existing) return existing;
-  const p = fetchAllProjectWorkReports(projectId).finally(() => {
-    inflightByProject.delete(projectId);
+  const p = fetchAllProjectWorkReports(projectId, { employeeIds: options?.employeeIds }).finally(() => {
+    inflightByKey.delete(cacheKey);
   });
-  inflightByProject.set(projectId, p);
+  inflightByKey.set(cacheKey, p);
   return p;
 }
 

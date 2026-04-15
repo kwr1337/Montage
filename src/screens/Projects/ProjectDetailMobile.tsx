@@ -607,9 +607,15 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
           uniqueEmployeesForSpent.set(emp.id, emp);
         });
 
+        const employeeIdsForReports = Array.from(uniqueEmployeesForSpent.keys()).filter(
+          (id) => Number.isFinite(id) && id > 0
+        );
+
         let reportsByUser: Map<number, any[]>;
         try {
-          const allReports = await fetchAllProjectWorkReportsDeduped(project.id);
+          const allReports = await fetchAllProjectWorkReportsDeduped(project.id, {
+            employeeIds: employeeIdsForReports,
+          });
           reportsByUser = groupWorkReportsByUserId(allReports);
         } catch (error) {
           console.error('Error loading project work reports for spent:', error);
@@ -670,6 +676,9 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       };
     });
     const activeEmployees = [...activeFromProject, ...assignedAsEmps];
+    const employeeIdsForReports = activeEmployees
+      .map((e: any) => Number(e.id))
+      .filter((id: number) => Number.isFinite(id) && id > 0);
 
     try {
       const today = new Date();
@@ -677,7 +686,9 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
 
       let reportsByUser: Map<number, any[]>;
       try {
-        const allReports = await fetchAllProjectWorkReportsDeduped(project.id);
+        const allReports = await fetchAllProjectWorkReportsDeduped(project.id, {
+          employeeIds: employeeIdsForReports,
+        });
         reportsByUser = groupWorkReportsByUserId(allReports);
       } catch (error) {
         console.error('Error loading project work reports for tracking:', error);
@@ -941,9 +952,35 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
       hourlyRate: Number(item?.hourlyRate) || 0,
     };
     const todayStr = getTodayLocal();
-    const todayReport = (item?.reports || []).find(
+    let todayReport = (item?.reports || []).find(
       (r: any) => normalizeFactDate(r.report_date) === todayStr
     );
+    /** Если отчёт уже есть в БД, но не попал в item.reports — иначе будет POST и 400 «уже существует» */
+    if (
+      project?.id &&
+      (todayReport == null || todayReport.id == null) &&
+      !mockApiResponses
+    ) {
+      try {
+        const resp = await apiService.getWorkReports(project.id, Number(id), {
+          per_page: 50,
+          filter: { date_from: todayStr, date_to: todayStr },
+        });
+        const list = Array.isArray(resp?.data?.data)
+          ? resp.data.data
+          : Array.isArray(resp?.data)
+            ? resp.data
+            : [];
+        const fromApi = list.find(
+          (r: any) => normalizeFactDate(r.report_date) === todayStr
+        );
+        if (fromApi && fromApi.id != null) {
+          todayReport = fromApi;
+        }
+      } catch {
+        // оставляем только данные из строки таблицы
+      }
+    }
     setHoursModalExistingReport(
       todayReport != null && todayReport.id != null
         ? {
@@ -1289,7 +1326,18 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
     // Обновляем trackedDates после успешного сохранения
     if (project?.id) {
       try {
-        const allReports = await fetchAllProjectWorkReportsDeduped(project.id);
+        const idSet = new Set<number>();
+        (project?.employees || []).forEach((e: any) => {
+          const id = Number(e.id ?? e.user_id);
+          if (Number.isFinite(id) && id > 0) idSet.add(id);
+        });
+        dayAssignedWorkers.forEach((w: any) => {
+          const id = Number(w.id);
+          if (Number.isFinite(id) && id > 0) idSet.add(id);
+        });
+        const allReports = await fetchAllProjectWorkReportsDeduped(project.id, {
+          employeeIds: Array.from(idSet),
+        });
         const reportsByUser = groupWorkReportsByUserId(allReports);
 
         if (selectedEmployee) {

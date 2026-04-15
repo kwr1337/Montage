@@ -498,9 +498,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       const loadTrackingData = async () => {
         const employeesWithoutGIP = localProject.employees.filter((emp: any) => !isGIP(emp));
 
+        const employeeIdsForReports = employeesWithoutGIP
+          .map((e: any) => Number(e.id))
+          .filter((id: number) => Number.isFinite(id) && id > 0);
+
         let reportsByUser: Map<number, any[]>;
         try {
-          const allReports = await fetchAllProjectWorkReportsDeduped(localProject.id);
+          const allReports = await fetchAllProjectWorkReportsDeduped(localProject.id, {
+            employeeIds: employeeIdsForReports,
+          });
           reportsByUser = groupWorkReportsByUserId(allReports);
         } catch (error) {
           console.error('Error loading project work reports for tracking table:', error);

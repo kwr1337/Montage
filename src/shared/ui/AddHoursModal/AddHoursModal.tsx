@@ -2,6 +2,7 @@
 import closeIconRaw from '../../icons/closeIcon.svg?raw';
 import calendarIconGreyRaw from '../../icons/calendarIconGrey.svg?raw';
 import { apiService } from '../../../services/api';
+import { extractWorkReportsArray } from '../../../utils/projectWorkReports';
 import './add-hours-modal.scss';
 
 const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
@@ -265,10 +266,36 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
       if (isUpdateToday) {
         await apiService.updateWorkReport(projectId, employee.id, existingReport.id, payload);
       } else {
-        await apiService.createWorkReport(projectId, employee.id, {
-          report_date: dateString,
-          ...payload,
-        });
+        try {
+          await apiService.createWorkReport(projectId, employee.id, {
+            report_date: dateString,
+            ...payload,
+          });
+        } catch (createErr: any) {
+          const st = (createErr as any)?.status;
+          const msg = String(createErr?.message ?? '');
+          const looksLikeDuplicate =
+            st === 400 ||
+            (msg.includes('400') &&
+              (msg.includes('уже существует') || /already exists/i.test(msg)));
+          if (looksLikeDuplicate) {
+            const wr = await apiService.getWorkReports(projectId, employee.id, {
+              per_page: 50,
+              filter: { date_from: dateString, date_to: dateString },
+            });
+            const list = extractWorkReportsArray(wr);
+            const match = list.find(
+              (r: any) => String(r?.report_date ?? '').slice(0, 10) === dateString
+            );
+            if (match?.id != null) {
+              await apiService.updateWorkReport(projectId, employee.id, Number(match.id), payload);
+            } else {
+              throw createErr;
+            }
+          } else {
+            throw createErr;
+          }
+        }
       }
 
       // Добавляем дату в savedDates, если её там еще нет

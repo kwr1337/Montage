@@ -191,14 +191,16 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
         const managerId = currentUser?.id ? Number(currentUser.id) : null;
 
         const primaryFilter: Record<string, any> = { with: ['employees', 'logs'] };
+        // Как на десктопе и в API: filter[manager_id]=… (не project_managers)
         if (isBrigadier && managerId != null) {
-          primaryFilter.filter = { project_managers: [managerId] };
+          primaryFilter.filter = { manager_id: [managerId] };
         }
 
         const response = await apiService.getProjects(1, 100, primaryFilter);
         data = extractProjectsFromResponse(response);
 
-        if (data.length === 0) {
+        // Для бригадира нельзя подменять пустой список запросом «все проекты» — иначе видны чужие объекты
+        if (data.length === 0 && !isBrigadier) {
           const fallbackResponse = await apiService.getProjects(1, 100, { with: ['employees', 'logs'] });
           data = extractProjectsFromResponse(fallbackResponse);
         }
