@@ -947,8 +947,8 @@
     }
 
     &:nth-child(7) {
-      flex: 0 0 75px;
-      min-width: 75px;
+      flex: 0 0 92px;
+      min-width: 92px;
       justify-content: center;
     }
   }
@@ -1042,8 +1042,8 @@
     }
 
     &:nth-child(7) {
-      flex: 0 0 75px;
-      min-width: 75px;
+      flex: 0 0 92px;
+      min-width: 92px;
       justify-content: center;
       padding: 0 4px;
     }
@@ -1188,17 +1188,18 @@
     /** Показывается только когда за сегодня уже есть отчёт — отличается от «Ввести часы» */
     &--edit-today {
       width: 100%;
-      max-width: 132px;
-      min-height: 32px;
+      max-width: 100%;
+      min-height: 30px;
       height: auto;
-      padding: 6px 10px;
-      gap: 6px;
+      padding: 4px 6px;
+      gap: 0;
       background: #ffffff;
       color: #2787f5;
       border: 1.5px solid #2787f5;
       box-shadow: 0 1px 3px rgba(39, 135, 245, 0.12);
-      font-size: 11px;
-      line-height: 1.2;
+      font-size: 9px;
+      line-height: 1.15;
+      letter-spacing: 0;
 
       &:active {
         background: #f0f7ff;
@@ -1213,6 +1214,23 @@
 
   &__tracking-action-label {
     text-align: center;
+
+    &--edit-hours {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+      font-size: 9px;
+      font-weight: 600;
+      line-height: 1.1;
+      max-width: 100%;
+    }
+  }
+
+  &__tracking-action-text-line {
+    display: block;
+    white-space: nowrap;
   }
 
   @media (max-width: 480px), (max-height: 450px) {

@@ -2,13 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import paginationIconActiveLeftRaw from '../../shared/icons/paginationIconActiveLeft.svg?raw';
 import upDownTableFilterRaw from '../../shared/icons/upDownTableFilter.svg?raw';
 import commentMobIconRaw from '../../shared/icons/commentMob.svg?raw';
-import editMobIconRaw from '../../shared/icons/editMob.svg?raw';
 
 const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
 const paginationIconActiveLeft = toDataUrl(paginationIconActiveLeftRaw);
 const upDownTableFilter = toDataUrl(upDownTableFilterRaw);
 const commentMobIcon = toDataUrl(commentMobIconRaw);
-const editMobIcon = toDataUrl(editMobIconRaw);
 import { apiService } from '../../services/api';
 import { fetchAllProjectWorkReportsDeduped, groupWorkReportsByUserId } from '../../utils/projectWorkReports';
 import { fetchProjectSpecificationDetailCache } from '../../utils/nomenclatureRowDetails';
@@ -1801,19 +1799,14 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                                   }
                                 >
                                   {hasReportToday ? (
-                                    <>
-                                      <img
-                                        src={editMobIcon}
-                                        alt=""
-                                        className="mobile-project-detail__tracking-action-icon"
-                                        width={14}
-                                        height={14}
-                                        aria-hidden
-                                      />
-                                      <span className="mobile-project-detail__tracking-action-label">
+                                    <span className="mobile-project-detail__tracking-action-label mobile-project-detail__tracking-action-label--edit-hours">
+                                      <span className="mobile-project-detail__tracking-action-text-line">
                                         Редактировать
                                       </span>
-                                    </>
+                                      <span className="mobile-project-detail__tracking-action-text-line">
+                                        часы
+                                      </span>
+                                    </span>
                                   ) : (
                                     'Ввести часы'
                                   )}
