@@ -27,6 +27,9 @@ const otchetIconWhite = toDataUrl(otchetIconWhiteRaw);
 const zpIconGrey = toDataUrl(zpIconGreyRaw);
 const zpIconWhite = toDataUrl(zpIconWhiteRaw);
 
+/** Временно: скрыть «Выдача ЗП» в боковом меню. Поставьте `false`, чтобы снова показать. */
+const HIDE_SALARY_IN_SIDEBAR = true;
+
 type MenuItem = {
   id: string;
   path: string;
@@ -43,6 +46,10 @@ const menuItems: MenuItem[] = [
   { id: 'reports', path: '/reports', label: 'Отчеты', iconGrey: otchetIconGrey, iconWhite: otchetIconWhite },
   { id: 'salary', path: '/salary', label: 'Выдача ЗП', iconGrey: zpIconGrey, iconWhite: zpIconWhite },
 ];
+
+const visibleMenuItems = HIDE_SALARY_IN_SIDEBAR
+  ? menuItems.filter((item) => item.id !== 'salary')
+  : menuItems;
 
 type SidebarProps = {
   activeItem?: string;
@@ -64,7 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeItem = 'projects', onNav
       </div>
 
       <nav className="sidebar__nav">
-        {menuItems.map((item) => (
+        {visibleMenuItems.map((item) => (
           <button
             key={item.id}
             className={`sidebar__item ${activeItem === item.id ? 'sidebar__item--active' : ''}`}
