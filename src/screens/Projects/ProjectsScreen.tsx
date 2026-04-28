@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
 import { apiService } from '../../services/api';
-import { canCreateProject } from '../../services/permissions';
+import { canCreateProject, isPTOEngineer } from '../../services/permissions';
+import { unwrapCreatedProject } from '../../utils/unwrapApiEntity';
+import { fetchAllProjectPages } from '../../utils/projectPages';
 import { ProjectDetail } from './ProjectDetail';
 import menuIconGreyRaw from '../../shared/icons/menuIconGrey.svg?raw';
 import searchIconRaw from '../../shared/icons/searchIcon.svg?raw';
@@ -50,24 +52,6 @@ const formatUserName = (user: any) => {
   const lastName = last_name || '';
   return `${lastName} ${firstNameInitial}${secondNameInitial ? `.${secondNameInitial}.` : '.'}`.trim();
 };
-
-/** Ответ Laravel paginator для GET /projects (одна страница) */
-function parseProjectsPagesResponse(response: any): { rows: any[]; lastPage: number } {
-  let rows: any[] = [];
-  let lastPage = 1;
-  if (!response) return { rows, lastPage };
-  const r = response;
-  if (Array.isArray(r)) return { rows: r, lastPage: 1 };
-  if (Array.isArray(r.data)) {
-    rows = r.data;
-    lastPage = Number(r.meta?.last_page ?? r.last_page ?? 1) || 1;
-  } else if (r.data && typeof r.data === 'object' && Array.isArray(r.data.data)) {
-    rows = r.data.data;
-    const meta = r.data.meta || r.meta || {};
-    lastPage = Number(meta.last_page ?? r.last_page ?? 1) || 1;
-  }
-  return { rows, lastPage: Math.max(1, lastPage) };
-}
 
 type ProjectsScreenProps = {
   onLogout?: () => void;
@@ -162,38 +146,44 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
 
   const currentUser = apiService.getCurrentUser();
   const isBrigadier = (currentUser?.role || currentUser?.position) === 'Бригадир';
+  const hideFotColumn = isPTOEngineer(currentUser);
   const projectsFetchKey = isBrigadier && currentUser?.id ? `m:${currentUser.id}` : 'all';
 
-  const loadAllProjects = React.useCallback(async () => {
-    setIsLoading(true);
+  const loadAllProjects = React.useCallback(async (opts?: { showLoading?: boolean }) => {
+    const showLoading = opts?.showLoading !== false;
+    if (showLoading) setIsLoading(true);
     try {
-      const all: any[] = [];
-      let page = 1;
-      let lastPage = 1;
-      const perPage = 100;
+      /** Не 100: при большом per_page бэкенд иногда отдаёт массив без last_page — остаётся одна «порция» (~15). */
+      const perPage = 15;
       const cu = apiService.getCurrentUser();
       const brig = (cu?.role || cu?.position) === 'Бригадир';
       const filter = brig && cu?.id ? { filter: { manager_id: [cu.id] } } : undefined;
-      do {
-        const response = await apiService.getProjects(page, perPage, filter);
-        const { rows, lastPage: lp } = parseProjectsPagesResponse(response);
-        lastPage = lp;
-        all.push(...rows);
-        page++;
-        if (rows.length === 0) break;
-      } while (page <= lastPage);
+      const all = await fetchAllProjectPages(
+        (p, pp) =>
+          apiService.getProjects(p, pp, {
+            ...filter,
+            with: ['employees', 'logs'],
+          }),
+        perPage
+      );
       setProjects(all);
     } catch (error) {
       console.error('Error fetching projects:', error);
       setProjects([]);
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void loadAllProjects();
   }, [projectsFetchKey, loadAllProjects]);
+
+  useEffect(() => {
+    if (hideFotColumn && sortField === 'spent') {
+      setSortField(null);
+    }
+  }, [hideFotColumn, sortField]);
 
   const calculateTotalSpent = (project: any): number => {
     const budgetBalance = project?.budget_balance;
@@ -929,6 +919,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                 className={`projects__sort-icon ${sortField === 'employees' ? 'projects__sort-icon--active' : ''}`}
               />
             </div>
+            {!hideFotColumn && (
             <div 
               className="projects__table-header-col"
               onClick={(e) => {
@@ -944,6 +935,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                 className={`projects__sort-icon ${sortField === 'spent' ? 'projects__sort-icon--active' : ''}`}
               />
             </div>
+            )}
           </div>
 
           {/* Строки таблицы */}
@@ -1116,6 +1108,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                     })()}
                   </div>
                 </div>
+                {!hideFotColumn && (
                 <div className="projects__table-row-col">
                   <div className="projects__budget">
                     <div className="projects__budget-remaining">
@@ -1143,6 +1136,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                     </div>
                   </div>
                 </div>
+                )}
                 </div>
               );
             })
@@ -1171,12 +1165,20 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
           }}
           onProjectUpdate={handleProjectUpdate}
           onRefresh={handleRefreshProject}
-          onProjectCreate={(createdProject) => {
-            setProjects(prev => [createdProject, ...prev]);
+          onProjectCreate={async (createdRaw) => {
+            const createdProject = unwrapCreatedProject(createdRaw) ?? (createdRaw as Record<string, unknown>);
+            if (createdProject?.id == null) {
+              console.error('onProjectCreate: нет id у созданного проекта', createdRaw);
+              return;
+            }
+            setProjects((prev) => {
+              const id = Number(createdProject.id);
+              return [createdProject, ...prev.filter((p) => Number(p?.id) !== id)];
+            });
             setIsCreatingProject(false);
             setSelectedProject(createdProject);
             setIsLoadingProject(false);
-            setNavigationHistory(prevHistory => {
+            setNavigationHistory((prevHistory) => {
               const updated = [...prevHistory];
               if (updated.length === 0) {
                 const result = [null, createdProject.id] as ProjectHistoryEntry[];
@@ -1184,12 +1186,17 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                 return result;
               }
               const targetIndex = Math.min(historyIndex, updated.length - 1);
-              updated[targetIndex] = createdProject.id;
+              updated[targetIndex] = createdProject.id as number;
               setHistoryIndex(targetIndex);
               return updated;
             });
             if (createdProject?.id) {
               navigate(`/projects/${createdProject.id}`, { replace: true });
+            }
+            try {
+              await loadAllProjects({ showLoading: false });
+            } catch (e) {
+              console.error('Не удалось обновить список проектов после создания', e);
             }
           }}
           isNew={isCreatingProject}

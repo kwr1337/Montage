@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { apiService } from '../../services/api';
+import { fetchAllProjectPages } from '../../utils/projectPages';
 import { mockData } from '../../mocks/mobile-project-mock';
 import menuIconGreyRaw from '../../shared/icons/menuIconGrey.svg?raw';
 import editMobIconRaw from '../../shared/icons/editMob.svg?raw';
@@ -124,22 +125,6 @@ const getActiveEmployeesCount = (project: ProjectListItem) => {
   return project.employees.filter((emp: any) => !emp.pivot?.end_working_date).length;
 };
 
-const extractProjectsFromResponse = (response: any): ProjectListItem[] => {
-  if (!response) return [];
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response.data)) return response.data;
-  if (Array.isArray(response.data?.data)) return response.data.data;
-  if (Array.isArray(response.projects)) return response.projects;
-  if (Array.isArray(response.items)) return response.items;
-  if (Array.isArray(response.results)) return response.results;
-  if (response.data && typeof response.data === 'object' && !Array.isArray(response.data)) {
-    const d = response.data;
-    if (Array.isArray(d.projects)) return d.projects;
-    if (Array.isArray(d.items)) return d.items;
-  }
-  return [];
-};
-
 export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLogout }) => {
   const currentUser = apiService.getCurrentUser();
   const currentUserId = currentUser?.id;
@@ -196,13 +181,18 @@ export const ProjectsScreenMobile: React.FC<ProjectsScreenMobileProps> = ({ onLo
           primaryFilter.filter = { manager_id: [managerId] };
         }
 
-        const response = await apiService.getProjects(1, 100, primaryFilter);
-        data = extractProjectsFromResponse(response);
+        const perPage = 15;
+        data = (await fetchAllProjectPages(
+          (p, pp) => apiService.getProjects(p, pp, primaryFilter),
+          perPage
+        )) as ProjectListItem[];
 
         // Для бригадира нельзя подменять пустой список запросом «все проекты» — иначе видны чужие объекты
         if (data.length === 0 && !isBrigadier) {
-          const fallbackResponse = await apiService.getProjects(1, 100, { with: ['employees', 'logs'] });
-          data = extractProjectsFromResponse(fallbackResponse);
+          data = (await fetchAllProjectPages(
+            (p, pp) => apiService.getProjects(p, pp, { with: ['employees', 'logs'] }),
+            perPage
+          )) as ProjectListItem[];
         }
 
         let filteredData = data.filter((project) => {

@@ -4,7 +4,7 @@ import { apiService } from '../../services/api';
 import { fetchProjectSpecificationDetailCache } from '../../utils/nomenclatureRowDetails';
 import { formatSpecQuantityForDisplay } from '../../utils/specQuantityFormat';
 import { fetchAllProjectWorkReportsDeduped, groupWorkReportsByUserId } from '../../utils/projectWorkReports';
-import { canDeleteProject, canEditProjectGeneralInfo, canChangeProjectStatus, canEditFOT, canManageProjectEmployees, canEditSpecification } from '../../services/permissions';
+import { canDeleteProject, canEditProjectGeneralInfo, canChangeProjectStatus, canEditFOT, canManageProjectEmployees, canEditSpecification, isPTOEngineer, isBrigadier } from '../../services/permissions';
 import sotrudnikiVProekteRaw from '../../shared/icons/sotrudnikiVProekte.svg?raw';
 import editIconRaw from '../../shared/icons/editIcon.svg?raw';
 import dotsIconRaw from '../../shared/icons/dotsIcon.svg?raw';
@@ -32,6 +32,7 @@ const deleteIcon = toDataUrl(deleteIconRaw);
 const addIcon = toDataUrl(addIconRaw);
 const commentMobIcon = toDataUrl(commentMobIconRaw);
 import { Pagination } from '../../shared/ui/Pagination/Pagination';
+import { unwrapCreatedProject } from '../../utils/unwrapApiEntity';
 import '../../shared/ui/CommentModal/comment-modal.scss';
 
 // Функция для получения инициалов (Иван Иванов -> ИИ)
@@ -158,6 +159,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
   const isNewProject = isNew;
 
   const currentUser = apiService.getCurrentUser();
+  const hideProjectFotSummary = isPTOEngineer(currentUser);
   const canDelete = canDeleteProject(currentUser);
   const canEditGeneral = isNewProject || canEditProjectGeneralInfo(currentUser);
   const canEditHeader = isNewProject || canEditProjectGeneralInfo(currentUser) || canChangeProjectStatus(currentUser) || canEditFOT(currentUser); // ПТО — статус, Сметчик — ФОТ
@@ -837,7 +839,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       .map((emp: any) => emp.id);
     let projectManagers: number[];
     if (isNewProject) {
-      projectManagers = foremenIds;
+      const foremanNums: number[] = foremenIds
+        .map((id: unknown) => Number(id))
+        .filter((n: number): n is number => Number.isFinite(n) && n > 0);
+      projectManagers = [...new Set(foremanNums)];
+      /** Список GET /projects для бригадира фильтруется по manager_id; иначе проект без текущего пользователя в менеджерах не попадёт в таблицу. */
+      if (isBrigadier(currentUser) && currentUser?.id != null) {
+        const uid = Number(currentUser.id);
+        if (!projectManagers.includes(uid)) projectManagers.push(uid);
+      }
     } else {
       projectManagers = foremenIds.length > 0
         ? foremenIds
@@ -901,9 +911,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         };
 
         const response = await apiService.createProject(createPayload);
-        const createdProject = (response?.data ?? response?.project ?? response) as Record<string, unknown>;
+        const createdProject = unwrapCreatedProject(response);
 
-        if (!createdProject || (typeof createdProject === 'object' && !('id' in createdProject))) {
+        if (!createdProject || createdProject.id == null) {
           throw new Error('Пустой или некорректный ответ сервера при создании проекта');
         }
 
@@ -2178,7 +2188,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
             </button>
           </div>
 
-          {/* Карточки бюджета */}
+          {/* Карточки бюджета — не показываем инженеру ПТО */}
+          {!hideProjectFotSummary && (
           <div className="projects__detail-budget-cards">
             <div className="projects__detail-budget-card projects__detail-budget-card--allocated">
               <span className="projects__detail-budget-label">Выделено</span>
@@ -2226,6 +2237,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
               </div>
             </div>
           </div>
+          )}
         </div>
       </div>
 
@@ -2335,6 +2347,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                   </div>
                 </div>
 
+                {!hideProjectFotSummary && (
                 <div className="projects__form-field">
                   <label>Выделено на ФОТ</label>
                   <div className="projects__currency-input">
@@ -2370,6 +2383,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                     <span className="projects__currency-suffix">₽</span>
                   </div>
                 </div>
+                )}
               </div>
 
               <div className="projects__detail-actions">

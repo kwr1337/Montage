@@ -8,6 +8,7 @@ const paginationIconActiveLeft = toDataUrl(paginationIconActiveLeftRaw);
 const upDownTableFilter = toDataUrl(upDownTableFilterRaw);
 const commentMobIcon = toDataUrl(commentMobIconRaw);
 import { apiService } from '../../services/api';
+import { isPTOEngineer } from '../../services/permissions';
 import { fetchAllProjectWorkReportsDeduped, groupWorkReportsByUserId } from '../../utils/projectWorkReports';
 import { fetchProjectSpecificationDetailCache } from '../../utils/nomenclatureRowDetails';
 import { formatSpecQuantityForDisplay } from '../../utils/specQuantityFormat';
@@ -390,6 +391,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
   // Загрузка назначений рабочих на день. Только для бригадиров — API доступен только им.
   const currentUser = apiService.getCurrentUser();
   const isBrigadierForAssignments = (currentUser?.role || currentUser?.position) === 'Бригадир';
+  const hideFotSummaryForPto = isPTOEngineer(currentUser);
   const myBrigadierId = currentUser?.id ?? null;
 
   useEffect(() => {
@@ -1418,6 +1420,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
         <div className="mobile-project-detail__content">
           {activeTab === 'general' && (
             <div className="mobile-project-detail__general-scroll">
+              {!hideFotSummaryForPto && (
               <section className="mobile-project-detail__budget">
                 <div className="mobile-project-detail__budget-header">
                   <span className="mobile-project-detail__section-label">ФОТ</span>
@@ -1437,6 +1440,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                   </div>
                 </div>
               </section>
+              )}
 
               <section className="mobile-project-detail__employees">
                 <div className="mobile-project-detail__employees-header">
