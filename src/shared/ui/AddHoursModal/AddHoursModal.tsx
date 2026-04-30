@@ -69,6 +69,8 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
   const [savedDates, setSavedDates] = useState<string[]>(trackedDates);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Сообщение при попытке изменить часы вне окна 6:00–21:00 (моб. версия) */
+  const [hoursTimeNotice, setHoursTimeNotice] = useState<string | null>(null);
 
   const hours = isControlled ? externalForm!.hours : internalHours;
   const isAbsent = isControlled ? externalForm!.isAbsent : internalAbsent;
@@ -106,6 +108,10 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
     setSavedDates(trackedDates);
   }, [trackedDates]);
 
+  useEffect(() => {
+    if (isOpen) setHoursTimeNotice(null);
+  }, [isOpen]);
+
   // При открытии: сегодня (неконтролируемый режим); при необходимости — подстановка из existingReport
   useEffect(() => {
     if (!isOpen || isControlled) return;
@@ -140,8 +146,21 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
     return trackedDates.length > 0 && !hasTracking(selectedDate);
   };
 
+  // В мобильной версии: корректировка возможна только с 6:00 до 21:00 (локальное время устройства)
+  const canEditByTime = (): boolean => {
+    if (!enforceTimeRestriction) return true;
+    const now = new Date();
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    return minutes >= 6 * 60 && minutes <= 21 * 60;
+  };
+
   const handleIncrement = () => {
     if (hours < 24 && !isAbsent) {
+      if (enforceTimeRestriction && !canEditByTime()) {
+        setHoursTimeNotice('Сейчас нельзя изменить часы. Вносите с 6:00 до 21:00.');
+        return;
+      }
+      setHoursTimeNotice(null);
       if (isControlled) {
         patchForm({ hours: hours + 1 });
       } else {
@@ -152,6 +171,11 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
 
   const handleDecrement = () => {
     if (!isAbsent) {
+      if (enforceTimeRestriction && !canEditByTime()) {
+        setHoursTimeNotice('Сейчас нельзя изменить часы. Вносите с 6:00 до 21:00.');
+        return;
+      }
+      setHoursTimeNotice(null);
       const next = Math.max(0, hours - 1);
       if (isControlled) {
         patchForm({ hours: next });
@@ -168,6 +192,11 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
     if (value === '' || /^\d+$/.test(value)) {
       const numValue = value === '' ? 0 : parseInt(value, 10);
       if (numValue >= 0 && numValue <= 24) {
+        if (enforceTimeRestriction && !canEditByTime() && numValue !== hours) {
+          setHoursTimeNotice('Сейчас нельзя изменить часы. Вносите с 6:00 до 21:00.');
+          return;
+        }
+        setHoursTimeNotice(null);
         if (isControlled) {
           patchForm({ hours: numValue });
         } else {
@@ -178,6 +207,7 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
   };
 
   const handleHoursBlur = () => {
+    if (enforceTimeRestriction && !canEditByTime()) return;
     // Если поле пустое, устанавливаем 8 часов по умолчанию
     if (hours === 0 && !isAbsent) {
       if (isControlled) {
@@ -191,16 +221,6 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
   // Показывать поле "Причина" если часы != 8 и сотрудник не отсутствовал
   const shouldShowReason = (): boolean => {
     return !isAbsent && hours !== 8;
-  };
-
-  // В мобильной версии: корректировка возможна только с 6:00 до 21:00
-  const canEditByTime = (): boolean => {
-    // Временно убираем проверку времени для тестирования.
-    // enforceTimeRestriction оставляем, чтобы поведение можно было быстро вернуть.
-    if (enforceTimeRestriction) {
-      return true;
-    }
-    return true;
   };
 
   // Только текущий день; вчера редактировать нельзя
@@ -230,7 +250,7 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
     }
 
     if (!canEditByTime()) {
-      setError('Корректировка часов возможна только с 6:00 до 21:00');
+      setError('Сейчас нельзя сохранить часы. Доступно с 6:00 до 21:00.');
       return;
     }
     
@@ -383,6 +403,11 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
           {!isAbsent && (
             <div className="add-hours-modal__quantity">
               <span className="add-hours-modal__quantity-label add-hours-modal__quantity-label--required">введите кол-во часов</span>
+              {hoursTimeNotice && (
+                <div className="add-hours-modal__error add-hours-modal__error--info add-hours-modal__error--compact" role="status">
+                  {hoursTimeNotice}
+                </div>
+              )}
               <div className="add-hours-modal__counter">
                 <button
                   type="button"
@@ -424,6 +449,11 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
                 checked={isAbsent}
                 onChange={(e) => {
                   const checked = e.target.checked;
+                  if (enforceTimeRestriction && !canEditByTime()) {
+                    setHoursTimeNotice('Сейчас нельзя изменить часы. Вносите с 6:00 до 21:00.');
+                    return;
+                  }
+                  setHoursTimeNotice(null);
                   if (isControlled) {
                     patchForm({
                       isAbsent: checked,
@@ -483,9 +513,9 @@ export const AddHoursModal: React.FC<AddHoursModalProps> = ({
             </div>
           )}
 
-          {!canEditByTime() && (
+          {!canEditByTime() && enforceTimeRestriction && (
             <div className="add-hours-modal__error add-hours-modal__error--info">
-              Корректировка возможна только с 6:00 до 21:00
+              Сейчас нельзя вносить часы. Доступно с 6:00 до 21:00
             </div>
           )}
           {error && (

@@ -1148,10 +1148,84 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     setNomenclatureHistory([]);
   };
 
+  const normalizeNomenclatureName = (value: string): string =>
+    value
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const extractNomenclatureArray = (response: any): any[] =>
+    Array.isArray(response?.data)
+      ? response.data
+      : response?.data
+        ? [response.data]
+        : [];
+
+  const ensureCatalogFromParsedRows = async (rows: any[]): Promise<any[]> => {
+    apiService.invalidateCache('nomenclature');
+    const allNomenclatureResponse = await apiService.getNomenclature();
+    const allNomenclature = extractNomenclatureArray(allNomenclatureResponse);
+    const byNormalizedName = new Map<string, any>();
+
+    allNomenclature.forEach((item: any) => {
+      const key = normalizeNomenclatureName(String(item?.name || ''));
+      if (key) byNormalizedName.set(key, item);
+    });
+
+    for (const row of rows) {
+      const rowName = String(row?.nomenclature || '');
+      const key = normalizeNomenclatureName(rowName);
+      if (!key) continue;
+
+      if (byNormalizedName.has(key)) continue;
+
+      try {
+        const createResponse = await apiService.createNomenclature({
+          name: rowName.trim(),
+          unit: String(row?.unit || '').trim(),
+          price: 1,
+          description: '',
+        });
+        const created = createResponse?.data || createResponse;
+        if (created?.id != null) {
+          allNomenclature.push(created);
+          byNormalizedName.set(key, created);
+          continue;
+        }
+      } catch (error: any) {
+        const status = Number((error as any)?.status);
+        const message = String(error?.message ?? '');
+        const isConflict = status === 409 || message.includes('409');
+        if (!isConflict) continue;
+      }
+
+      // После конфликта перечитываем справочник: позиция могла быть создана конкурентно/через другой импорт.
+      try {
+        apiService.invalidateCache('nomenclature');
+        const refreshed = extractNomenclatureArray(await apiService.getNomenclature());
+        refreshed.forEach((item: any) => {
+          const itemKey = normalizeNomenclatureName(String(item?.name || ''));
+          if (itemKey && !byNormalizedName.has(itemKey)) byNormalizedName.set(itemKey, item);
+        });
+      } catch {
+        // Если не удалось перечитать справочник, продолжаем импорт оставшихся строк.
+      }
+    }
+
+    return allNomenclature;
+  };
+
   const handleImport = async (file: File, parsedData?: any[], _matches?: string[]) => {
     if (!localProject.id) return;
 
     try {
+      const parsedRows = Array.isArray(parsedData) ? parsedData : [];
+
+      // Гарантируем пополнение общего справочника из файла перед импортом в проект.
+      if (parsedRows.length > 0) {
+        await ensureCatalogFromParsedRows(parsedRows);
+      }
+
       // Сначала пробуем импорт через бэкенд — он может суммировать совпадающие материалы
       try {
         await apiService.importNomenclatureFromFile(localProject.id, file);
@@ -1168,22 +1242,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         // Бэкенд-импорт не сработал — используем клиентскую обработку
       }
 
-      if (!parsedData || parsedData.length === 0) return;
+      if (parsedRows.length === 0) return;
 
       // Получаем список всей номенклатуры для поиска по названию
-      const allNomenclatureResponse = await apiService.getNomenclature();
-      const allNomenclature = Array.isArray(allNomenclatureResponse?.data) 
-        ? allNomenclatureResponse.data 
-        : allNomenclatureResponse?.data 
-        ? [allNomenclatureResponse.data] 
-        : [];
+      const allNomenclature = await ensureCatalogFromParsedRows(parsedRows);
 
       // Обрабатываем каждую строку из файла
-      for (const row of parsedData) {
+      for (const row of parsedRows) {
         // Ищем номенклатуру по названию в общем списке
         let nomenclatureItem = allNomenclature.find((item: any) => {
-          const itemName = String(item.name || '').toLowerCase().trim();
-          const rowName = row.nomenclature.toLowerCase().trim();
+          const itemName = normalizeNomenclatureName(String(item.name || ''));
+          const rowName = normalizeNomenclatureName(String(row.nomenclature || ''));
           return itemName === rowName;
         });
 

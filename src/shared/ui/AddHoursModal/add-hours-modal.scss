@@ -509,6 +509,12 @@
       border-color: #2787f5;
       color: #2787f5;
     }
+
+    &--compact {
+      padding: 8px 10px;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
   }
 
   &__actions {
