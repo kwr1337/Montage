@@ -950,7 +950,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
               <div className="employee-detail__avatar">
                 {employee.avatar_id || employee.avatar_url ? (
                   <img 
-                    src={employee.avatar_url || `http://92.53.97.20/api/avatars/${employee.avatar_id}`} 
+                    src={employee.avatar_url || `/api/avatars/${employee.avatar_id}`} 
                     alt={formatEmployeeName()} 
                   />
                 ) : (

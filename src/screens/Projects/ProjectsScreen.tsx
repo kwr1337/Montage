@@ -1016,7 +1016,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                           <>
                             {foreman.avatar_id || foreman.avatar_url ? (
                               <img 
-                                src={foreman.avatar_url || `http://92.53.97.20/api/avatars/${foreman.avatar_id}`} 
+                                src={foreman.avatar_url || `/api/avatars/${foreman.avatar_id}`} 
                                 alt={`${foreman.last_name} ${foreman.first_name}`} 
                                 className="projects__foreman-avatar" 
                               />
@@ -1054,7 +1054,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                               emp.avatar_id || emp.avatar_url ? (
                                 <img 
                                   key={emp.id} 
-                                  src={emp.avatar_url || `http://92.53.97.20/api/avatars/${emp.avatar_id}`} 
+                                  src={emp.avatar_url || `/api/avatars/${emp.avatar_id}`} 
                                   alt={`${emp.last_name} ${emp.first_name}`} 
                                   className="projects__employee-avatar" 
                                 />

@@ -1729,7 +1729,7 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
                             <div className="mobile-project-detail__tracking-employee">
                               {item.employee?.avatar_id || item.employee?.avatar_url ? (
                                 <img 
-                                  src={item.employee.avatar_url || `http://92.53.97.20/api/avatars/${item.employee.avatar_id}`} 
+                                  src={item.employee.avatar_url || `/api/avatars/${item.employee.avatar_id}`} 
                                   alt={item.employeeName} 
                                   className="mobile-project-detail__tracking-avatar" 
                                 />

@@ -2182,7 +2182,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                   <div key={emp.id} className="projects__detail-employee-card">
                     {emp.avatar_id || emp.avatar_url ? (
                       <img 
-                        src={emp.avatar_url || `http://92.53.97.20/api/avatars/${emp.avatar_id}`} 
+                        src={emp.avatar_url || `/api/avatars/${emp.avatar_id}`} 
                         alt={`${emp.last_name} ${emp.first_name}`} 
                         className="projects__detail-employee-avatar" 
                       />

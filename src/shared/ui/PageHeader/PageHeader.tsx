@@ -227,7 +227,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
             <div className="page-header__user" onClick={handleUserClick}>
               {currentUser && (currentUser.avatar_id || currentUser.avatar_url) ? (
                 <img 
-                  src={currentUser.avatar_url || `http://92.53.97.20/api/avatars/${currentUser.avatar_id}`} 
+                  src={currentUser.avatar_url || `/api/avatars/${currentUser.avatar_id}`} 
                   alt={userDisplayName} 
                   className="page-header__user-avatar" 
                 />
