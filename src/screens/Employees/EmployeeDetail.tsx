@@ -748,7 +748,7 @@ export const EmployeeDetail: React.FC<EmployeeDetailProps> = ({ employee, onBack
         const isWorker = formData.position === 'Рабочий';
         const payload: Record<string, unknown> = {
           first_name: trimmedFirstName,
-          second_name: trimmedSecondName,
+          ...(trimmedSecondName ? { second_name: trimmedSecondName } : {}),
           last_name: trimmedLastName,
           birth_date: formData.birth_date,
           gender: formData.gender,
