@@ -1088,11 +1088,19 @@ export const ProjectDetailMobile: React.FC<ProjectDetailMobileProps> = ({ projec
         };
       });
     if (!mockApiResponses) {
-      for (const id of workerIds) {
-        const res = await apiService.addAssignment(id, assignmentDate, projectId);
-        const created = res?.data ?? res;
-        const assignmentId = created?.id ?? created?.data?.id;
-        const added = toAdd.find((w) => w.id === id);
+      // Один запрос с массивом workers — бэкенд шлёт одно уведомление в Телеграм вместо N
+      const res = await apiService.addAssignment(workerIds, assignmentDate, projectId);
+      const created = res?.data ?? res;
+      // Бэкенд может вернуть массив созданных назначений — проставим assignment_id по worker_id, если есть
+      const createdList = Array.isArray(created)
+        ? created
+        : Array.isArray(created?.data)
+          ? created.data
+          : [];
+      for (const a of createdList) {
+        const wid = a?.worker_id ?? a?.user_id ?? a?.worker?.id;
+        const assignmentId = a?.id ?? a?.assignment_id;
+        const added = toAdd.find((w) => w.id === wid);
         if (added && assignmentId != null) {
           (added as any).assignment_id = assignmentId;
         }

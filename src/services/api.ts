@@ -300,13 +300,15 @@ class ApiService {
     return this.request<any>(url, { method: 'GET' });
   }
 
-  /** Добавить рабочего на день в конкретный проект. project_id обязателен — без него назначается на все проекты бригадира */
-  async addAssignment(workerId: number, assignmentDate: string, projectId: number): Promise<any> {
+  /** Добавить рабочих на день в конкретный проект одним запросом. workers — массив worker_id
+   *  (один запрос = одно уведомление в Телеграм вместо N). project_id обязателен — без него
+   *  назначается на все проекты бригадира */
+  async addAssignment(workerIds: number[], assignmentDate: string, projectId: number): Promise<any> {
     return this.request<any>('/assignments/add', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify({
-        worker_id: workerId,
+        workers: workerIds,
         assignment_date: assignmentDate,
         project_id: projectId,
       }),
