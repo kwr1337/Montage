@@ -107,36 +107,16 @@ export const ReportsScreen: React.FC = () => {
   }, [projects]);
 
 
-  // Фильтрация отчётов по периоду
-  const filteredByPeriod = useMemo(() => {
-    if (!dateFrom && !dateTo) {
-      return reports; // Если период не выбран, показываем все
-    }
-
-    return reports.filter((report) => {
-      const reportDate = new Date(report.createdAt);
-      const fromDate = dateFrom ? new Date(dateFrom) : null;
-      const toDate = dateTo ? new Date(dateTo) : null;
-
-      if (fromDate && toDate) {
-        return reportDate >= fromDate && reportDate <= toDate;
-      } else if (fromDate) {
-        return reportDate >= fromDate;
-      } else if (toDate) {
-        return reportDate <= toDate;
-      }
-
-      return true;
-    });
-  }, [reports, dateFrom, dateTo]);
-
-  // Фильтрация по поиску
+  // Список отчётов НЕ фильтруется по выбранному периоду: диапазон дат задаёт
+  // только период данных при скачивании (period_start/period_end для номенклатуры
+  // и period для выплат). Сами карточки отчётов должны быть доступны всегда,
+  // иначе при выборе периода список схлопывается и нечего скачивать.
   const filteredBySearch = useMemo(() => {
-    if (!searchValue) return filteredByPeriod;
-    return filteredByPeriod.filter((report) =>
+    if (!searchValue) return reports;
+    return reports.filter((report) =>
       report.name.toLowerCase().includes(searchValue.toLowerCase())
     );
-  }, [filteredByPeriod, searchValue]);
+  }, [reports, searchValue]);
 
   // Сортировка
   const sortedReports = useMemo(() => {
