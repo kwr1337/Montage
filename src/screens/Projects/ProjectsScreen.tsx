@@ -1027,7 +1027,9 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                               const firstNameInitial = foreman.first_name ? foreman.first_name.charAt(0).toUpperCase() : '';
                               const secondNameInitial = foreman.second_name ? foreman.second_name.charAt(0).toUpperCase() : '';
                               const foremanName = `${foreman.last_name} ${firstNameInitial}.${secondNameInitial ? ` ${secondNameInitial}.` : ''}`;
-                              return <span title={foremanName}>{foremanName}</span>;
+                              // На ховере показываем полное ФИО (имя и отчество целиком)
+                              const foremanFullName = `${foreman.last_name || ''} ${foreman.first_name || ''} ${foreman.second_name || ''}`.replace(/\s+/g, ' ').trim();
+                              return <span title={foremanFullName}>{foremanName}</span>;
                             })()}
                           </>
                         );
