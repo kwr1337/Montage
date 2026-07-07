@@ -1023,13 +1023,12 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                             ) : (
                               <img src={brigadirIcon} alt="—" className="projects__foreman-avatar" />
                             )}
-                            <span>
-                              {(() => {
-                                const firstNameInitial = foreman.first_name ? foreman.first_name.charAt(0).toUpperCase() : '';
-                                const secondNameInitial = foreman.second_name ? foreman.second_name.charAt(0).toUpperCase() : '';
-                                return `${foreman.last_name} ${firstNameInitial}.${secondNameInitial ? ` ${secondNameInitial}.` : ''}`;
-                              })()}
-                            </span>
+                            {(() => {
+                              const firstNameInitial = foreman.first_name ? foreman.first_name.charAt(0).toUpperCase() : '';
+                              const secondNameInitial = foreman.second_name ? foreman.second_name.charAt(0).toUpperCase() : '';
+                              const foremanName = `${foreman.last_name} ${firstNameInitial}.${secondNameInitial ? ` ${secondNameInitial}.` : ''}`;
+                              return <span title={foremanName}>{foremanName}</span>;
+                            })()}
                           </>
                         );
                       }
