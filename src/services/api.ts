@@ -163,15 +163,18 @@ class ApiService {
   }
 
   async logout(): Promise<void> {
-    await this.request('/auth/logout', {
-      method: 'POST',
-    });
-
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('token_type');
-    this.clearProfileCache();
-    this.invalidateCache();
+    try {
+      await this.request('/auth/logout', {
+        method: 'POST',
+      });
+    } finally {
+      // Чистим и при ошибке запроса, иначе следующий вошедший увидит кэш прежнего пользователя
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user');
+      localStorage.removeItem('token_type');
+      this.clearProfileCache();
+      this.invalidateCache();
+    }
   }
 
   isAuthenticated(): boolean {

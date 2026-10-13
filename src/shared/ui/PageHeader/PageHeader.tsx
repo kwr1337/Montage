@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import { CategoryBadge } from '../CategoryBadge/CategoryBadge';
 import { apiService } from '../../../services/api';
+import { LogoutContext } from './LogoutContext';
 import plusIconRaw from '../../icons/plus-icon.svg?raw';
 import userDropdownIconRaw from '../../icons/user-dropdown-icon.svg?raw';
 import logoutIconRaw from '../../icons/logoutIcon.svg?raw';
@@ -58,7 +58,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   onLogout,
   className,
 }) => {
-  const navigate = useNavigate();
+  const layoutLogout = useContext(LogoutContext);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -144,22 +144,20 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   };
 
   const handleLogout = async () => {
+    setIsUserDropdownOpen(false);
+    const logout = onLogout ?? layoutLogout;
+    if (logout) {
+      // App сбрасывает isAuthenticated и сам показывает экран входа
+      await logout();
+      return;
+    }
+    // Без обработчика из App состояние авторизации сбросит только перезагрузка
     try {
-      if (onLogout) {
-        await onLogout();
-      }
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('token_type');
-      localStorage.removeItem('user');
-      setIsUserDropdownOpen(false);
-      navigate('/login');
+      await apiService.logout();
     } catch (error) {
       console.error('Logout error:', error);
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('token_type');
-      localStorage.removeItem('user');
-      navigate('/login');
     }
+    window.location.href = '/login';
   };
   return (
     <header className={`page-header ${className ?? ''}`}>

@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import type { FC } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../ui/Sidebar/Sidebar';
+import { LogoutContext } from '../ui/PageHeader/LogoutContext';
 import { apiService } from '../../services/api';
 import { canAccessEmployees, canAccessSalary } from '../../services/permissions';
 import './main-layout.scss';
@@ -33,7 +34,7 @@ const ProtectedSalary = () => {
   return canAccessSalary(user) ? <SalaryScreen /> : <NoAccess />;
 };
 
-export const MainLayout: FC<MainLayoutProps> = () => {
+export const MainLayout: FC<MainLayoutProps> = ({ onLogout }) => {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -53,21 +54,23 @@ export const MainLayout: FC<MainLayoutProps> = () => {
   const activeItem = location.pathname.split('/')[1] || 'projects';
 
   return (
-    <div className="main-layout">
-      <Sidebar activeItem={activeItem} onNavigate={handleNavigate} />
-      <main className="main-layout__content">
-        <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#888' }}>Загрузка...</div>}>
-          <Routes>
-            <Route path="/dashboard" element={<DashboardScreen />} />
-            <Route path="/projects/*" element={<ProjectsScreen />} />
-            <Route path="/employees/*" element={<ProtectedEmployees />} />
-            <Route path="/nomenclature" element={<NomenclatureScreen />} />
-            <Route path="/reports" element={<ReportsScreen />} />
-            <Route path="/salary" element={<ProtectedSalary />} />
-            <Route path="*" element={<Navigate to="/projects" replace />} />
-          </Routes>
-        </Suspense>
-      </main>
-    </div>
+    <LogoutContext.Provider value={onLogout}>
+      <div className="main-layout">
+        <Sidebar activeItem={activeItem} onNavigate={handleNavigate} />
+        <main className="main-layout__content">
+          <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#888' }}>Загрузка...</div>}>
+            <Routes>
+              <Route path="/dashboard" element={<DashboardScreen />} />
+              <Route path="/projects/*" element={<ProjectsScreen />} />
+              <Route path="/employees/*" element={<ProtectedEmployees />} />
+              <Route path="/nomenclature" element={<NomenclatureScreen />} />
+              <Route path="/reports" element={<ReportsScreen />} />
+              <Route path="/salary" element={<ProtectedSalary />} />
+              <Route path="*" element={<Navigate to="/projects" replace />} />
+            </Routes>
+          </Suspense>
+        </main>
+      </div>
+    </LogoutContext.Provider>
   );
 };
