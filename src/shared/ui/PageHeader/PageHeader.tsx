@@ -22,6 +22,8 @@ type PageHeaderProps = {
     icon?: string;
     label: string;
     onClick?: () => void;
+    /** HEX-цвет: кружок после подписи (цвет проекта) */
+    color?: string | null;
   }[];
 
   // Пагинация
@@ -195,7 +197,12 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                     <span>{item.label}</span>
                   </button>
                 ) : (
-                  <span className="page-header__breadcrumb-current">{item.label}</span>
+                  <span className="page-header__breadcrumb-current">
+                    {item.label}
+                    {item.color && (
+                      <span className="page-header__breadcrumb-color" style={{ backgroundColor: item.color }} />
+                    )}
+                  </span>
                 )}
                 {index < breadcrumb.length - 1 && (
                   <img 

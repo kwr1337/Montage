@@ -19,6 +19,7 @@ import ImportModal from '../../shared/ui/ImportModal/ImportModal';
 import AddTrackingModal from '../../shared/ui/AddTrackingModal/AddTrackingModal';
 import DeleteTrackingModal from '../../shared/ui/DeleteTrackingModal/DeleteTrackingModal';
 import { CommentModal } from '../../shared/ui/CommentModal/CommentModal';
+import { ProjectColorPicker } from '../../shared/ui/ProjectColorPicker/ProjectColorPicker';
 import commentMobIconRaw from '../../shared/icons/commentMob.svg?raw';
 
 const toDataUrl = (raw: string) => `data:image/svg+xml,${encodeURIComponent(raw)}`;
@@ -125,7 +126,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
     startDate: project.start_date || '',
     endDate: project.end_date || '',
     foreman: '',
-    budget: project.budget || ''
+    budget: project.budget || '',
+    color: project.color || ''
   });
   const [isDotsMenuOpen, setIsDotsMenuOpen] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
@@ -656,7 +658,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         startDate: project.start_date || '',
         endDate: project.end_date || '',
         foreman: '',
-        budget: project.budget || ''
+        budget: project.budget || '',
+        color: project.color || ''
       });
     } else {
       // Обновляем только измененные поля, сохраняя бригадира
@@ -666,7 +669,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         address: project.address || prev.address,
         startDate: project.start_date || prev.startDate,
         endDate: project.end_date || prev.endDate,
-        budget: project.budget || prev.budget
+        budget: project.budget || prev.budget,
+        // Цвет можно сбросить, поэтому null с сервера — это значение, а не «нет данных»
+        color: project.color !== undefined ? (project.color || '') : prev.color
       }));
     }
   }, [project]);
@@ -766,6 +771,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         status: editedStatus,
         employee: employeeObjects,
       };
+      // Как и сроки с ФОТ, цвет из формы уходит вместе с шапкой — но только у тех, кто вправе его менять
+      if (canEditGeneral) {
+        updateData.color = formData.color || null;
+      }
 
       await apiService.updateProject(localProject.id, updateData);
 
@@ -774,6 +783,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         ...localProject,
         name: trimmedName,
         status: editedStatus,
+        ...(canEditGeneral ? { color: updateData.color } : {}),
       };
       setLocalProject(optimisticUpdate);
       if (onProjectUpdate) {
@@ -890,6 +900,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       description: localProject.description || '',
       status: statusForSave,
       employee: employeeObjects,
+      color: formData.color || null,
     };
 
     if (isNewProject) {
@@ -927,6 +938,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
           startDate: createdProject.start_date || '',
           endDate: createdProject.end_date || '',
           budget: createdProject.budget ? createdProject.budget.toString() : '',
+          color: createdProject.color || '',
         }));
 
         if (onProjectCreate) {
@@ -965,14 +977,28 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
         name: trimmedName,
         status: statusForSave,
         project_managers: projectManagers,
+        color: basePayload.color,
       };
       setLocalProject(optimisticUpdate);
       if (onProjectUpdate) {
         onProjectUpdate(optimisticUpdate);
       }
 
-    } catch (error) {
-      // Ошибка обработана без уведомления пользователя
+    } catch (error: any) {
+      // Остальные ошибки, как и раньше, не показываем; отказ валидации (422) объясняем текстом сервера
+      const errMsg: string = error?.message || '';
+      if (errMsg.includes('status: 422')) {
+        let message = 'Не удалось сохранить изменения. Проверьте заполненные данные.';
+        try {
+          const bodyMatch = errMsg.match(/body:\s*(.+)$/);
+          const body = bodyMatch ? JSON.parse(bodyMatch[1].trim()) : null;
+          if (body?.error) message = body.error;
+          else if (body?.message) message = body.message;
+        } catch {
+          // Тело ответа не JSON — оставляем общий текст
+        }
+        alert(message);
+      }
     }
   };
 
@@ -1001,7 +1027,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
       startDate: localProject.start_date || '',
       endDate: localProject.end_date || '',
       foreman: '',
-      budget: localProject.budget || ''
+      budget: localProject.budget || '',
+      color: localProject.color || ''
     });
 
     // Возвращаемся на страницу проектов
@@ -2453,6 +2480,29 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, onBack, o
                   </div>
                 </div>
                 )}
+              </div>
+
+              {/* Форма - вторая строка */}
+              <div className="projects__detail-form-row">
+                <div className="projects__form-field projects__form-field--single">
+                  <label className="projects__form-label-with-hint">
+                    Цвет проекта
+                    <span className="projects__form-hint" tabIndex={0} aria-label="Цвет отображается в отчетах">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                        <circle cx="7" cy="7" r="6.25" stroke="currentColor" strokeWidth="1.5" />
+                        <path d="M7 6.25V10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                        <circle cx="7" cy="4.1" r="0.9" fill="currentColor" />
+                      </svg>
+                      <span className="projects__form-hint-tooltip">Цвет отображается в отчетах</span>
+                    </span>
+                  </label>
+                  <ProjectColorPicker
+                    value={formData.color || null}
+                    onChange={(color) => handleInputChange('color', color ?? '')}
+                    disabled={!canEditGeneral}
+                    onDisabledClick={() => alert('Недостаточно прав')}
+                  />
+                </div>
               </div>
 
               <div className="projects__detail-actions">

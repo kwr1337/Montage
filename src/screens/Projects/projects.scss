@@ -1345,6 +1345,65 @@
     }
   }
 
+  &__form-label-with-hint {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  // Значок «i» у подписи поля с подсказкой при наведении
+  &__form-hint {
+    position: relative;
+    display: inline-flex;
+    color: #919399;
+    cursor: help;
+    outline: none;
+
+    &:hover,
+    &:focus {
+      color: #2787f5;
+
+      .projects__form-hint-tooltip {
+        display: block;
+      }
+    }
+  }
+
+  &__form-hint-tooltip {
+    display: none;
+    position: absolute;
+    // Справа от значка, в строке подписи: сверху подсказка закрывала бы поля первой строки
+    left: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    margin-left: 6px;
+    padding: 4px 10px;
+    background: #ffffff;
+    border: 1px solid #f3f3f5;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    font-size: 12px;
+    letter-spacing: 0;
+    color: #2c2d2e;
+    white-space: nowrap;
+    z-index: 1001;
+  }
+
+  // Кружок цвета проекта перед названием в списке
+  &__project-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  &__color-dot {
+    flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px rgba(44, 45, 46, 0.12);
+  }
+
   &__currency-input {
     position: relative;
     display: flex;

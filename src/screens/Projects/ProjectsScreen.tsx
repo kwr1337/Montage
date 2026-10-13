@@ -763,7 +763,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
         categoryLabel={!selectedProject ? "Проекты" : undefined}
         breadcrumb={selectedProject ? [
           { icon: menuIconGrey, label: "Проекты", onClick: () => navigateToProject(null) },
-          { label: `№ ${selectedProject.id} ${selectedProject.name}` }
+          { label: `№ ${selectedProject.id} ${selectedProject.name}`, color: selectedProject.color }
         ] : undefined}
         showPagination={true}
         onBack={handleBack}
@@ -986,7 +986,12 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ onLogout }) => {
                   <span>{project.id}</span>
                 </div>
                 <div className="projects__table-row-col">
-                  <span>{project.name}</span>
+                  <span className="projects__project-name">
+                    {project.color && (
+                      <span className="projects__color-dot" style={{ backgroundColor: project.color }} />
+                    )}
+                    {project.name}
+                  </span>
                 </div>
                 <div className="projects__table-row-col">
                   <div className={statusClassNames}>

@@ -1,0 +1,172 @@
+.project-color-picker {
+  position: relative;
+  width: 100%;
+
+  &__trigger {
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    background: #ffffff;
+    border: 1px solid #f3f3f5;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 16px;
+    color: #2c2d2e;
+    text-align: left;
+    cursor: pointer;
+
+    &:focus {
+      outline: none;
+    }
+
+    &--readonly {
+      cursor: default;
+      background: #f9f9fa;
+    }
+  }
+
+  &__dot {
+    flex-shrink: 0;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    // Тонкая обводка, чтобы очень светлый цвет не сливался с белым фоном
+    box-shadow: inset 0 0 0 1px rgba(44, 45, 46, 0.12);
+  }
+
+  &__value,
+  &__placeholder {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__placeholder {
+    color: #919399;
+  }
+
+  &__arrow {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    opacity: 0.5;
+    transition: transform 0.2s ease;
+
+    &--open {
+      transform: rotate(180deg);
+    }
+  }
+
+  &__dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 1000;
+    box-sizing: border-box;
+    width: 250px;
+    margin-top: 4px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: #ffffff;
+    border: 1px solid #f3f3f5;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  &__palette {
+    display: grid;
+    grid-template-columns: repeat(6, 24px);
+    justify-content: space-between;
+    row-gap: 12px;
+  }
+
+  &__swatch {
+    position: relative;
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px rgba(44, 45, 46, 0.12);
+    cursor: pointer;
+    transition: transform 0.15s ease;
+
+    &:hover {
+      transform: scale(1.1);
+    }
+
+    &--selected {
+      box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #2787f5;
+    }
+
+    // Пока свой цвет не задан — радужный кружок, после выбора — сам цвет
+    &--custom {
+      display: block;
+      overflow: hidden;
+      background: conic-gradient(#ff7b7b, #ffe066, #66d9c8, #7fcdff, #b58cff, #ff9ed2, #ff7b7b);
+
+      &.project-color-picker__swatch--selected {
+        overflow: visible;
+      }
+
+      input {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        border: none;
+        opacity: 0;
+        cursor: pointer;
+      }
+    }
+  }
+
+  &__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #f3f3f5;
+  }
+
+  // Удвоенный селектор: поле стоит внутри форм, где стили заданы для любого label
+  & &__custom {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    letter-spacing: 0;
+    color: #2c2d2e;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  &__clear {
+    padding: 0;
+    background: transparent;
+    border: none;
+    font-size: 12px;
+    color: #2787f5;
+    white-space: nowrap;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      opacity: 0.7;
+    }
+
+    &:disabled {
+      color: #919399;
+      cursor: default;
+    }
+  }
+}
